@@ -2,7 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-flutter pub get
+flutter pub get --enforce-lockfile
+# Let Flutter regenerate native plugin registration for release mode.
 flutter build apk --release "$@"
 mkdir -p dist
 cp build/app/outputs/flutter-apk/app-release.apk dist/camereon-demo.apk

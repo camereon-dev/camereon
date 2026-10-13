@@ -7,7 +7,8 @@
 CI: [成功した実行](https://github.com/camereon-dev/camereon/actions/runs/38359139420)
 ／ [配布 APK](https://github.com/camereon-dev/camereon/actions/runs/38359139420/artifacts/11794780085)
 
-この記録の追記ではドキュメントのみを変更している。
+以下は起動・配布基盤を作った時点の検証結果。
+通常配布 CI の短縮ではワークフローとビルドスクリプトを変更している。
 
 ## ローカル環境
 
@@ -38,3 +39,13 @@ CI: [成功した実行](https://github.com/camereon-dev/camereon/actions/runs/3
 - APK はデモ用 debug 鍵で署名する。別環境の APK へ更新する場合はアンインストールが必要になることがある。
 - Android の実機確認は、今回の完了条件に含めない。Emulator 上で検証する。
 - 撮影・加工・保存は未実装。起動画面には今後追加予定であることを表示する。
+
+## 配布 CI の短縮
+
+マージ後の通常配布で Emulator の工程が20分以上完了せず、APK のアップロードまで進まなかったため、旧実行を中止した。
+
+- 通常 CI は静的解析・画面テストと release APK の生成・配布を行う。
+- Emulator、integration test、端末へのインストールと起動は手動ワークフローへ移した。
+- Gradle の依存キャッシュを追加し、debug と release の二重ビルドを通常配布から除いた。
+- APK ビルドの前に依存を固定して取得し、Flutter の release 用プラグイン生成を実行する。
+- workflow の actionlint とビルドスクリプトの構文確認が成功。新しい配布 CI の所要時間は実行後に確認する。

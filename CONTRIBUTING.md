@@ -2,7 +2,7 @@
 
 ## 開始する
 
-README に沿って Flutter 3.47.4 とAndroid の環境を用意する。
+README に沿って Flutter 3.47.4 と Android の環境を用意する。
 SDK バージョンは `pubspec.yaml` と `.fvmrc`、依存バージョンは `pubspec.lock` を共有する。
 SDK を更新する PR では両方のバージョン指定を変更し、Android のビルド・起動テストを実行する。
 
@@ -24,7 +24,8 @@ flutter test
 ```
 
 OS 固有の設定や依存を変更したら、Android の integration test とビルドも確認する。
-`.github/workflows/mobile.yml` は Android の起動テストと配布物作成を確認する。
+`.github/workflows/mobile.yml` は静的解析・画面テストと配布物の作成を確認する。
+端末上の起動テストは `.github/workflows/android-device-tests.yml` を手動実行する。通常の配布では Emulator を起動しない。
 
 署名鍵、SDK のローカルパス、画像に含まれる個人情報をコミットしない。
 デモ配布・レビュー・結合確認の担当も、実装担当と同じように Issue に記録する。
