@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.camereon.camereon"
+    namespace = "dev.camereon.camereon.demo"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 

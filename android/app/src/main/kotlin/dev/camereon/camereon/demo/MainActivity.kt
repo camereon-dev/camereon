@@ -1,4 +1,4 @@
-package dev.camereon.camereon
+package dev.camereon.camereon.demo
 
 import io.flutter.embedding.android.FlutterActivity
 
