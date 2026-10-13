@@ -16,9 +16,9 @@
 | Dart フォーマット | 成功 |
 | flutter analyze | 成功・指摘なし |
 | widget test | 2 件成功。説明の開閉、小さい画面・文字拡大時の操作を確認 |
-| Android release APK | 検証中 |
-| Android Emulator 起動テスト | 検証中 |
-| Android APK インストール・通常起動 | 検証中 |
+| Android release APK | 成功。`dist/camereon-demo.apk` を生成 |
+| Android Emulator 起動テスト | 成功。Pixel Tablet API 31 上で説明の開閉を確認 |
+| Android APK インストール・通常起動 | 成功。release APK のインストールと cold launch が成功し、スクリーンショットを目視確認 |
 | GitHub Actions | 未実行 |
 | iOS Simulator 起動 | CI で確認予定 |
 

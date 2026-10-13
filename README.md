@@ -92,7 +92,7 @@ CI や別の PC で作った APK は署名が異なるため、更新時に `INS
 | Job | 内容 |
 | --- | --- |
 | Format, analyze and widget tests | バージョン・依存を固定してフォーマット、静的解析、widget test を実行 |
-| Android launch test and demo APK | Android Emulator 上で起動テストし、配布用 APK を生成 |
+| Android launch test and demo APK | Android Emulator 上で起動テストし、配布用 APK を生成・インストール・起動 |
 | iOS Simulator build and launch test | macOS runner 上の iPhone Simulator で起動テストし、通常アプリもビルド |
 
 配布手順:
@@ -102,7 +102,7 @@ CI や別の PC で作った APK は署名が異なるため、更新時に `INS
 3. `camereon-demo.apk` を Android 端末へ渡し、インストールする。
 4. 起動して `camereon` の画面を確認し、「このアプリについて」→「閉じる」を試す。
 
-APK の保管期間は 30 日。期間を過ぎた場合は再実行して取得する。Actions の成果物の取得には GitHub ログインとリポジトリの読み取り権限が必要。
+APK の保管期間は 30 日。期間を過ぎた場合は再実行して取得する。両 OS の通常起動画面は `android-startup-screenshot` / `ios-startup-screenshot` で取得できる（14 日間保存）。Actions の成果物の取得には GitHub ログインとリポジトリの読み取り権限が必要。
 今回は Actions の成果物を Android のデモ配布先とする。公開ストア、TestFlight、公開 Release は対象に含めない。
 
 ## ユーザー・チーム側の準備

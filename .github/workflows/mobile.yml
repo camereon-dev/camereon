@@ -66,9 +66,14 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          script: flutter test integration_test/app_test.dart -d emulator-5554
-      - name: Build Android demo
-        run: bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER"
+          script: |
+            flutter test integration_test/app_test.dart -d emulator-5554
+            bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER"
+            adb install -r dist/camereon-demo.apk
+            adb shell am start -W -n dev.camereon.camereon.demo/.MainActivity
+            sleep 3
+            adb shell pidof dev.camereon.camereon.demo
+            adb exec-out screencap -p > dist/android-startup.png
       - name: Upload installable APK
         uses: actions/upload-artifact@v7
         with:
@@ -78,6 +83,13 @@ jobs:
             dist/camereon-demo.apk.sha256
           if-no-files-found: error
           retention-days: 30
+      - name: Upload Android launch screenshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-startup-screenshot
+          path: dist/android-startup.png
+          if-no-files-found: error
+          retention-days: 14
 
   ios:
     name: iOS Simulator build and launch test
