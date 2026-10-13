@@ -1,6 +1,10 @@
 name: Android device tests
 
+# エミュレーターは重いので、必要なときだけ実行する:
+# PR に `device-test` ラベルを付ける（以降の push でも再実行）か、手動実行。
 on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -13,6 +17,7 @@ concurrency:
 jobs:
   android:
     name: Android launch test and demo APK
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'device-test')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

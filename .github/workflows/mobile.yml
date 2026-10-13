@@ -38,8 +38,8 @@ jobs:
 
   android:
     name: Android demo APK
+    # quality と並列に走らせる。main ではキャッシュ作成を beta ジョブが兼ねる
     if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
-    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -58,9 +58,25 @@ jobs:
           flutter-version-file: pubspec.yaml
           channel: stable
           cache: true
+      - id: ndk
+        name: Resolve Flutter NDK version
+        run: |
+          python3 - <<'PYCODE'
+          import os, re
+          from pathlib import Path
+          extension = Path(os.environ["FLUTTER_ROOT"]) / "packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt"
+          version = re.search(r'val ndkVersion:\s*String\s*=\s*"([^"]+)"', extension.read_text())[1]
+          Path(os.environ["GITHUB_OUTPUT"]).write_text(f"path={os.environ['ANDROID_HOME']}/ndk/{version}\nversion={version}\n")
+          PYCODE
+      - name: Cache Android NDK
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.ndk.outputs.path }}
+          key: android-ndk-${{ runner.os }}-${{ steps.ndk.outputs.version }}
       - name: Build Android demo APK
         timeout-minutes: 10
-        run: bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER"
+        # 実機配布用なので arm64 のみ
+        run: bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER" --target-platform android-arm64
       - name: Upload installable APK
         uses: actions/upload-artifact@v7
         with:
