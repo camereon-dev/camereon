@@ -4,6 +4,15 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val betaKeystorePath = System.getenv("CAMEREON_BETA_KEYSTORE")
+val betaPassword = System.getenv("CAMEREON_BETA_PASSWORD")
+val isBetaBuild = !betaKeystorePath.isNullOrBlank()
+
+if (isBetaBuild) {
+    require(!betaPassword.isNullOrBlank()) { "Beta signing password is required" }
+    require(file(betaKeystorePath!!).isFile) { "Beta signing keystore is missing" }
+}
+
 android {
     namespace = "dev.camereon.camereon.demo"
     compileSdk = flutter.compileSdkVersion
@@ -17,6 +26,7 @@ android {
     defaultConfig {
         // Keep the demo separate from a future production app.
         applicationId = "dev.camereon.camereon.demo"
+        manifestPlaceholders["appName"] = if (isBetaBuild) "camereon beta" else "camereon demo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -29,10 +39,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (isBetaBuild) {
+            create("beta") {
+                storeFile = file(betaKeystorePath!!)
+                storePassword = betaPassword
+                keyAlias = "camereon-beta"
+                keyPassword = betaPassword
+                storeType = "PKCS12"
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Demo APK only. Store distribution will require a private release key.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (isBetaBuild) "beta" else "debug")
         }
     }
 }
