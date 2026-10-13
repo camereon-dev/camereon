@@ -1,0 +1,43 @@
+name: Set up Flutter
+description: mise.toml のツールを入れ、Android ビルド時は Gradle と NDK のキャッシュも用意する
+
+inputs:
+  android:
+    description: Android ビルド用に Java・Gradle・NDK を用意する
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@v5
+      with:
+        install_args: ${{ inputs.android == 'true' && 'flutter java' || 'flutter' }}
+        cache: true
+    - name: Export Flutter SDK path
+      shell: bash
+      run: echo "FLUTTER_ROOT=$(mise where flutter)" >> "$GITHUB_ENV"
+    - name: Cache pub packages
+      uses: actions/cache@v6
+      with:
+        path: ~/.pub-cache
+        key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+    - if: inputs.android == 'true'
+      uses: gradle/actions/setup-gradle@v6
+      with:
+        # OSS の actions/cache ベース。main 以外は読み取りのみ
+        cache-provider: basic
+    - id: ndk
+      if: inputs.android == 'true'
+      name: Resolve Flutter NDK version
+      shell: bash
+      run: |
+        version=$(grep -oP 'val ndkVersion:\s*String\s*=\s*"\K[^"]+' \
+          "$FLUTTER_ROOT/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt")
+        echo "path=$ANDROID_HOME/ndk/$version" >> "$GITHUB_OUTPUT"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+    - if: inputs.android == 'true'
+      name: Cache Android NDK
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.ndk.outputs.path }}
+        key: android-ndk-${{ runner.os }}-${{ steps.ndk.outputs.version }}

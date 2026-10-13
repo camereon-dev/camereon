@@ -1,0 +1,46 @@
+name: Android demo APK
+
+# デモ APK は必要なときだけ手動で作る。普段の確認はローカルの `mise run apk` で行う。
+# ビルド設定を変える PR だけは、main の beta ビルドを壊さないよう自動で確認する。
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - android/**
+      - mise.toml
+      - pubspec.yaml
+      - pubspec.lock
+      - scripts/build-android-*.sh
+      - .github/actions/**
+      - .github/workflows/android-demo.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Build Android demo APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-flutter
+        with:
+          android: 'true'
+      - name: Build Android demo APK
+        timeout-minutes: 10
+        # 実機配布用なので arm64 のみ
+        run: bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER" --target-platform android-arm64
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: camereon-android-demo
+          path: |
+            dist/camereon-demo.apk
+            dist/camereon-demo.apk.sha256
+          if-no-files-found: error
+          retention-days: 30

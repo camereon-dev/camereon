@@ -10,10 +10,10 @@ Android 向けに Flutter で開発する。現在は起動画面とアプリの
 
 ## 起動する
 
-Flutter **3.47.4** / Dart **3.13.3** を使う。バージョンは `pubspec.yaml` と `.fvmrc` で固定する。
-Flutter を直接使う場合は `flutter --version` を確認する。FVM を使う場合は `fvm install` のあと、以下の `flutter` / `dart` を `fvm flutter` / `fvm dart` に読み替える。
+Flutter **3.47.7** / Dart **3.13.5** / JDK **25**（Temurin）を使う。ツールのバージョンは [mise](https://mise.jdx.dev/) の `mise.toml` で固定し、CI も同じファイルを使う。
 
 ```sh
+mise install
 flutter doctor -v
 flutter pub get
 flutter devices
@@ -35,9 +35,7 @@ flutter run -d <device-id>
 ## テストする
 
 ```sh
-dart format --output=none --set-exit-if-changed lib test integration_test
-flutter analyze
-flutter test --coverage
+mise run check   # format・analyze・widget test
 ```
 
 起動画面、説明ダイアログの開閉、小さい画面と文字拡大時の操作を widget test で確認する。
@@ -45,7 +43,7 @@ flutter test --coverage
 
 ```sh
 # 起動済みの Android Emulator または実機
-flutter test integration_test/app_test.dart -d <android-device-id>
+mise run device-test -- -d <android-device-id>
 ```
 
 ## Android のベータ版を取得する
@@ -57,7 +55,7 @@ flutter test integration_test/app_test.dart -d <android-device-id>
 ## ローカルのデモ APK を作る
 
 ```sh
-bash scripts/build-android-demo.sh
+mise run apk
 ```
 
 `dist/camereon-demo.apk` と SHA-256 ファイルができる。APK は端末を選びにくい universal APK とし、デモ用の debug 鍵で署名する。アプリ ID は `dev.camereon.camereon.demo`、表示名は `camereon demo`。
@@ -74,25 +72,29 @@ adb install -r dist/camereon-demo.apk
 
 ## GitHub Actions で確認・配布する
 
-[Android checks and demo](https://github.com/camereon-dev/camereon/actions) は `main` への push、PR、手動実行で動く。
+動作確認やデバッグはローカルの方が速いため、CI は PR の確認とベータ公開に絞る。
+
+[Checks and beta release](https://github.com/camereon-dev/camereon/actions) は `main` への push、PR、手動実行で動く。
 
 | Job | 内容 |
 | --- | --- |
 | Format, analyze and widget tests | バージョン・依存を固定してフォーマット、静的解析、widget test を実行 |
-| Android demo APK | PR・main 以外の手動実行でデモ APK を生成 |
 | Build signed Android beta | main で ARM64 のベータ APK を固定鍵で署名し、署名・バージョン・チェックサムを確認 |
 | Publish beta GitHub Release | 検証済み APK を Pre-release として自動公開 |
 
 `main` への push（PR のマージを含む）で、解析・画面テスト → 署名付き APK ビルド → GitHub Pre-release 公開まで自動実行する。ベータ版の名前は `v0.1.0-beta.<CI 実行番号>` の形式。同じ CI の再実行では既存の公開 Release を使い、重複公開しない。
 
-手動で新しいベータ版を出す場合は、**Android checks and demo → Run workflow → main** を選ぶ。
+手動で新しいベータ版を出す場合は、**Checks and beta release → Run workflow → main** を選ぶ。
 PR や別ブランチからは公開しない。APK の公開はビルドと検証が成功した場合に行う。
 
 公開先は [GitHub Releases](https://github.com/camereon-dev/camereon/releases)。ブラウザーで APK を直接取得できる。Actions の成果物にはベータ APK・SHA-256・公開用メタデータを30日間保持する。GitHub Release の添付ファイルはその期間に依存しない。
 署名鍵の設定・バックアップ・再実行については [ベータ版の運用](docs/beta-releases.md) を参照する。
 
-通常の配布 CI は Emulator の準備・起動、端末テスト、debug APK のビルドを行わない。
-端末上の起動確認が必要なときは、Actions の **Android device tests** から **Run workflow** を選ぶ。
+デモ APK が必要なときは、Actions の **Android demo APK** から **Run workflow** を選ぶ（ARM64 実機用）。
+Android のビルド設定（`android/`・`mise.toml`・`pubspec`・ビルドスクリプト）を変える PR では、このワークフローが自動で動いてビルドを確認する。
+
+通常の CI は Emulator の準備・起動、端末テストを行わない。
+端末上の起動確認が必要なときは、PR に `device-test` ラベルを付けるか、Actions の **Android device tests** から **Run workflow** を選ぶ。
 この手動ワークフローで integration test と APK のインストール・起動を確認し、`android-startup-screenshot` を取得できる（14 日間保存）。手動テストの完了を待たずに通常の APK 配布を進められる。
 初回やキャッシュがない実行では依存の取得に時間がかかる。通常の APK ビルドは10分、配布 job 全体は15分でタイムアウトする。
 
@@ -100,7 +102,7 @@ PR や別ブランチからは公開しない。APK の公開はビルドと検�
 
 - ローカルで Android を確認する人: Android Studio・SDK を導入し、SDK ライセンスを確認して Emulator または実機を準備する。
 - リポジトリ管理者: GitHub Actions の実行を有効にする。自動ベータ公開では署名用 Secrets と証明書の SHA-256 を設定する（このリポジトリでは初期設定済み）。
-- チーム: PR のレビュー担当を決め、PR の解析・画面テストと Android ビルドの成功を確認して取り込む。必要に応じて `main` の保護ルールに必須チェックを設定する。
+- チーム: PR のレビュー担当を決め、PR の解析・画面テストの成功を確認して取り込む。必要に応じて `main` の保護ルールに必須チェックを設定する。
 
 開発ルールは [CONTRIBUTING.md](CONTRIBUTING.md)。環境の不具合は `flutter doctor -v` で不足している項目を確認する。
 

@@ -1,0 +1,21 @@
+# 開発ツールのバージョンはここで固定する（CI も同じファイルを使う）
+[tools]
+flutter = "3.47.7"
+java = "temurin-25"
+
+[tasks.check]
+description = "PR 前の確認（format・analyze・widget test）"
+run = [
+  "flutter pub get --enforce-lockfile",
+  "dart format --output=none --set-exit-if-changed lib test integration_test",
+  "flutter analyze",
+  "flutter test",
+]
+
+[tasks.device-test]
+description = "接続中の Android 端末・エミュレーターで起動テスト"
+run = "flutter test integration_test/app_test.dart"
+
+[tasks.apk]
+description = "デモ APK を dist/ に作る"
+run = "bash scripts/build-android-demo.sh"
