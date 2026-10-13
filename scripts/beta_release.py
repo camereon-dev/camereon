@@ -69,11 +69,18 @@ def package():
         raise ValueError("Invalid expected signing certificate")
     source = Path("dist/camereon-demo.apk")
     signatures = subprocess.check_output(
-        [android_tool("apksigner"), "verify", "--print-certs", str(source)], text=True)
-    certificates = re.findall(r"Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-f]+)",
-                              signatures)
-    if certificates != [expected_cert]:
-        raise ValueError("APK is not signed with the configured beta key")
+        [android_tool("apksigner"), "verify", "--print-certs-pem", str(source)], text=True)
+    # SDK versions use different signer labels and may repeat a certificate
+    # for several Android API ranges. Compare the actual certificate bytes.
+    certificates = re.findall(
+        r"-----BEGIN CERTIFICATE-----\s*(.*?)\s*-----END CERTIFICATE-----",
+        signatures, re.DOTALL)
+    fingerprints = {
+        hashlib.sha256(base64.b64decode(re.sub(r"\s+", "", cert), validate=True)).hexdigest()
+        for cert in certificates
+    }
+    if fingerprints != {expected_cert}:
+        raise ValueError(f"Unexpected APK signing certificate: {sorted(fingerprints)}")
     manifest = subprocess.check_output(
         [android_tool("aapt"), "dump", "badging", str(source)], text=True)
     package_info = re.search(r"package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", manifest)
