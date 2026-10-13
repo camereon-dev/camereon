@@ -1,9 +1,10 @@
-name: Android checks and demo
+name: Checks and beta release
 
 on:
   push:
     branches: [main]
   pull_request:
+  # main で実行すると新しいベータ版を公開する
   workflow_dispatch:
 
 permissions:
@@ -19,12 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: pubspec.yaml
-          channel: stable
-          cache: true
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-flutter
       - run: flutter pub get --enforce-lockfile
       - run: dart format --output=none --set-exit-if-changed lib test integration_test
       - run: flutter analyze
@@ -36,57 +33,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  android:
-    name: Android demo APK
-    # quality と並列に走らせる。main ではキャッシュ作成を beta ジョブが兼ねる
-    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            android/**/*.gradle*
-            android/gradle/wrapper/gradle-wrapper.properties
-            pubspec.lock
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: pubspec.yaml
-          channel: stable
-          cache: true
-      - id: ndk
-        name: Resolve Flutter NDK version
-        run: |
-          python3 - <<'PYCODE'
-          import os, re
-          from pathlib import Path
-          extension = Path(os.environ["FLUTTER_ROOT"]) / "packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt"
-          version = re.search(r'val ndkVersion:\s*String\s*=\s*"([^"]+)"', extension.read_text())[1]
-          Path(os.environ["GITHUB_OUTPUT"]).write_text(f"path={os.environ['ANDROID_HOME']}/ndk/{version}\nversion={version}\n")
-          PYCODE
-      - name: Cache Android NDK
-        uses: actions/cache@v5
-        with:
-          path: ${{ steps.ndk.outputs.path }}
-          key: android-ndk-${{ runner.os }}-${{ steps.ndk.outputs.version }}
-      - name: Build Android demo APK
-        timeout-minutes: 10
-        # 実機配布用なので arm64 のみ
-        run: bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER" --target-platform android-arm64
-      - name: Upload installable APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: camereon-android-demo
-          path: |
-            dist/camereon-demo.apk
-            dist/camereon-demo.apk.sha256
-          if-no-files-found: error
-          retention-days: 30
-
   beta:
     name: Build signed Android beta
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -94,36 +40,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-flutter
         with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            android/**/*.gradle*
-            android/gradle/wrapper/gradle-wrapper.properties
-            pubspec.lock
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: pubspec.yaml
-          channel: stable
-          cache: true
-      - id: ndk
-        name: Resolve Flutter NDK version
-        run: |
-          python3 - <<'PYCODE'
-          import os, re
-          from pathlib import Path
-          extension = Path(os.environ["FLUTTER_ROOT"]) / "packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt"
-          version = re.search(r'val ndkVersion:\s*String\s*=\s*"([^"]+)"', extension.read_text())[1]
-          Path(os.environ["GITHUB_OUTPUT"]).write_text(f"path={os.environ['ANDROID_HOME']}/ndk/{version}\nversion={version}\n")
-          PYCODE
-      - name: Cache Android NDK
-        uses: actions/cache@v5
-        with:
-          path: ${{ steps.ndk.outputs.path }}
-          key: android-ndk-${{ runner.os }}-${{ steps.ndk.outputs.version }}
+          android: 'true'
       - id: signing
         name: Restore beta signing key
         env:
@@ -157,7 +77,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: camereon-beta
