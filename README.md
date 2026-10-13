@@ -73,7 +73,7 @@ CI や別の PC で作った APK は署名が異なるため、更新時に `INS
 | Job | 内容 |
 | --- | --- |
 | Format, analyze and widget tests | バージョン・依存を固定してフォーマット、静的解析、widget test を実行 |
-| Android launch test and demo APK | Android Emulator 上で起動テストし、配布用 APK を生成・インストール・起動 |
+| Android demo APK | Gradle のキャッシュを使い、release APK を生成・配布。Emulator を起動しない |
 
 配布手順:
 
@@ -82,8 +82,13 @@ CI や別の PC で作った APK は署名が異なるため、更新時に `INS
 3. `camereon-demo.apk` を Android 端末へ渡し、インストールする。
 4. 起動して `camereon` の画面を確認し、「このアプリについて」→「閉じる」を試す。
 
-APK の保管期間は 30 日。期間を過ぎた場合は再実行して取得する。Android の通常起動画面は `android-startup-screenshot` で取得できる（14 日間保存）。Actions の成果物の取得には GitHub ログインとリポジトリの読み取り権限が必要。
+APK の保管期間は 30 日。期間を過ぎた場合は再実行して取得する。Actions の成果物の取得には GitHub ログインとリポジトリの読み取り権限が必要。
 今回は Actions の成果物を Android のデモ配布先とする。公開ストア、公開 Release は対象に含めない。
+
+通常の配布 CI は Emulator の準備・起動、端末テスト、debug APK のビルドを行わない。
+端末上の起動確認が必要なときは、Actions の **Android device tests** から **Run workflow** を選ぶ。
+この手動ワークフローで integration test と APK のインストール・起動を確認し、`android-startup-screenshot` を取得できる（14 日間保存）。手動テストの完了を待たずに通常の APK 配布を進められる。
+初回やキャッシュがない実行では依存の取得に時間がかかる。通常の APK ビルドは10分、配布 job 全体は15分でタイムアウトする。
 
 ## ユーザー・チーム側の準備
 

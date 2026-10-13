@@ -2,8 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-flutter pub get
-flutter build apk --release "$@"
+flutter pub get --enforce-lockfile
+flutter build apk --release --no-pub "$@"
 mkdir -p dist
 cp build/app/outputs/flutter-apk/app-release.apk dist/camereon-demo.apk
 python3 - <<'PY'
