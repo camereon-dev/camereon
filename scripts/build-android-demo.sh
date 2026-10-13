@@ -15,4 +15,8 @@ Path('dist/camereon-demo.apk.sha256').write_text(
     f'{hashlib.sha256(apk.read_bytes()).hexdigest()}  {apk.name}\n'
 )
 PY
-echo '配布物: dist/camereon-demo.apk（デモ用の debug 鍵で署名）'
+if [[ -n "${CAMEREON_BETA_KEYSTORE:-}" ]]; then
+  echo '配布物: dist/camereon-demo.apk（ベータ版専用の固定鍵で署名）'
+else
+  echo '配布物: dist/camereon-demo.apk（デモ用の debug 鍵で署名）'
+fi
