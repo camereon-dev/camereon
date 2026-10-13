@@ -1,4 +1,4 @@
-name: Mobile checks and Android demo
+name: Android checks and demo
 
 on:
   push:
@@ -88,27 +88,5 @@ jobs:
         with:
           name: android-startup-screenshot
           path: dist/android-startup.png
-          if-no-files-found: error
-          retention-days: 14
-
-  ios:
-    name: iOS Simulator build and launch test
-    needs: quality
-    runs-on: macos-15
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v6
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: pubspec.yaml
-          channel: stable
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - name: Test launch on iOS Simulator
-        run: bash scripts/test-ios.sh
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ios-startup-screenshot
-          path: dist/ios-startup.png
           if-no-files-found: error
           retention-days: 14

@@ -2,7 +2,7 @@
 
 写真に写り込んだ個人情報を簡単に隠して、SNSへ投稿する前の確認を助けるカメラアプリ。
 
-iOS・Android に対応し、Flutter で開発する。現在は起動画面とアプリの説明を表示するデモ。撮影・加工・画像保存は次の段階で追加する。
+Android 向けに Flutter で開発する。現在は起動画面とアプリの説明を表示するデモ。撮影・加工・画像保存は次の段階で追加する。
 
 ## 今回の範囲
 
@@ -32,20 +32,6 @@ flutter devices
 flutter run -d <device-id>
 ```
 
-iOS は **macOS と Xcode 本体**が必要（Command Line Tools だけでは起動できない）。最小対応は iOS 15.0。
-Xcode を開いて初回設定を完了し、Settings → Components から iOS Simulator runtime を追加する。
-必要に応じて次の初期設定を行う。
-
-```sh
-sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-sudo xcodebuild -runFirstLaunch
-open -a Simulator
-flutter devices
-flutter run -d <simulator-id>
-```
-
-Simulator の確認では有料の Apple Developer 登録や署名鍵は不要。iPhone 実機で確認する場合は `ios/Runner.xcworkspace` を Xcode で開き、Signing & Capabilities で自分の Team を設定する。今回は iOS の配布は行わない。
-
 ## テストする
 
 ```sh
@@ -60,12 +46,7 @@ flutter test --coverage
 ```sh
 # 起動済みの Android Emulator または実機
 flutter test integration_test/app_test.dart -d <android-device-id>
-
-# 利用可能な iPhone Simulator を自動選択して起動・テスト
-bash scripts/test-ios.sh
 ```
-
-iOS のスクリプトはテスト後に通常アプリもビルド・起動し、`dist/ios-startup.png` を保存する。
 
 ## Android のデモを配布する
 
@@ -87,13 +68,12 @@ CI や別の PC で作った APK は署名が異なるため、更新時に `INS
 
 ## GitHub Actions で確認・配布する
 
-[Mobile checks and Android demo](https://github.com/camereon-dev/camereon/actions) は `main` への push、PR、手動実行で動く。
+[Android checks and demo](https://github.com/camereon-dev/camereon/actions) は `main` への push、PR、手動実行で動く。
 
 | Job | 内容 |
 | --- | --- |
 | Format, analyze and widget tests | バージョン・依存を固定してフォーマット、静的解析、widget test を実行 |
 | Android launch test and demo APK | Android Emulator 上で起動テストし、配布用 APK を生成・インストール・起動 |
-| iOS Simulator build and launch test | macOS runner 上の iPhone Simulator で起動テストし、通常アプリもビルド |
 
 配布手順:
 
@@ -102,18 +82,17 @@ CI や別の PC で作った APK は署名が異なるため、更新時に `INS
 3. `camereon-demo.apk` を Android 端末へ渡し、インストールする。
 4. 起動して `camereon` の画面を確認し、「このアプリについて」→「閉じる」を試す。
 
-APK の保管期間は 30 日。期間を過ぎた場合は再実行して取得する。両 OS の通常起動画面は `android-startup-screenshot` / `ios-startup-screenshot` で取得できる（14 日間保存）。Actions の成果物の取得には GitHub ログインとリポジトリの読み取り権限が必要。
-今回は Actions の成果物を Android のデモ配布先とする。公開ストア、TestFlight、公開 Release は対象に含めない。
+APK の保管期間は 30 日。期間を過ぎた場合は再実行して取得する。Android の通常起動画面は `android-startup-screenshot` で取得できる（14 日間保存）。Actions の成果物の取得には GitHub ログインとリポジトリの読み取り権限が必要。
+今回は Actions の成果物を Android のデモ配布先とする。公開ストア、公開 Release は対象に含めない。
 
 ## ユーザー・チーム側の準備
 
 - ローカルで Android を確認する人: Android Studio・SDK を導入し、SDK ライセンスを確認して Emulator または実機を準備する。
-- ローカルで iOS を確認する人: Xcode 本体と iOS Simulator runtime を導入する。
 - リポジトリ管理者: GitHub Actions の実行を有効にする。今回のデモ配布では追加の Secrets は不要。
-- チーム: PR のレビュー担当を決め、3 jobs の成功を確認して取り込む。必要に応じて `main` の保護ルールに必須チェックを設定する。
+- チーム: PR のレビュー担当を決め、2 jobs の成功を確認して取り込む。必要に応じて `main` の保護ルールに必須チェックを設定する。
 
 開発ルールは [CONTRIBUTING.md](CONTRIBUTING.md)。環境の不具合は `flutter doctor -v` で不足している項目を確認する。
 
-参考: [Flutter 導入](https://docs.flutter.dev/install)、[iOS 開発環境](https://docs.flutter.dev/platform-integration/ios/setup)、[Android ビルド](https://docs.flutter.dev/deployment/android)、[integration test](https://docs.flutter.dev/testing/integration-tests)。
+参考: [Flutter 導入](https://docs.flutter.dev/install)、[Android ビルド](https://docs.flutter.dev/deployment/android)、[integration test](https://docs.flutter.dev/testing/integration-tests)。
 
 関連 Issue: [#1 定義書作る](https://github.com/camereon-dev/camereon/issues/1)

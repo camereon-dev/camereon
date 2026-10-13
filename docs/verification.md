@@ -7,7 +7,6 @@
 - macOS 26.6.2 / Apple Silicon
 - Flutter 3.47.4 / Dart 3.13.3
 - Android SDK API 36 / Android Studio 同梱 JDK 25
-- Xcode 本体なし。ローカル iOS ビルド・起動は未確認。
 
 ## 結果
 
@@ -19,11 +18,10 @@
 | Android release APK | 成功。`dist/camereon-demo.apk` を生成 |
 | Android Emulator 起動テスト | 成功。Pixel Tablet API 31 上で説明の開閉を確認 |
 | Android APK インストール・通常起動 | 成功。release APK のインストールと cold launch が成功し、スクリーンショットを目視確認 |
-| GitHub Actions | 未実行 |
-| iOS Simulator 起動 | CI で確認予定 |
+| GitHub Actions | Android のみに切り替えて実行中 |
 
 ## 制約
 
 - APK はデモ用 debug 鍵で署名する。別環境の APK へ更新する場合はアンインストールが必要になることがある。
-- iOS の配布と両 OS の実機確認は、今回の完了条件に含めない。
+- Android の実機確認は、今回の完了条件に含めない。Emulator 上で検証する。
 - 撮影・加工・保存は未実装。起動画面には今後追加予定であることを表示する。
