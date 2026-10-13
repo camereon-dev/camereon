@@ -47,5 +47,5 @@ CI: [成功した実行](https://github.com/camereon-dev/camereon/actions/runs/3
 - 通常 CI は静的解析・画面テストと release APK の生成・配布を行う。
 - Emulator、integration test、端末へのインストールと起動は手動ワークフローへ移した。
 - Gradle の依存キャッシュを追加し、debug と release の二重ビルドを通常配布から除いた。
-- APK ビルドの前に依存を固定して取得し、ビルド時の重複取得を省いた。
+- APK ビルドの前に依存を固定して取得し、Flutter の release 用プラグイン生成を実行する。
 - workflow の actionlint とビルドスクリプトの構文確認が成功。新しい配布 CI の所要時間は実行後に確認する。

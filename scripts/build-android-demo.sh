@@ -3,7 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 flutter pub get --enforce-lockfile
-flutter build apk --release --no-pub "$@"
+# Let Flutter regenerate native plugin registration for release mode.
+flutter build apk --release "$@"
 mkdir -p dist
 cp build/app/outputs/flutter-apk/app-release.apk dist/camereon-demo.apk
 python3 - <<'PY'
