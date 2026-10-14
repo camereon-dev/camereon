@@ -43,6 +43,8 @@ jobs:
             flutter test integration_test/app_test.dart -d emulator-5554
             bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER"
             adb install -r dist/camereon-demo.apk
+            # 起動画面としてカメラのプレビューを撮るため、権限ダイアログを省く
+            adb shell pm grant dev.camereon.camereon.demo android.permission.CAMERA
             adb shell am start -W -n dev.camereon.camereon.demo/.MainActivity
             sleep 3
             adb shell pidof dev.camereon.camereon.demo

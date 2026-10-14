@@ -2,11 +2,11 @@
 
 写真に写り込んだ個人情報を簡単に隠して、SNSへ投稿する前の確認を助けるカメラアプリ。
 
-Android 向けに Flutter で開発する。現在は起動画面とアプリの説明を表示するデモ。撮影・加工・画像保存は次の段階で追加する。
+Android 向けに Flutter で開発する。起動するとすぐにカメラが開き、撮影した写真を確認・撮り直しできる。隠す加工と画像保存は次の段階で追加する。
 
 ## 今回の範囲
 
-[ベータ版の取得・運用](docs/beta-releases.md) / [今回の定義・完了条件](docs/bootstrap-definition.md) / [プロダクト全体の MVP 定義](docs/mvp-definition.md) / [検証記録](docs/verification.md)
+[ベータ版の取得・運用](docs/beta-releases.md) / [今回の定義・完了条件](docs/bootstrap-definition.md) / [プロダクト全体の MVP 定義](docs/mvp-definition.md) / [検証記録](docs/verification.md) / [今後のアイデア](docs/ideas.md)
 
 ## 起動する
 
@@ -38,8 +38,8 @@ flutter run -d <device-id>
 mise run check   # format・analyze・widget test
 ```
 
-起動画面、説明ダイアログの開閉、小さい画面と文字拡大時の操作を widget test で確認する。
-端末上での起動と説明の開閉は integration test で確認する。
+widget test は偽のカメラ（`CameraPlatform` の差し替え）を使い、起動直後のプレビュー、撮影と撮り直し、カメラの切り替え、権限拒否・カメラなしの表示、小さい画面と文字拡大時のレイアウトを確認する。
+端末上でカメラ画面が起動することは integration test で確認する。撮影はカメラの実装に依存するため、実機で確認する。
 
 ```sh
 # 起動済みの Android Emulator または実機
