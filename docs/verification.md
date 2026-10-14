@@ -49,3 +49,23 @@ CI: [成功した実行](https://github.com/camereon-dev/camereon/actions/runs/3
 - Gradle の依存キャッシュを追加し、debug と release の二重ビルドを通常配布から除いた。
 - APK ビルドの前に依存を固定して取得し、Flutter の release 用プラグイン生成を実行する。
 - workflow の actionlint とビルドスクリプトの構文確認が成功。新しい配布 CI の所要時間は実行後に確認する。
+
+## カメラ起動（#8）
+
+検証日: 2026-10-14 ／ 対象: `af3f37f`（#8 のマージコミット）
+
+| 確認 | 環境 | 結果 |
+| --- | --- | --- |
+| フォーマット・静的解析・widget test | macOS / Flutter 3.47.7 | 成功。偽のカメラで 6 件 |
+| integration test（カメラ画面の起動） | Emulator Pixel Tablet API 31 | 成功 |
+| 権限ダイアログ・切り替え・復帰・前面カメラ撮影・撮り直し・一時ファイル削除・権限拒否から設定経由の復帰 | Emulator Pixel Tablet API 31 | 成功（手動） |
+| 背面カメラの撮影 | Emulator Pixel Tablet API 31 | 失敗。撮影時にエミュレーターのカメラ HAL がクラッシュする（解像度を下げても再現） |
+| カメラ起動・撮影 | 実機 Xiaomi 14T Pro（HyperOS 3.0.4 / Android 16） | 成功（チームメンバーが手動確認） |
+| release APK の権限 | — | `CAMERA` と CameraX 由来の `ACCESS_NETWORK_STATE` のみ |
+
+背面カメラの撮影失敗はエミュレーター固有と判断した（#17）。
+
+制約:
+
+- 画面は縦向き固定のため、横向きに構えて撮っても縦向きで保存される（#16）。
+- タブレットのエミュレーターでは縦向き固定が効かず、横画面で表示された。
