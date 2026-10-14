@@ -13,7 +13,20 @@ PR には変更内容、確認方法、未確認の環境を記載する。別�
 `main` へのマージ後はベータ版を自動公開する。[ベータ版の運用](docs/beta-releases.md) を確認する。
 
 `lib/app.dart` はテーマとアプリの入口、`lib/features/` は機能ごとの画面を置く。
-今後追加するカメラ・画像処理・保存は、画面から切り離してテストできる形にする。
+画像処理・保存は画面から切り離してテストできる形にする。
+
+機能をまたいで受け渡す型は `lib/core/photo/` に置く。
+
+| 型 | 内容 |
+| --- | --- |
+| `SourcePhoto` | 編集の元画像。向きを正規化しメタデータを除いたバイト列と画素サイズ |
+| `HideRegion` | 黒塗りする範囲。`SourcePhoto` の画素座標の整数の長方形（外側へ丸める） |
+| `RedactedJpeg` | 黒塗りを焼き込んだ保存用 JPEG |
+| `PhotoProcessor` | `normalize`（撮影画像 → `SourcePhoto`）と `redact`（→ `RedactedJpeg`） |
+| `PhotoSaver` | `RedactedJpeg` をギャラリーに保存し、`SaveResult` を返す |
+
+撮影 → `PhotoProcessor.normalize` → 編集画面で `HideRegion` を選ぶ → `PhotoProcessor.redact` → `PhotoSaver.save` の順に渡す。
+検出機能（顔・テキスト）も候補を `HideRegion` で返す。
 
 ## PR 前の確認
 
