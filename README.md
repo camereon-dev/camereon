@@ -2,6 +2,8 @@
 
 写真に写り込んだ個人情報を簡単に隠して、SNSへ投稿する前の確認を助けるカメラアプリ。
 
+[アプリ紹介・ダウンロード](https://camereon-dev.github.io/camereon/)
+
 Android 向けに Flutter で開発する。起動するとすぐにカメラが開き、撮影した写真を確認・撮り直しできる。隠す加工と画像保存は次の段階で追加する。
 
 ## 今回の範囲
@@ -107,6 +109,8 @@ Android のビルド設定（`android/`・`mise.toml`・`pubspec`・ビルドス
 - チーム: PR のレビュー担当を決め、PR の解析・画面テストの成功を確認して取り込む。必要に応じて `main` の保護ルールに必須チェックを設定する。
 
 開発ルールは [CONTRIBUTING.md](CONTRIBUTING.md)。環境の不具合は `flutter doctor -v` で不足している項目を確認する。
+
+紹介サイトは `site/` で管理し、GitHub Pages へ自動公開する。サイトの更新・画像差し替えの手順は [サイトの README](site/README.md) を参照する。
 
 参考: [Flutter 導入](https://docs.flutter.dev/install)、[Android ビルド](https://docs.flutter.dev/deployment/android)、[integration test](https://docs.flutter.dev/testing/integration-tests)。
 

@@ -1,0 +1,169 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="900"
+  height="1120"
+  viewBox="0 0 900 1120"
+  fill="none"
+>
+  <defs>
+    <linearGradient
+      id="sky"
+      x1="450"
+      y1="0"
+      x2="450"
+      y2="670"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#BCD1CF" />
+      <stop offset="1" stop-color="#EBEAD7" />
+    </linearGradient>
+    <linearGradient
+      id="lake"
+      x1="450"
+      y1="375"
+      x2="450"
+      y2="820"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#809F95" />
+      <stop offset="1" stop-color="#C1CCAF" />
+    </linearGradient>
+    <linearGradient
+      id="table"
+      x1="450"
+      y1="730"
+      x2="450"
+      y2="1120"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#BB8762" />
+      <stop offset="1" stop-color="#DCAD81" />
+    </linearGradient>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="13" />
+    </filter>
+    <pattern id="grain" width="160" height="160" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="19" r="1" fill="#294536" fill-opacity=".08" />
+      <circle cx="70" cy="92" r="1.2" fill="#FFF" fill-opacity=".2" />
+      <circle cx="134" cy="45" r="1" fill="#294536" fill-opacity=".07" />
+    </pattern>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h900v1120H0z" />
+  <circle cx="655" cy="170" r="62" fill="#F5E6B8" />
+  <path
+    d="M-40 395 162 174l160 181 130-139 165 165 114-107 227 206H-40Z"
+    fill="#A2B6A3"
+  />
+  <path
+    d="m-40 445 154-144 90 91 80-89 155 146 167-135 110 100 102-65 136 113H-40Z"
+    fill="#668B79"
+  />
+  <path d="M0 426h900v437H0z" fill="url(#lake)" />
+  <path
+    d="m0 412 140 20 183-12 139 13 173-13 265 17v36l-233-18-193 10-160-12-193 12L0 451Z"
+    fill="#547C65"
+  />
+  <g stroke="#E0E4CD" stroke-linecap="round">
+    <path
+      d="M84 518h183m206-25h133m-287 91h225m79-53h119M35 641h226m285-25h247m-361 79h127"
+      stroke-width="3"
+      opacity=".5"
+    />
+    <path
+      d="M116 561h78m452 125h136m-474-40h100"
+      stroke-width="2"
+      opacity=".65"
+    />
+  </g>
+  <path d="M0 730 900 706v414H0V730Z" fill="url(#table)" />
+  <g opacity=".25" stroke="#825B40" stroke-width="3">
+    <path d="m-10 892 920-30M-10 1060l920-44M224 724l-55 396M691 712l112 408" />
+  </g>
+  <path
+    d="M0 725c89-96 139-161 137-241C77 507 43 514 0 515v210Z"
+    fill="#274E3C"
+  />
+  <path
+    d="M0 552c110-3 185-40 222-118-76-7-141 12-175 53 38-77 39-150 4-217-39 58-52 103-51 164v118Z"
+    fill="#365F47"
+  />
+  <g transform="translate(126 824) rotate(-11)">
+    <ellipse
+      cx="151"
+      cy="114"
+      rx="130"
+      ry="46"
+      fill="#634B37"
+      opacity=".22"
+      filter="url(#shadow)"
+    />
+    <rect width="294" height="196" rx="8" fill="#F5F0DF" />
+    <rect width="294" height="47" rx="8" fill="#2F5841" />
+    <path d="M0 38h294v10H0z" fill="#2F5841" />
+    <text
+      x="23"
+      y="31"
+      font-family="Arial,sans-serif"
+      font-size="17"
+      letter-spacing="3"
+      fill="#E3EBCC"
+    >
+      A LITTLE GETAWAY
+    </text>
+    <text
+      x="23"
+      y="87"
+      font-family="Arial,sans-serif"
+      font-size="22"
+      font-weight="700"
+      fill="#354C3C"
+    >
+      WEEKEND TICKET
+    </text>
+    <text
+      x="23"
+      y="121"
+      font-family="Arial,sans-serif"
+      font-size="16"
+      fill="#66725E"
+    >
+      NAME : HANAKO SAMPLE
+    </text>
+    <text
+      x="23"
+      y="151"
+      font-family="Arial,sans-serif"
+      font-size="16"
+      fill="#66725E"
+    >
+      ID : 0123 4567 8900
+    </text>
+    <path d="M22 172h139" stroke="#BCC3AA" stroke-width="2" />
+  </g>
+  <g transform="translate(555 749)">
+    <ellipse
+      cx="125"
+      cy="163"
+      rx="126"
+      ry="48"
+      fill="#634B37"
+      opacity=".23"
+      filter="url(#shadow)"
+    />
+    <ellipse cx="111" cy="148" rx="123" ry="48" fill="#DDD9C0" />
+    <ellipse cx="111" cy="143" rx="111" ry="39" fill="#F7F0D7" />
+    <path d="M181 48c83-9 90 96 17 105" stroke="#F8F2DB" stroke-width="24" />
+    <path d="M29 48h163l-9 87c-6 50-140 50-146 0l-8-87Z" fill="#ECE9D1" />
+    <ellipse cx="111" cy="49" rx="82" ry="29" fill="#FFFAE7" />
+    <ellipse cx="111" cy="51" rx="67" ry="22" fill="#654635" />
+    <path
+      d="M92 53c-25-15 5-27 19-9 16-18 46-6 18 9l-18 10-19-10Z"
+      fill="#DFBA85"
+    />
+  </g>
+  <path
+    d="M804 1120c-46-74-40-135 29-211 2 45 17 63 67 67v144h-96Z"
+    fill="#355A3E"
+  />
+  <path fill="url(#grain)" d="M0 0h900v1120H0z" />
+</svg>
