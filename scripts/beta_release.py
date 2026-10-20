@@ -87,8 +87,9 @@ def package():
     expected = ("dev.camereon.camereon.demo", str(int(required("GITHUB_RUN_NUMBER"))), version)
     if not package_info or package_info.groups() != expected:
         raise ValueError("APK package or version does not match the beta release")
-    if "native-code: 'arm64-v8a'" not in manifest:
-        raise ValueError("Beta APK must target ARM64 Android devices")
+    native_code = re.search(r"^native-code: (.+)$", manifest, re.MULTILINE)
+    if not native_code or native_code.group(1).strip() != "'arm64-v8a'":
+        raise ValueError("Beta APK must contain ARM64 native libraries only")
     BETA_DIR.mkdir(parents=True, exist_ok=True)
     apk = BETA_DIR / APK_NAME
     shutil.copyfile(source, apk)
