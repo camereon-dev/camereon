@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:camera/camera.dart';
+import 'package:camera_platform_interface/camera_platform_interface.dart';
+import 'package:camereon/app.dart';
 import 'package:camereon/core/photo/android_photo_saver.dart';
 import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
@@ -25,8 +26,56 @@ class RecordingSaver implements PhotoSaver {
   }
 }
 
+class _UnavailableCamera extends CameraPlatform {
+  @override
+  Future<List<CameraDescription>> availableCameras() async => const [];
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'sample: open without camera, redact, confirm and save on Android',
+    (tester) async {
+      final camera = CameraPlatform.instance;
+      CameraPlatform.instance = _UnavailableCamera();
+      addTearDown(() => CameraPlatform.instance = camera);
+      await tester.pumpWidget(const CamereonApp());
+      await tester.pumpAndSettle();
+      expect(find.text('カメラが見つかりません'), findsOneWidget);
+      await tester.tap(find.text('サンプルで試す'));
+      await tester.pumpAndSettle();
+      final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      final gesture = await tester.startGesture(
+        rect.topLeft + Offset(rect.width * .1, rect.height * .1),
+      );
+      await gesture.moveTo(
+        rect.topLeft + Offset(rect.width * .6, rect.height * .6),
+      );
+      await gesture.up();
+      await tester.pump();
+      expect(find.text('1箇所の領域を選択中'), findsOneWidget);
+      await tester.dragFrom(
+        rect.center,
+        Offset(rect.width * .2, rect.height * .2),
+      );
+      await tester.pump();
+      expect(find.text('2箇所の領域を選択中'), findsOneWidget);
+      await tester.tap(find.text('取り消す'));
+      await tester.pump();
+      expect(find.text('1箇所の領域を選択中'), findsOneWidget);
+      await tester.tap(find.text('保存前に確認'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
+      await tester.tap(find.text('写真に保存'));
+      await tester.pumpAndSettle();
+      expect(find.text('写真を保存しました'), findsOneWidget);
+      await tester.tap(find.text('もう一枚'));
+      await tester.pumpAndSettle();
+      expect(find.text('サンプルで試す'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'oriented photograph: edit, confirm, save JPEG, retake and clean up',
