@@ -4,14 +4,18 @@ import 'photo_images.dart';
 import 'photo_saver.dart';
 
 class AndroidPhotoSaver implements PhotoSaver {
-  const AndroidPhotoSaver({
-    MethodChannel channel = const MethodChannel('dev.camereon/photo_saver'),
-  }) : _channel = channel;
+  AndroidPhotoSaver({MethodChannel? channel})
+    : _channel = channel ?? const MethodChannel('dev.camereon/photo_saver');
 
   final MethodChannel _channel;
+  bool _saving = false;
 
   @override
   Future<SaveResult> save(RedactedJpeg jpeg) async {
+    if (_saving || jpeg.bytes.isEmpty || jpeg.width <= 0 || jpeg.height <= 0) {
+      return const SaveFailed(SaveFailureReason.failed);
+    }
+    _saving = true;
     try {
       final result = await _channel.invokeMethod<String>('save', {
         'bytes': jpeg.bytes,
@@ -30,6 +34,8 @@ class AndroidPhotoSaver implements PhotoSaver {
       return const SaveFailed(SaveFailureReason.failed);
     } on MissingPluginException {
       return const SaveFailed(SaveFailureReason.failed);
+    } finally {
+      _saving = false;
     }
   }
 }

@@ -1,5 +1,7 @@
 package dev.camereon.camereon.demo
 
+import android.graphics.BitmapFactory
+import java.util.UUID
 import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
@@ -45,7 +47,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 val bytes = call.argument<ByteArray>("bytes")
-                if (bytes == null || bytes.isEmpty() || saveInProgress) {
+                if (bytes == null || !isJpeg(bytes) || saveInProgress) {
                     result.success("failed")
                     return@setMethodCallHandler
                 }
@@ -57,10 +59,16 @@ class MainActivity : FlutterActivity() {
                 ) {
                     pendingSaveBytes = bytes
                     pendingSaveResult = result
-                    requestPermissions(
-                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                        savePermissionRequestCode,
-                    )
+                    try {
+                        requestPermissions(
+                            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                            savePermissionRequestCode,
+                        )
+                    } catch (_: Exception) {
+                        pendingSaveBytes = null
+                        pendingSaveResult = null
+                        finishSave(result, "failed")
+                    }
                 } else {
                     saveToGallery(bytes, result)
                 }
@@ -86,6 +94,22 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onDestroy() {
+        pendingSaveResult?.let { finishSave(it, "failed") }
+        pendingSaveResult = null
+        pendingSaveBytes = null
+        super.onDestroy()
+    }
+
+    private fun isJpeg(bytes: ByteArray): Boolean {
+        if (bytes.size < 4 || bytes[0] != 0xff.toByte() || bytes[1] != 0xd8.toByte() ||
+            bytes[bytes.size - 2] != 0xff.toByte() || bytes.last() != 0xd9.toByte()
+        ) return false
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        return options.outWidth > 0 && options.outHeight > 0 && options.outMimeType == "image/jpeg"
+    }
+
     private fun saveToGallery(bytes: ByteArray, result: MethodChannel.Result) {
         Thread {
             val status = try {
@@ -101,7 +125,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun insertImage(bytes: ByteArray) {
-        val fileName = "camereon_${System.currentTimeMillis()}.jpg"
+        val fileName = "camereon_${UUID.randomUUID()}.jpg"
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -135,15 +159,23 @@ class MainActivity : FlutterActivity() {
                 ?: throw IllegalStateException("Could not open gallery entry")
             output.use { it.write(bytes) }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentResolver.update(
+                val published = contentResolver.update(
                     uri,
                     ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
                     null,
                     null,
                 )
+                check(published == 1) { "Could not publish gallery entry" }
             }
         } catch (error: Exception) {
-            contentResolver.delete(uri, null, null)
+            try {
+                contentResolver.delete(uri, null, null)
+            } catch (_: Exception) {
+                // Preserve the original failure even when cleanup is rejected.
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                values.getAsString(MediaStore.Images.Media.DATA)?.let { File(it).delete() }
+            }
             throw error
         }
     }
