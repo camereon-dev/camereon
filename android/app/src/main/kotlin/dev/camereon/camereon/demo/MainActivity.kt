@@ -1,13 +1,25 @@
 package dev.camereon.camereon.demo
 
+import android.Manifest
+import android.content.ContentValues
+import android.content.pm.PackageManager
 import android.content.Intent
+import android.os.Build
+import android.os.Environment
 import android.net.Uri
+import android.provider.MediaStore
 import android.provider.Settings
+import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private val savePermissionRequestCode = 731
+    private var saveInProgress = false
+    private var pendingSaveBytes: ByteArray? = null
+    private var pendingSaveResult: MethodChannel.Result? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // カメラ権限を「今後表示しない」で拒否された場合に、アプリの設定画面へ案内する
@@ -24,5 +36,120 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/photo_saver")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "save") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+
+                val bytes = call.argument<ByteArray>("bytes")
+                if (bytes == null || bytes.isEmpty() || saveInProgress) {
+                    result.success("failed")
+                    return@setMethodCallHandler
+                }
+
+                saveInProgress = true
+                if (Build.VERSION.SDK_INT in Build.VERSION_CODES.M..Build.VERSION_CODES.P &&
+                    checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    pendingSaveBytes = bytes
+                    pendingSaveResult = result
+                    requestPermissions(
+                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                        savePermissionRequestCode,
+                    )
+                } else {
+                    saveToGallery(bytes, result)
+                }
+            }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != savePermissionRequestCode) return
+
+        val result = pendingSaveResult ?: return
+        val bytes = pendingSaveBytes
+        pendingSaveResult = null
+        pendingSaveBytes = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && bytes != null) {
+            saveToGallery(bytes, result)
+        } else {
+            finishSave(result, "permissionDenied")
+        }
+    }
+
+    private fun saveToGallery(bytes: ByteArray, result: MethodChannel.Result) {
+        Thread {
+            val status = try {
+                insertImage(bytes)
+                "saved"
+            } catch (_: SecurityException) {
+                "permissionDenied"
+            } catch (_: Exception) {
+                "failed"
+            }
+            runOnUiThread { finishSave(result, status) }
+        }.start()
+    }
+
+    private fun insertImage(bytes: ByteArray) {
+        val fileName = "camereon_${System.currentTimeMillis()}.jpg"
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(
+                    MediaStore.Images.Media.RELATIVE_PATH,
+                    "${Environment.DIRECTORY_PICTURES}/camereon",
+                )
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            } else {
+                val directory = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    "camereon",
+                )
+                if (!directory.exists() && !directory.mkdirs()) {
+                    throw IllegalStateException("Could not create gallery directory")
+                }
+                put(MediaStore.Images.Media.DATA, File(directory, fileName).absolutePath)
+            }
+        }
+
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+        val uri = contentResolver.insert(collection, values)
+            ?: throw IllegalStateException("Could not create gallery entry")
+        try {
+            val output = contentResolver.openOutputStream(uri)
+                ?: throw IllegalStateException("Could not open gallery entry")
+            output.use { it.write(bytes) }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentResolver.update(
+                    uri,
+                    ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
+                    null,
+                    null,
+                )
+            }
+        } catch (error: Exception) {
+            contentResolver.delete(uri, null, null)
+            throw error
+        }
+    }
+
+    private fun finishSave(result: MethodChannel.Result, status: String) {
+        saveInProgress = false
+        result.success(status)
     }
 }
