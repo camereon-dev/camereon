@@ -1,0 +1,84 @@
+{
+  "status": "completed",
+  "started_at": "2026-10-20T07:46:12.713137Z",
+  "packages": {
+    "flutter_edge_ai": "2.4.1",
+    "flutter_edge_ai_litertlm": "1.15.0"
+  },
+  "model": {
+    "name": "Gemma 4 E2B",
+    "model_type": "gemma4",
+    "repository": "litert-community/gemma-4-E2B-it-litert-lm",
+    "revision": "41c5569623a7c189d6eec3e5225260c58cedbce7",
+    "filename": "gemma-4-E2B-it.litertlm",
+    "size": 2588147712,
+    "sha256": "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c",
+    "license": "apache-2.0"
+  },
+  "prompt": "Briefly describe the objects, colors and visible text in the attached image. If no image is attached, reply only NO_IMAGE. Do not assess safety or privacy risks.",
+  "context_tokens": 2048,
+  "max_output_tokens": 160,
+  "cases": [
+    {
+      "index": 0,
+      "image_id": null,
+      "image_attached": false,
+      "session_ms": 1434,
+      "input_ms": 2,
+      "status": "completed",
+      "first_output_ms": 3221,
+      "total_ms": 3476,
+      "output": "NO_IMAGE",
+      "rss_bytes": 2099773440,
+      "max_rss_bytes": 2108506112
+    },
+    {
+      "index": 1,
+      "image_id": "red_circle",
+      "image_attached": true,
+      "session_ms": 48,
+      "input_ms": 1,
+      "status": "completed",
+      "first_output_ms": 15778,
+      "total_ms": 18388,
+      "output": "The image displays a solid red circle centered on a white background. There is no visible text.",
+      "rss_bytes": 3002249216,
+      "max_rss_bytes": 3025899520
+    },
+    {
+      "index": 2,
+      "image_id": "blue_bars",
+      "image_attached": true,
+      "session_ms": 57,
+      "input_ms": 0,
+      "status": "completed",
+      "first_output_ms": 24393,
+      "total_ms": 37685,
+      "output": "The image displays a bar chart with four vertical blue bars of varying heights against a white background. The bars are of different heights, suggesting a comparison of different quantities. There is no visible text in the image.",
+      "rss_bytes": 3016028160,
+      "max_rss_bytes": 3025899520
+    },
+    {
+      "index": 3,
+      "image_id": "parcel_label",
+      "image_attached": true,
+      "session_ms": 182,
+      "input_ms": 0,
+      "status": "completed",
+      "first_output_ms": 34615,
+      "total_ms": 78986,
+      "output": "The image is a graphic design featuring a brown, geometric layout.\n\n**Objects:**\n*   The image is composed of large, rectangular blocks of a solid, warm brown color, arranged in a grid-like pattern.\n*   A central, white rectangular box is overlaid on the brown background.\n\n**Colors:**\n*   **Brown/Tan:** Various shades of warm brown and tan are used for the background blocks.\n*   **White:** The central text box is white.\n*   **Beige/Light Brown:** A lighter, tan or beige color is used for a vertical dividing line running through the center of the image.\n\n**Visible Text:**\nThe text inside the white box is in black, capitalized, and reads:\n*   DELIVERY\n*",
+      "rss_bytes": 3073662976,
+      "max_rss_bytes": 3081007104
+    }
+  ],
+  "semantic_review": "pending",
+  "phase": "finished",
+  "rss_bytes": 538513408,
+  "max_rss_bytes": 3081007104,
+  "load_ms": 9934,
+  "requested_backend": "cpu",
+  "active_backend": "cpu",
+  "active_vision_backend": "cpu",
+  "completed_at": "2026-10-20T07:48:43.750174Z"
+}

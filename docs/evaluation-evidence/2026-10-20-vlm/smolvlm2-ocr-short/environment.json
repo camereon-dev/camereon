@@ -1,0 +1,118 @@
+{
+  "device": {
+    "model": "sdk_gphone64_arm64",
+    "android": "12",
+    "api": 31,
+    "abis": "arm64-v8a",
+    "hardware": "ranchu",
+    "emulator": true,
+    "memory": "MemTotal:        8118916 kB"
+  },
+  "build_mode": "debug",
+  "model": {
+    "name": "SmolVLM2 500M",
+    "model_type": "general",
+    "repository": "litert-community/SmolVLM2-500M",
+    "revision": "78a25681a0811230bfa3079504a717e9a4a139d1",
+    "filename": "SmolVLM2-500M.litertlm",
+    "size": 360822960,
+    "sha256": "b808b328d845a600a33c5295f93d9217487317bd334dbc91b2a8d50e26e60ad0",
+    "license": "apache-2.0"
+  },
+  "build": {
+    "mode": "debug",
+    "apk_sha256": "a197181bfe07aef2468a30ebe5350faceb149e3353092717832e05f26aecc05d",
+    "harness": {
+      "main.dart.template": "e8d061be474ba8fbcbf3fde4e66892e94bdab834b813ee48db8ff6add053626e",
+      "evaluator.dart.template": "72280ed619c394d3f6cf37af3cf21875fcc0475bc8fec41cdb0e356869e138cb",
+      "pubspec.yaml": "64c020ff0c0732087e5b54bbaf92035cfaa81b29e313589ec12fb9384213f1f9",
+      "make_images.py": "1d9a0488266fef4c1ce7bf06da1a76325366c9e46322237638322659ed5f495d",
+      "model.json": "1410781f3dd59462fb0f021e6a00d669060d981784cb3fa57286a444f1ec3209",
+      "smolvlm2.json": "5ae1389b2bf9873d9123b72b30c0f8ce35568339ae80d30a7f60b9557d1539cd",
+      "run.py": "d498aa7a42f76236bcbbc4754b353922fe781b65d96d554cc34207fc684c0f1e",
+      "pubspec.lock": "1bff348784595640309d9539ca62f43809afae45cff6033e0166be7f5f353f96"
+    },
+    "resolved_lock_sha256": "1bff348784595640309d9539ca62f43809afae45cff6033e0166be7f5f353f96",
+    "permissions": "package: dev.camereon.camereon_vlm_eval\nuses-permission: name='android.permission.ACCESS_NETWORK_STATE'\nuses-permission: name='android.permission.WAKE_LOCK'\nuses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'\nuses-permission: name='android.permission.FOREGROUND_SERVICE'\npermission: dev.camereon.camereon_vlm_eval.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION\nuses-permission: name='dev.camereon.camereon_vlm_eval.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'\n",
+    "fixtures": {
+      "fixtures/parcel_ja.json": "410d244fe36891016063ad79a21f8683fb05c15314c617f5a5698d2a908f8211",
+      "fixtures/parcel_ja.png": "c7170ea9e094093a55f097b42312a07f23ac3386d81e99d5b359f0a188e70a83"
+    }
+  },
+  "fixtures": [
+    {
+      "id": "red_circle",
+      "file": "image_01.png",
+      "expected": "A single large red circle on a white background.",
+      "sha256": "aa9675a3aa1930fed54043e55861d1ba196756dfcc9c31783f57581e329954f8"
+    },
+    {
+      "id": "blue_bars",
+      "file": "image_02.png",
+      "expected": "Three blue vertical rectangles on a white background.",
+      "sha256": "72ae916d4f1827f583638a4a06e1a9daec43434358e024dafd1dcfe369d31b7c"
+    },
+    {
+      "id": "parcel_label",
+      "file": "image_03.png",
+      "expected": "A white shipping label on a brown parcel, with fictional name and address.",
+      "sha256": "8d1af99d80efebb8acf3c66a29229d21bb91f9fec24aeeeee8e17aa55acddd23"
+    },
+    {
+      "id": "parcel_label_ja",
+      "file": "image_04.png",
+      "expected": "A brown parcel with a white Japanese delivery label. The label contains a fictional recipient name, address and phone number.",
+      "sha256": "c7170ea9e094093a55f097b42312a07f23ac3386d81e99d5b359f0a188e70a83",
+      "ocr_source": "synthetic_ground_truth_not_paddle_output",
+      "ocr_blocks": [
+        {
+          "id": "b1",
+          "text": "お届け先",
+          "bounds": [
+            80,
+            210,
+            192,
+            236
+          ]
+        },
+        {
+          "id": "b2",
+          "text": "山田 花子 様",
+          "bounds": [
+            80,
+            269,
+            232,
+            296
+          ]
+        },
+        {
+          "id": "b3",
+          "text": "東京都サンプル区一丁目2-3",
+          "bounds": [
+            80,
+            329,
+            427,
+            356
+          ]
+        },
+        {
+          "id": "b4",
+          "text": "電話 03-0000-1234",
+          "bounds": [
+            80,
+            390,
+            310,
+            415
+          ]
+        }
+      ],
+      "font_sha256": "33119a596d1bfae91165585c90c6e9752cf2c9120b45c18388fb81724b3ec64b",
+      "font_name": "NotoSansJP-VariableFont_wght.ttf",
+      "font_size": 28,
+      "image_generator": "Pillow 12.3.0; original synthetic fixture"
+    }
+  ],
+  "private_images": [],
+  "started_at": "2026-10-20T08:03:18.053755+00:00",
+  "note": "RSS/PSS do not represent all GPU allocations. Semantic review is required."
+}
