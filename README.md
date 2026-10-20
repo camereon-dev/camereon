@@ -2,7 +2,7 @@
 
 写真に写り込んだ個人情報を簡単に隠して、SNSへ投稿する前の確認を助けるカメラアプリ。
 
-Android 向けに Flutter で開発する。起動するとすぐにカメラが開き、撮影した写真を確認・撮り直しできる。隠す加工と画像保存は次の段階で追加する。
+Android と iOS 向けに Flutter で開発する。起動するとすぐにカメラが開き、撮影した写真を確認・撮り直しできる。隠す加工と画像保存は次の段階で追加する。
 
 ## 今回の範囲
 
@@ -23,6 +23,8 @@ flutter run -d <device-id>
 Android は Android Studio・SDK と、Emulator または USB 接続した実機が必要。現時点の最小対応は Android 7.0（API 24）、ビルド用 SDK は API 36。
 初回は `flutter doctor --android-licenses` でライセンスを確認する。実機では開発者向けオプションの USB デバッグを有効にして、接続を許可する。
 
+iOS は macOS・Xcode と、iOS Simulator または USB 接続した iPhone が必要。iPhoneでの実行にはAppleの署名設定が必要になる。初回起動時にカメラへのアクセスを許可する。
+
 Emulator は Android Studio の Device Manager で作成するか、作成済みのものを起動する。
 
 ```sh
@@ -31,6 +33,8 @@ flutter emulators --launch <emulator-id>
 flutter devices
 flutter run -d <device-id>
 ```
+
+iOS Simulator は Xcode の **Open Developer Tool → Simulator** から起動する。接続中のSimulatorやiPhoneを `flutter devices` で確認して実行する。
 
 ## テストする
 
@@ -45,6 +49,8 @@ widget test は偽のカメラ（`CameraPlatform` の差し替え）を使い、
 # 起動済みの Android Emulator または実機
 mise run device-test -- -d <android-device-id>
 ```
+
+iOS上で確認する場合は `flutter test integration_test/app_test.dart -d <ios-device-id>` を実行する。カメラの撮影動作はiPhone実機でも確認する。
 
 ## Android のベータ版を取得する
 
