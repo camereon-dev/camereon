@@ -23,8 +23,29 @@ abstract final class GemmaModelSpec {
 Future<String> _checksum(String path) async =>
     (await sha256.bind(File(path).openRead()).first).toString();
 
+// Capture only a path: the downloader also owns an unsendable HTTP client.
+Future<String> _checksumInWorker(String path) =>
+    Isolate.run(() => _checksum(path));
+
 class GemmaModelStore implements AnalysisModelStore {
-  static const _device = MethodChannel('dev.camereon/analysis_device');
+  GemmaModelStore({
+    Future<Directory> Function()? supportDirectory,
+    HttpClient Function()? createClient,
+    MethodChannel? device,
+    this.expectedBytes = GemmaModelSpec.bytes,
+    this.expectedSha256 = GemmaModelSpec.sha256Hex,
+    Uri? downloadUrl,
+  }) : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
+       _createClient = createClient ?? HttpClient.new,
+       _device = device ?? const MethodChannel('dev.camereon/analysis_device'),
+       _downloadUrl = downloadUrl ?? Uri.parse(GemmaModelSpec.url);
+
+  final Future<Directory> Function() _supportDirectory;
+  final HttpClient Function() _createClient;
+  final MethodChannel _device;
+  final Uri _downloadUrl;
+  final int expectedBytes;
+  final String expectedSha256;
   HttpClient? _client;
   bool _downloading = false;
   int _generation = 0;
@@ -32,7 +53,7 @@ class GemmaModelStore implements AnalysisModelStore {
   Future<bool>? _verification;
 
   Future<File> get modelFile async {
-    final root = await getApplicationSupportDirectory();
+    final root = await _supportDirectory();
     return File('${root.path}/ai/models/${GemmaModelSpec.filename}');
   }
 
@@ -45,12 +66,12 @@ class GemmaModelStore implements AnalysisModelStore {
     final file = await modelFile;
     if (!await file.exists()) return false;
     final stat = await file.stat();
-    if (stat.size != GemmaModelSpec.bytes) return false;
+    if (stat.size != expectedBytes) return false;
     final stamp =
         '${file.path}:${stat.size}:${stat.modified.microsecondsSinceEpoch}';
     if (_verifiedStamp == stamp) return true;
     final path = file.path;
-    if (await Isolate.run(() => _checksum(path)) != GemmaModelSpec.sha256Hex) {
+    if (await _checksumInWorker(path) != expectedSha256) {
       return false;
     }
     _verifiedStamp = stamp;
@@ -73,7 +94,7 @@ class GemmaModelStore implements AnalysisModelStore {
     final generation = ++_generation;
     File? partial;
     IOSink? sink;
-    final client = HttpClient()
+    final client = _createClient()
       ..connectionTimeout = const Duration(seconds: 30);
     _client = client;
     void checkCancelled() {
@@ -83,14 +104,13 @@ class GemmaModelStore implements AnalysisModelStore {
     try {
       final free = await _device.invokeMethod<int>('availableStorageBytes');
       checkCancelled();
-      if (free == null ||
-          free < GemmaModelSpec.bytes + GemmaModelSpec.workingBytes) {
+      if (free == null || free < expectedBytes + GemmaModelSpec.workingBytes) {
         throw const AnalysisFailure(AnalysisFailureKind.storage);
       }
       final target = await modelFile;
       await target.parent.create(recursive: true);
       partial = File('${target.path}.part');
-      final request = await client.getUrl(Uri.parse(GemmaModelSpec.url));
+      final request = await client.getUrl(_downloadUrl);
       final response = await request.close().timeout(
         const Duration(seconds: 60),
       );
@@ -98,37 +118,36 @@ class GemmaModelStore implements AnalysisModelStore {
         throw const AnalysisFailure(AnalysisFailureKind.network);
       }
       if (response.contentLength >= 0 &&
-          response.contentLength != GemmaModelSpec.bytes) {
+          response.contentLength != expectedBytes) {
         throw const AnalysisFailure(AnalysisFailureKind.integrity);
       }
       sink = partial.openWrite();
       var received = 0;
       var lastProgress = DateTime.now();
-      onProgress(0, GemmaModelSpec.bytes);
+      onProgress(0, expectedBytes);
       await for (final chunk in response.timeout(const Duration(seconds: 60))) {
         checkCancelled();
         received += chunk.length;
-        if (received > GemmaModelSpec.bytes) {
+        if (received > expectedBytes) {
           throw const AnalysisFailure(AnalysisFailureKind.integrity);
         }
         sink.add(chunk);
         // Apply backpressure; do not queue a multi-GB file in memory.
         await sink.flush();
         if (DateTime.now().difference(lastProgress).inMilliseconds > 150) {
-          onProgress(received, GemmaModelSpec.bytes);
+          onProgress(received, expectedBytes);
           lastProgress = DateTime.now();
         }
       }
       await sink.close();
       sink = null;
       checkCancelled();
-      onProgress(received, GemmaModelSpec.bytes);
-      if (received != GemmaModelSpec.bytes) {
+      onProgress(received, expectedBytes);
+      if (received != expectedBytes) {
         throw const AnalysisFailure(AnalysisFailureKind.integrity);
       }
       final path = partial.path;
-      if (await Isolate.run(() => _checksum(path)) !=
-          GemmaModelSpec.sha256Hex) {
+      if (await _checksumInWorker(path) != expectedSha256) {
         throw const AnalysisFailure(AnalysisFailureKind.integrity);
       }
       checkCancelled();
@@ -142,6 +161,9 @@ class GemmaModelStore implements AnalysisModelStore {
       rethrow;
     } on AnalysisCancelled {
       rethrow;
+    } on FileSystemException {
+      if (generation != _generation) throw const AnalysisCancelled();
+      throw const AnalysisFailure(AnalysisFailureKind.storage);
     } catch (_) {
       if (generation != _generation) throw const AnalysisCancelled();
       throw const AnalysisFailure(AnalysisFailureKind.network);
@@ -169,14 +191,16 @@ class GemmaModelStore implements AnalysisModelStore {
 
   @override
   Future<void> delete() async {
-    if (_downloading) throw const AnalysisFailure(AnalysisFailureKind.busy);
+    if (_downloading || _verification != null) {
+      throw const AnalysisFailure(AnalysisFailureKind.busy);
+    }
     _verifiedStamp = null;
     final file = await modelFile;
     if (await file.exists()) await file.delete();
     final partial = File('${file.path}.part');
     if (await partial.exists()) await partial.delete();
     // LiteRT-LM keeps its derived caches in Application Support, not in models/.
-    final root = await getApplicationSupportDirectory();
+    final root = await _supportDirectory();
     await for (final entity in root.list(followLinks: false)) {
       final name = entity.uri.pathSegments.last;
       if (entity is File && name.startsWith('${GemmaModelSpec.filename}_')) {

@@ -69,6 +69,9 @@ class GemmaSceneAnalyzer implements SceneAnalyzer {
         preferredBackend: backend == AnalysisBackend.compatible
             ? PreferredBackend.cpu
             : PreferredBackend.gpu,
+        preferredVisionBackend: backend == AnalysisBackend.compatible
+            ? PreferredBackend.cpu
+            : null,
         supportImage: true,
         supportAudio: false,
         maxNumImages: 1,
