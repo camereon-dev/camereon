@@ -1,16 +1,16 @@
 # ベータ版の自動リリース
 
 しばらくは GitHub Releases の **Pre-release** として Android APK を配布する。
-現在のアプリは起動画面と説明を表示するプロトタイプ。撮影・画像加工・保存は今後追加する。
+現在のアプリは起動直後にカメラを開き、撮影・撮り直し・前面と背面の切り替えができる。編集・画像加工・保存は今後追加する。
 
 ## 公開の流れ
 
-1. PR の解析・画面テストと Android ビルドを確認して `main` へマージする。
+1. PR の解析・画面テストと、変更内容に応じた Android のビルド・端末確認を行い、レビュー後に `main` へマージする。
 2. `main` の解析・画面テストが成功すると、ARM64 の APK を固定のベータ署名鍵でビルドする。
 3. APK の署名、アプリ ID、バージョン、SHA-256 を検証する。
 4. APK と SHA-256 を GitHub Pre-release に添付し、自動公開する。
 
-Emulator の起動は公開の前提にしない。端末テストは **Android device tests** を必要なときに手動実行する。
+Emulator の起動は公開の前提にしない。端末テストは PR に `device-test` ラベルを付けるか、**Android device tests** を必要なときに手動実行する。
 PR や `main` 以外のブランチには、ベータ署名鍵を渡さず、Release を公開しない。
 Release 公開 job だけが `contents: write` を持つ。ビルド job はリポジトリの読み取り権限で動く。
 
@@ -51,7 +51,7 @@ Secrets は値を後から取得できないため、バックアップを保持
 
 ## 手動公開と再実行
 
-- 新しいベータ版を公開する: **Android checks and demo → Run workflow → main**。
+- 新しいベータ版を公開する: **Checks and beta release → Run workflow → main**。
 - 失敗した公開を再試行する: 失敗した CI の **Re-run failed jobs**。同じ実行番号・タグを使う。
 - 既に公開済みのタグなら、添付ファイルと対象コミットを確認して既存 Release を使う。
 - 途中で止まった draft は、APK とチェックサムを揃えてから公開する。

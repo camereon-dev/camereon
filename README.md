@@ -8,6 +8,8 @@ Android 向けに Flutter で開発する。起動するとすぐにカメラが
 
 [ベータ版の取得・運用](docs/beta-releases.md) / [今回の定義・完了条件](docs/bootstrap-definition.md) / [プロダクト全体の MVP 定義](docs/mvp-definition.md) / [検証記録](docs/verification.md) / [今後のアイデア](docs/ideas.md)
 
+チームで作業を分担する場合は [共有仕様と分担の進め方](docs/team-development.md) を参照する。
+
 ## 起動する
 
 Flutter **3.47.7** / Dart **3.13.5** / JDK **25**（Temurin）を使う。ツールのバージョンは [mise](https://mise.jdx.dev/) の `mise.toml` で固定し、CI も同じファイルを使う。
