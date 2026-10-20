@@ -45,7 +45,10 @@ def main():
     free = subprocess.check_output(adb+['shell','df','-k','/data'],text=True).splitlines()[-1].split()
     if int(free[3])*1024 < SPEC['size']+2*1024**3:
         parser.error('Not enough space for model and working cache')
-    subprocess.run(adb+['shell','am','force-stop',PACKAGE],check=True)
+    # A fresh test process can wait for its first model to be published.
+    # Stop only when replacing an existing model that could be in use.
+    if current.returncode == 0:
+        subprocess.run(adb+['shell','am','force-stop',PACKAGE],check=True)
     private(['mkdir','-p','files/ai/models'],check=True)
     print(f'Transferring {SPEC["size"]/1e9:.2f} GB into the AI preview only...',flush=True)
     with path.open('rb') as source:

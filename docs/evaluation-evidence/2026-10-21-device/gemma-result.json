@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-21",
+  "device": "Xiaomi 14T Pro / Android 16 / ARM64",
+  "build": "debug AI preview",
+  "sdk": {
+    "flutter": "3.47.7",
+    "flutter_edge_ai": "2.4.1",
+    "flutter_edge_ai_litertlm": "1.15.0"
+  },
+  "fixture": "tools/vlm-eval/fixtures/parcel_ja.png (synthetic)",
+  "model_sha256": "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c",
+  "records": [
+    {
+      "requested": "automatic",
+      "backend": "gpu",
+      "visionBackend": "cpu",
+      "text": "これは、住所と電話番号が記載された情報カードの画像です。内容は「お届け先」として山田花子様宛の連絡先情報です。",
+      "loadMs": 4387,
+      "totalMs": 22269,
+      "firstOutputMs": 9186,
+      "maxRssBytes": 3052793856
+    },
+    {
+      "requested": "compatible",
+      "backend": "cpu",
+      "visionBackend": "cpu",
+      "text": "これは、住所と電話番号が記載された情報カードのような画像です。内容は「お届け先」として、山田花子様宛の住所と電話番号が示されています。",
+      "loadMs": 1366,
+      "totalMs": 11525,
+      "firstOutputMs": 8359,
+      "maxRssBytes": 3052793856
+    },
+    {
+      "case": "retry-after-cancel",
+      "backend": "cpu",
+      "totalMs": 11690
+    }
+  ],
+  "checks": {
+    "gpu_and_cpu": true,
+    "concurrent_request_rejected": true,
+    "cancelled_request_releases_model": true,
+    "retry_after_cancel": true,
+    "model_deletion": true,
+    "actual_analysis_screen": true,
+    "editor_selection_preserved": true,
+    "android_gallery_saved_after_analysis": true,
+    "temporary_source_deleted": true,
+    "http_blocked_during_screen_inference": true
+  },
+  "sampled_peak_pss_kib": 2198941,
+  "notes": [
+    "Single run per backend; initialized caches may already exist. These are not controlled performance comparisons.",
+    "Device network was enabled; physical airplane-mode inference was not verified.",
+    "Only the synthetic fixture response is stored. No real photographs or phone serial are included.",
+    "The memory sampling loop began later in the run; the separate GPU snapshot was captured during the describing phase."
+  ],
+  "gpu_manual_snapshot_pss_kib": 3237134,
+  "screen_integration": {
+    "text": "これは、住所と電話番号が記載された情報カードの画像です。内容は「お届け先」として山田花子様宛の連絡先情報です。",
+    "backend": "gpu",
+    "visionBackend": "cpu",
+    "totalMs": 56410,
+    "dartHttpBlocked": true
+  }
+}
