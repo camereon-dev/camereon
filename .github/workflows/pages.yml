@@ -1,0 +1,65 @@
+name: Deploy website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - .github/workflows/pages.yml
+  # GITHUB_TOKEN による Release 公開では release イベントが再発火しないため、
+  # ベータ公開ワークフローの完了でダウンロード情報を更新する。
+  workflow_run:
+    workflows: [Checks and beta release]
+    branches: [main]
+    types: [completed]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.event != 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      # workflow_run の成果物や外部ブランチを実行せず、公開元は常に main。
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Build website with latest beta download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 site/build.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
