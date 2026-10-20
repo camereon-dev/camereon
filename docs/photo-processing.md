@@ -17,6 +17,7 @@ final jpeg = await processor.redact(source, regions);
 - `normalize` は EXIF の回転・反転を画素へ反映し、メタデータのない RGB PNG を返す。
 - PNG の透過部分は白に合成する。ICC は引き継がず、広色域・HDR の色再現は保証しない。
 - JPEG は image 4.12.0 のデコーダーが向きを補正する。PNG は同版が `eXIf` を解釈しないため、チャンクから TIFF を読み、`bakeOrientation` で補正する。
+- JPEG の Orientation はデコーダーが消す前に検証し、不正な値と `redact` に渡された未正規化画像を拒否する。
 - `redact` は `normalize` の結果を入力とする。新しい RGB 画像へ画素だけをコピーして、全領域を検証後に黒で上書きする。右端・下端は含まない。
 - 空リストも有効。毎回元の `SourcePhoto` から加工し、出力 JPEG を再加工の入力にしない。
 - 最終 JPEG は品質 100・yuv444、正規化後の全解像度。向きによる縦横の交換以外に縮小・切り取りはしない。

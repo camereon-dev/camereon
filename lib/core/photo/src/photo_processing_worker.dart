@@ -28,7 +28,7 @@ ProcessedPixels redactPixels(
   List<PixelRegion> regions,
   int maxPixels,
 ) {
-  final decoded = _decode(bytes, maxPixels);
+  final decoded = _decode(bytes, maxPixels, requireNormalized: true);
   if (width <= 0 ||
       height <= 0 ||
       decoded.width != width ||
@@ -41,7 +41,11 @@ ProcessedPixels redactPixels(
   return _encode(clean, jpeg: true);
 }
 
-img.Image _decode(Uint8List bytes, int maxPixels) {
+img.Image _decode(
+  Uint8List bytes,
+  int maxPixels, {
+  bool requireNormalized = false,
+}) {
   if (bytes.isEmpty) {
     throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
   }
@@ -69,6 +73,19 @@ img.Image _decode(Uint8List bytes, int maxPixels) {
     );
   }
   try {
+    // JPEG デコーダーは Orientation を補正して消すため、補正前に検査する。
+    final exif = decoder is img.JpegDecoder
+        ? _jpegExif(bytes)
+        : _pngExif(bytes);
+    final orientation = exif.imageIfd.orientation ?? 1;
+    if (orientation < 1 || orientation > 8) {
+      throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
+    }
+    if (requireNormalized && orientation != 1) {
+      throw const PhotoProcessingException(
+        PhotoProcessingFailure.invalidSource,
+      );
+    }
     final info = decoder.startDecode(bytes);
     if (info == null) {
       throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
@@ -85,7 +102,7 @@ img.Image _decode(Uint8List bytes, int maxPixels) {
     }
     if (decoder is img.PngDecoder) {
       // image 4.12.0 は PNG の eXIf を解釈しないため TIFF 部分を明示的に読む。
-      decoded.exif = _pngExif(bytes);
+      decoded.exif = exif;
     }
     return decoded;
   } on img.ImageException {
@@ -93,6 +110,53 @@ img.Image _decode(Uint8List bytes, int maxPixels) {
   } on RangeError {
     throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
   }
+}
+
+// スキャンデータには入らず、APP1 の EXIF だけを読む。
+img.ExifData _jpegExif(Uint8List bytes) {
+  var offset = 2;
+  img.ExifData? exif;
+  while (offset < bytes.length) {
+    if (bytes[offset++] != 0xff) {
+      throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
+    }
+    while (offset < bytes.length && bytes[offset] == 0xff) {
+      offset++;
+    }
+    if (offset >= bytes.length) break;
+    final marker = bytes[offset++];
+    if (marker == 0xda || marker == 0xd9) break;
+    if (marker == 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (offset + 2 > bytes.length) break;
+    final size = (bytes[offset] << 8) | bytes[offset + 1];
+    if (size < 2 || offset + size > bytes.length) {
+      throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
+    }
+    if (marker == 0xe1 &&
+        size >= 8 &&
+        String.fromCharCodes(bytes.sublist(offset + 2, offset + 8)) ==
+            'Exif\x00\x00') {
+      if (exif != null) {
+        throw const PhotoProcessingException(
+          PhotoProcessingFailure.invalidImage,
+        );
+      }
+      exif = _readExif(Uint8List.sublistView(bytes, offset + 8, offset + size));
+    }
+    offset += size;
+  }
+  return exif ?? img.ExifData();
+}
+
+img.ExifData _readExif(Uint8List tiff) {
+  if (tiff.length < 8) {
+    throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
+  }
+  final signature = ByteData.sublistView(tiff).getUint32(0);
+  if (signature != 0x49492a00 && signature != 0x4d4d002a) {
+    throw const PhotoProcessingException(PhotoProcessingFailure.invalidImage);
+  }
+  return img.ExifData.fromInputBuffer(img.InputBuffer(tiff));
 }
 
 img.ExifData _pngExif(Uint8List bytes) {
@@ -112,15 +176,8 @@ img.ExifData _pngExif(Uint8List bytes) {
         );
       }
       final tiff = Uint8List.sublistView(bytes, offset + 8, end - 4);
-      final signature = ByteData.sublistView(tiff).getUint32(0);
-      if (signature != 0x49492a00 && signature != 0x4d4d002a) {
-        throw const PhotoProcessingException(
-          PhotoProcessingFailure.invalidImage,
-        );
-      }
-      // 4.12.0 の ExifData.read は正常に読めた場合も false を返す。
-      // 戻り値には依存せず、TIFF ヘッダーを検査してから読み込む。
-      exif = img.ExifData.fromInputBuffer(img.InputBuffer(tiff));
+      // ExifData.read の戻り値には依存せず TIFF ヘッダーを検査する。
+      exif = _readExif(tiff);
     }
     if (data.getUint32(offset + 4) == 0x49454e44) break;
     offset = end;

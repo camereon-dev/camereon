@@ -251,6 +251,26 @@ void main() {
     );
   });
 
+  test('JPEGの不正な向きと、寸法が同じでも未正規化の入力を拒否', () async {
+    await expectLater(
+      processor.normalize(metadataJpeg(orientation: 9)),
+      throwsA(failure(PhotoProcessingFailure.invalidImage)),
+    );
+    for (final orientation in [2, 3, 4, 6]) {
+      await expectLater(
+        processor.redact(
+          SourcePhoto(
+            bytes: metadataJpeg(orientation: orientation),
+            width: orientation >= 5 ? 32 : 48,
+            height: orientation >= 5 ? 48 : 32,
+          ),
+          [],
+        ),
+        throwsA(failure(PhotoProcessingFailure.invalidSource)),
+      );
+    }
+  });
+
   test('寸法不一致・別画像用の範囲を拒否する', () async {
     final source = await processor.normalize(img.encodePng(colorGrid()));
     await expectLater(
