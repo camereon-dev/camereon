@@ -48,8 +48,8 @@ python3 tools/vlm-eval/run.py --prepare
 `VLM_EVAL_DIR` で作業ディレクトリを変更できる。生成アプリは `camereon_vlm_eval`、applicationId は `dev.camereon.camereon_vlm_eval`。
 
 - 初回は `flutter create` で Android アプリを生成する。
-- `main.dart.template` と `evaluator.dart.template` を生成アプリの Dart ソースとして配置する。
-- テンプレート形式なのは、本体の静的解析・依存解決に実験用 SDK を混ぜないため。
+- `pubspec.yaml.template`・`main.dart.template`・`evaluator.dart.template` を生成アプリの依存定義と Dart ソースとして配置する。
+- テンプレート形式なのは、本体の静的解析・依存解決に実験用 SDK や、生成先だけにある assets を混ぜないため。
 - `pubspec.lock` を使って依存を固定し、API 30・ARM64 用の debug APK をビルドする。
 - 評価 APK からネットワーク権限を除去し、完成 APK でも権限を確認する。
 

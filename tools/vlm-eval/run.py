@@ -71,7 +71,7 @@ def prepare():
              '--project-name', 'camereon_vlm_eval', '--empty', APP], cwd=ROOT)
     if not re.search(r'^name:\s*camereon_vlm_eval\s*$', (APP / 'pubspec.yaml').read_text(), re.MULTILINE):
         raise ValueError('The work directory does not belong to this evaluation app')
-    shutil.copyfile(TOOL/'pubspec.yaml', APP/'pubspec.yaml')
+    shutil.copyfile(TOOL/'pubspec.yaml.template', APP/'pubspec.yaml')
     for name in ('main.dart', 'evaluator.dart'):
         shutil.copyfile(TOOL/(name+'.template'), APP/'lib'/name)
     locked = (TOOL/'pubspec.lock').exists()
@@ -125,7 +125,7 @@ def build():
     build_info = {
         'mode': 'debug', 'apk_sha256': digest(apk),
         'harness': {name:digest(TOOL/name) for name in
-                    ('main.dart.template', 'evaluator.dart.template', 'pubspec.yaml',
+                    ('main.dart.template', 'evaluator.dart.template', 'pubspec.yaml.template',
                      'make_images.py', 'model.json', 'smolvlm2.json', 'run.py', 'pubspec.lock') if (TOOL/name).exists()},
         'resolved_lock_sha256':digest(APP/'pubspec.lock'),
         'permissions':permissions,
