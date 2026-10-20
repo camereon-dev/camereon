@@ -87,8 +87,9 @@ def package():
     expected = ("dev.camereon.camereon.demo", str(int(required("GITHUB_RUN_NUMBER"))), version)
     if not package_info or package_info.groups() != expected:
         raise ValueError("APK package or version does not match the beta release")
-    if "native-code: 'arm64-v8a'" not in manifest:
-        raise ValueError("Beta APK must target ARM64 Android devices")
+    native_code = re.search(r"^native-code: (.+)$", manifest, re.MULTILINE)
+    if not native_code or native_code.group(1).strip() != "'arm64-v8a'":
+        raise ValueError("Beta APK must contain ARM64 native libraries only")
     BETA_DIR.mkdir(parents=True, exist_ok=True)
     apk = BETA_DIR / APK_NAME
     shutil.copyfile(source, apk)
@@ -159,9 +160,9 @@ def publish():
         notes = BETA_DIR / "release-notes.md"
         notes.write_text(
             f"camereon {metadata['version']} のベータ版です。\n\n"
-            "現在は起動画面とアプリの説明を確認できます。撮影・編集・画像保存は今後追加予定です。\n\n"
-            f"Android 7.0 以上の ARM64 端末で `{APK_NAME}` を開いてインストールしてください。\n"
-            "以前のデモ APK を使っていた場合は、初回のみアンインストールが必要です。"
+            "撮影と、Gemma 4 による端末内の写真の内容説明を利用できます。編集・画像保存は今後追加予定です。\n\n"
+            f"Android 11 以上の ARM64 端末で `{APK_NAME}` を開いてインストールしてください。\n"
+            "初回の AI 利用には約2.6GBのモデル取得と作業領域が必要です。写真は端末内で処理します。\n"
             "以後のベータ版は同じ署名鍵で更新できます。\n\n"
             f"ソース: `{commit}`\n"
         )

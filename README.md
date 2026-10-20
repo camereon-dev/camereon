@@ -4,7 +4,7 @@
 
 [アプリ紹介・ダウンロード](https://camereon-dev.github.io/camereon/)
 
-Android 向けに Flutter で開発する。起動するとすぐにカメラが開く。撮影した写真をドラッグして複数箇所を黒塗りし、保存前に確認して Android のギャラリーへ新しい JPEG として保存できる。取り消し・全リセット・撮り直しに対応する。
+Android 向けに Flutter で開発する。起動するとすぐにカメラが開く。撮影した写真をドラッグして複数箇所を黒塗りし、保存前に確認して Android のギャラリーへ新しい JPEG として保存できる。取り消し・全リセット・撮り直しに対応する。 撮影後には Gemma 4 による端末内の内容説明も利用できる。
 
 ## 今回の範囲
 
@@ -13,6 +13,8 @@ Android 向けに Flutter で開発する。起動するとすぐにカメラが
 チームで作業を分担する場合は [共有仕様と分担の進め方](docs/team-development.md) を参照する。
 
 撮影後の自動検出は [オンデバイス解析の設計案](docs/ai-analysis-design.md) を参照する。OCR と VLM の単独検証、共通の入出力、本体への結合方針をまとめている。
+
+本体の解析機能・実機プレビュー・チームの担当範囲は [Gemma 4 組み込み手順](docs/gemma-integration.md) を参照する。
 
 ## 起動する
 
@@ -26,7 +28,7 @@ flutter devices
 flutter run -d <device-id>
 ```
 
-Android は Android Studio・SDK と、Emulator または USB 接続した実機が必要。現時点の最小対応は Android 7.0（API 24）、ビルド用 SDK は API 36。
+Android は Android Studio・SDK と、Emulator または USB 接続した実機が必要。現時点の最小対応は Android 11（API 30）、ビルド用 SDK は API 36。
 初回は `flutter doctor --android-licenses` でライセンスを確認する。実機では開発者向けオプションの USB デバッグを有効にして、接続を許可する。
 
 Emulator は Android Studio の Device Manager で作成するか、作成済みのものを起動する。
@@ -55,7 +57,7 @@ mise run device-test -- -d <android-device-id>
 
 ## Android のベータ版を取得する
 
-[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-arm64.apk` をダウンロードしてインストールする。Android 7.0 以上の ARM64 端末に対応する。
+[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-arm64.apk` をダウンロードしてインストールする。Android 11 以上の ARM64 端末に対応する。
 
 ベータ版は固定の署名鍵で署名する。以前の debug 署名のデモ APK を入れていた場合は、初回のみ `camereon demo` をアンインストールする。以降のベータ版は上書き更新できる。
 

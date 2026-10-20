@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../analysis/photo_analysis_entry.dart';
 import 'captured_photo_screen.dart';
 
 enum _CameraIssue { permissionDenied, noCamera, failed }
@@ -162,7 +163,10 @@ class _CameraScreenState extends State<CameraScreen>
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (context) => CapturedPhotoScreen(photo: photo),
+          builder: (context) => PhotoAnalysisEntry(
+            loadImage: photo.readAsBytes,
+            child: CapturedPhotoScreen(photo: photo),
+          ),
         ),
       );
     } catch (e) {
