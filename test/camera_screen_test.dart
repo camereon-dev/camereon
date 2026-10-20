@@ -113,6 +113,11 @@ void main() {
     await tester.pumpWidget(const CamereonApp());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('撮影する'));
+    await tester.pump();
+    // Read failure for the fake camera's nonexistent file uses real IO.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
     await tester.pumpAndSettle();
 
     expect(camera.pictures, 1);

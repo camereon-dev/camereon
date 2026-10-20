@@ -40,7 +40,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            flutter test integration_test/app_test.dart -d emulator-5554
+            flutter test integration_test -d emulator-5554
             bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER"
             adb install -r dist/camereon-demo.apk
             # 起動画面としてカメラのプレビューを撮るため、権限ダイアログを省く

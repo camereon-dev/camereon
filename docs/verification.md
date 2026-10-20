@@ -107,3 +107,24 @@ Flutter 3.47.7 / Dart 3.13.5、macOS で依存ロックの照合・静的解析�
 JPEG デコーダーが Orientation を消す前に検証するよう修正し、不正な Orientation と
 寸法だけでは検出できない未正規化 JPEG の拒否を回帰テストに追加した。
 編集画面・Android 保存との結合結果は後続の統合記録を参照する。
+
+## 編集・画像処理・保存の統合（PR #26・#27・#29）
+
+検証日: 2026-10-20。対象は各 PR の修正コミットと、それらを取り込んだ PR #26。
+Flutter 3.47.7 / Dart 3.13.5 / Temurin JDK 25、macOS で実施。
+
+- #27: JPEG の向きをデコーダーが消す前に検証。不正な向き・未正規化画像の拒否を含む43テストと静的解析が成功。CI の品質チェックと release APK ビルドも成功。
+- #29: 19テストと静的解析が成功。Android 12 / Pixel Tablet API 31 エミュレーターで `integration_test/gallery_save_test.dart` の2テストが成功。実保存と非JPEG入力の拒否を確認。
+- 保存画像の MediaStore 行を確認。`relative_path=Pictures/camereon/`、`is_pending=0`。保存ファイルを adb で取得し、Pillow で JPEG・48×32・全画素黒・EXIFなしを独立に確認。
+- 統合後はロック照合・フォーマット・静的解析と全61テストが成功。
+- #26: 元画素の座標変換、縦横・余白・画像端・重なり・ドラッグ取消、取り消し・リセット、読み込み再試行、加工・保存失敗時の状態保持、二重保存防止、破棄確認、小画面と文字拡大を widget test で検証。
+- `integration_test/photo_edit_save_test.dart` が Android 12 エミュレーターで成功。EXIF Orientation 6 の人工JPEG → 32×48へ正規化 → ドラッグ → 保存前確認 → ネイティブ保存 → 成功表示 → 戻る → 元一時ファイル削除を確認。出力の解像度・黒塗り座標・EXIF/サムネイル除去も検査。
+
+再現: `mise run check`、接続済み端末に対して `mise run device-test -- -d <device-id>`。
+端末テストには架空の人工画像だけを使い、ギャラリーにテスト用JPEGを作成する。
+
+制約:
+
+- 接続された Xiaomi 14T Pro / Android 16 は USB インストールが端末側で拒否され、今回の実機テストは未完了。既存の撮影確認記録とは区別する。
+- Android 9 以下の権限ダイアログ・実保存は未確認。権限拒否・例外・再試行は Dart のテストで確認。
+- 大きな実機写真の処理時間・ピークメモリ、オフラインでの実撮影から保存の手動操作は未計測。

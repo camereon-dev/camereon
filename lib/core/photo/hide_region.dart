@@ -19,6 +19,16 @@ class HideRegion {
     required int imageWidth,
     required int imageHeight,
   }) {
+    if (imageWidth <= 0 ||
+        imageHeight <= 0 ||
+        !rect.left.isFinite ||
+        !rect.top.isFinite ||
+        !rect.right.isFinite ||
+        !rect.bottom.isFinite ||
+        rect.left == rect.right ||
+        rect.top == rect.bottom) {
+      return null;
+    }
     final left = (rect.left < rect.right ? rect.left : rect.right).floor();
     final right = (rect.left < rect.right ? rect.right : rect.left).ceil();
     final top = (rect.top < rect.bottom ? rect.top : rect.bottom).floor();
