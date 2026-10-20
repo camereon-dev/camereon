@@ -13,8 +13,8 @@ run = [
 ]
 
 [tasks.device-test]
-description = "接続中の Android 端末・エミュレーターで起動テスト"
-run = "flutter test integration_test/app_test.dart"
+description = "接続中の Android 端末・エミュレーターで起動・編集・保存テスト"
+run = "flutter test integration_test"
 
 [tasks.apk]
 description = "デモ APK を dist/ に作る"

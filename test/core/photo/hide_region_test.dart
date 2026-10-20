@@ -32,4 +32,24 @@ void main() {
     expect(region(const Rect.fromLTRB(410, 10, 500, 50)), isNull);
     expect(region(const Rect.fromLTRB(10, 10, 10, 50)), isNull);
   });
+
+  test('幅や高さが0の小数座標を丸めて1画素の範囲にしない', () {
+    expect(region(const Rect.fromLTRB(10.5, 20.2, 10.5, 40.9)), isNull);
+    expect(region(const Rect.fromLTRB(10.5, 20.2, 30.1, 20.2)), isNull);
+  });
+
+  test('非有限座標と不正な画像サイズは範囲を作らない', () {
+    expect(region(const Rect.fromLTRB(double.nan, 0, 20, 20)), isNull);
+    expect(region(const Rect.fromLTRB(0, 0, double.infinity, 20)), isNull);
+    for (final size in [(0, 10), (10, 0), (-1, 10), (10, -1)]) {
+      expect(
+        HideRegion.fromRect(
+          const Rect.fromLTRB(0, 0, 5, 5),
+          imageWidth: size.$1,
+          imageHeight: size.$2,
+        ),
+        isNull,
+      );
+    }
+  });
 }

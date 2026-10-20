@@ -4,7 +4,7 @@
 
 [アプリ紹介・ダウンロード](https://camereon-dev.github.io/camereon/)
 
-Android 向けに Flutter で開発する。起動するとすぐにカメラが開き、撮影した写真を確認・撮り直しできる。隠す加工と画像保存は次の段階で追加する。
+Android 向けに Flutter で開発する。起動するとすぐにカメラが開く。撮影した写真をドラッグして複数箇所を黒塗りし、保存前に確認して Android のギャラリーへ新しい JPEG として保存できる。取り消し・全リセット・撮り直しに対応する。
 
 ## 今回の範囲
 
@@ -45,7 +45,8 @@ mise run check   # format・analyze・widget test
 ```
 
 widget test は偽のカメラ（`CameraPlatform` の差し替え）を使い、起動直後のプレビュー、撮影と撮り直し、カメラの切り替え、権限拒否・カメラなしの表示、小さい画面と文字拡大時のレイアウトを確認する。
-端末上でカメラ画面が起動することは integration test で確認する。撮影はカメラの実装に依存するため、実機で確認する。
+画像処理では向き・解像度・黒塗り・メタデータ除去、編集画面では座標変換・取り消し・失敗時の状態保持を自動テストで確認する。
+integration test はカメラ起動、人工画像を使った編集から保存・一時ファイル削除、MediaStore への保存と不正入力の拒否を確認する。実機での撮影操作は別途確認する。
 
 ```sh
 # 起動済みの Android Emulator または実機
@@ -101,7 +102,7 @@ Android のビルド設定（`android/`・`mise.toml`・`pubspec`・ビルドス
 
 通常の CI は Emulator の準備・起動、端末テストを行わない。
 端末上の起動確認が必要なときは、PR に `device-test` ラベルを付けるか、Actions の **Android device tests** から **Run workflow** を選ぶ。
-この手動ワークフローで integration test と APK のインストール・起動を確認し、`android-startup-screenshot` を取得できる（14 日間保存）。手動テストの完了を待たずに通常の APK 配布を進められる。
+この手動ワークフローでカメラ起動・編集・ギャラリー保存の integration test と APK のインストール・起動を確認し、`android-startup-screenshot` を取得できる（14 日間保存）。手動テストの完了を待たずに通常の APK 配布を進められる。
 初回やキャッシュがない実行では依存の取得に時間がかかる。通常の APK ビルドは10分、配布 job 全体は15分でタイムアウトする。
 
 ## ユーザー・チーム側の準備
