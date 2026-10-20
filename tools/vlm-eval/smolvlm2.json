@@ -1,0 +1,10 @@
+{
+  "name": "SmolVLM2 500M",
+  "model_type": "general",
+  "repository": "litert-community/SmolVLM2-500M",
+  "revision": "78a25681a0811230bfa3079504a717e9a4a139d1",
+  "filename": "SmolVLM2-500M.litertlm",
+  "size": 360822960,
+  "sha256": "b808b328d845a600a33c5295f93d9217487317bd334dbc91b2a8d50e26e60ad0",
+  "license": "apache-2.0"
+}

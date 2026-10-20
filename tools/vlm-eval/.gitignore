@@ -1,0 +1,6 @@
+# Evaluation output, generated app and licensed model files stay local.
+app/
+results/
+*.litertlm
+*.task
+.venv/

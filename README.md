@@ -12,6 +12,8 @@ Android 向けに Flutter で開発する。起動するとすぐにカメラが
 
 チームで作業を分担する場合は [共有仕様と分担の進め方](docs/team-development.md) を参照する。
 
+撮影後の自動検出は [オンデバイス解析の設計案](docs/ai-analysis-design.md) を参照する。OCR と VLM の単独検証、共通の入出力、本体への結合方針をまとめている。
+
 ## 起動する
 
 Flutter **3.47.7** / Dart **3.13.5** / JDK **25**（Temurin）を使う。ツールのバージョンは [mise](https://mise.jdx.dev/) の `mise.toml` で固定し、CI も同じファイルを使う。

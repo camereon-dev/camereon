@@ -1,0 +1,7 @@
+{
+  "airplane_mode_on": "1",
+  "wifi_on": "3",
+  "wifi_status": "Wifi is disabled\nWifi scanning is always available",
+  "recorded_at": "2026-10-20T08:03:40.932716+00:00",
+  "note": "Queried during the final short-prompt comparison. APK INTERNET permission was also removed and checked at build time."
+}
