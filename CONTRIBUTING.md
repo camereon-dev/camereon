@@ -1,5 +1,8 @@
 # チームでの開発
 
+分担する前に [チームで分担するための共有事項](docs/team-development.md) を確認する。
+共有済みの仕様、Issue ごとの担当範囲、並行して進める方法、着手時に決めることをまとめている。
+
 ## 開始する
 
 README に沿って `mise install` で Flutter・JDK を入れ、Android の環境を用意する。
