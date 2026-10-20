@@ -55,6 +55,15 @@ void main() {
       await gesture.up();
       await tester.pump();
       expect(find.text('1箇所の領域を選択中'), findsOneWidget);
+      await tester.dragFrom(
+        rect.center,
+        Offset(rect.width * .2, rect.height * .2),
+      );
+      await tester.pump();
+      expect(find.text('2箇所の領域を選択中'), findsOneWidget);
+      await tester.tap(find.text('取り消す'));
+      await tester.pump();
+      expect(find.text('1箇所の領域を選択中'), findsOneWidget);
       await tester.tap(find.text('保存前に確認'));
       await tester.pumpAndSettle();
       expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
