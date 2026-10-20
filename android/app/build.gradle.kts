@@ -7,6 +7,9 @@ plugins {
 val betaKeystorePath = System.getenv("CAMEREON_BETA_KEYSTORE")
 val betaPassword = System.getenv("CAMEREON_BETA_PASSWORD")
 val isBetaBuild = !betaKeystorePath.isNullOrBlank()
+// Opt-in install for physical AI verification, without replacing a beta app.
+val isAiPreview = System.getenv("CAMEREON_AI_PREVIEW") == "1"
+require(!(isBetaBuild && isAiPreview)) { "AI preview cannot be published as a beta" }
 
 if (isBetaBuild) {
     require(!betaPassword.isNullOrBlank()) { "Beta signing password is required" }
@@ -25,11 +28,16 @@ android {
 
     defaultConfig {
         // Keep the demo separate from a future production app.
-        applicationId = "dev.camereon.camereon.demo"
-        manifestPlaceholders["appName"] = if (isBetaBuild) "camereon beta" else "camereon demo"
+        applicationId = if (isAiPreview) "dev.camereon.camereon.demo.ai_preview" else "dev.camereon.camereon.demo"
+        manifestPlaceholders["appName"] = when {
+            isAiPreview -> "camereon AI preview"
+            isBetaBuild -> "camereon beta"
+            else -> "camereon demo"
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // LiteRT-LM requires Android 11. AI is enabled only on ARM64 at runtime.
+        minSdk = 30
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)

@@ -1,7 +1,7 @@
 # ベータ版の自動リリース
 
 しばらくは GitHub Releases の **Pre-release** として Android APK を配布する。
-現在のアプリは起動直後にカメラを開き、撮影・撮り直し・前面と背面の切り替えができる。編集・画像加工・保存は今後追加する。
+現在のアプリは起動直後にカメラを開き、撮影・撮り直し・前面と背面の切り替えができる。撮影後に Gemma 4 の端末内の内容説明を利用できる。編集・画像加工・保存は今後追加する。
 
 ## 公開の流れ
 
@@ -25,7 +25,7 @@ Release 公開 job だけが `contents: write` を持つ。ビルド job はリ�
 公開先: [GitHub Releases](https://github.com/camereon-dev/camereon/releases)
 
 公開するファイルは `camereon-beta-arm64.apk` と `camereon-beta-arm64.apk.sha256`。
-Android 7.0 以上の ARM64 端末で利用できる。アプリ ID は `dev.camereon.camereon.demo`、表示名は `camereon beta`。
+Android 11 以上の ARM64 端末で利用できる。アプリ ID は `dev.camereon.camereon.demo`、表示名は `camereon beta`。
 正式版を出すタイミングでは、配布先・アプリ ID・バージョン方針を改めて決める。
 
 ## 署名の設定
@@ -58,3 +58,4 @@ Secrets は値を後から取得できないため、バックアップを保持
 - 既存タグが別のコミットを指す場合は失敗させ、公開済みのタグやファイルを上書きしない。
 
 通常の PR・手動テスト用のデモ APK は debug 署名。公開ベータ版とは署名が異なる。
+Android demo APK の CI は別 ID `dev.camereon.camereon.demo.ai_preview` でビルドし、既存のベータ版と共存できる。

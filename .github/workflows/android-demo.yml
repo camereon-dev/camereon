@@ -33,6 +33,9 @@ jobs:
           android: 'true'
       - name: Build Android demo APK
         timeout-minutes: 10
+        env:
+          # Keep debug-signed previews separate from the installed beta app.
+          CAMEREON_AI_PREVIEW: '1'
         # 実機配布用なので arm64 のみ
         run: bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER" --target-platform android-arm64
       - name: Upload installable APK

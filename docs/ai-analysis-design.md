@@ -1,6 +1,6 @@
 # 撮影後のオンデバイス解析の設計案
 
-作成日: 2026-10-20。状態: 設計案・実機での単独検証前。
+作成日: 2026-10-20。状態: 設計案と単独検証。本体組み込みは #28 で進める。
 
 進め方の更新: Gemma の画像入力検証を [#23](https://github.com/camereon-dev/camereon/issues/23) で先行する。
 リスク評価は、実際の認識結果と失敗例を材料に深く検討する [後続タスク #24](https://github.com/camereon-dev/camereon/issues/24) に分ける。
@@ -30,13 +30,13 @@
 
 ### 対応 OS とモデルサイズ
 
-- 本体は現在 API 24 以上。既存の PaddleOCR Android SDK 評価は API 26 以上なので、そのまま本体に依存を追加すると対応範囲が変わる。[既存検証](ocr-evaluation.md)、[PaddleOCR の Android 要件](https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/inference_deployment/cross_platform/android_deployment.en.md)
+- 組み込み前の本体は API 24 以上。今回の組み込みブランチは API 30 以上。既存の PaddleOCR Android SDK 評価は API 26 以上なので、そのまま本体に依存を追加すると対応範囲が変わる。[既存検証](ocr-evaluation.md)、[PaddleOCR の Android 要件](https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/inference_deployment/cross_platform/android_deployment.en.md)
 - `flutter_gemma` は旧名での公開を終了し、後継への移行が案内されている。現在の後継パッケージの LiteRT 系ランタイムは Android API 30 以上・ARM64 を要求する。[旧パッケージの案内](https://pub.dev/packages/flutter_gemma)、[後継のプラットフォーム要件](https://pub.dev/packages/flutter_edge_ai)
 - 検証用に `flutter_edge_ai 2.4.1` + `flutter_edge_ai_litertlm 1.15.0` を固定。独立した評価アプリで Android ARM64 エミュレーター上の Gemma 4 / SmolVLM2 のモデルロード・画像推論まで確認。実機の性能は未確認。[検証状況・他モデルの比較方針](gemma-evaluation.md)、[パッケージの導入例](https://pub.dev/packages/flutter_edge_ai)
 - Gemma 4 の native 用 `gemma-4-E2B-it.litertlm` を約 2.59 GB で固定。Web 用・別の変換版と取り違えない。ダウンロード容量と実行時 RAM は別に計測する。[配布ファイル](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/tree/main)
 
-**最初は評価アプリを分け、本体の最低 OS は変更しない。** API 判定の `if` を Dart に書くだけでは、依存ライブラリの `minSdk` 要件を回避できない。
-本体へ統合する段階で、最低 OS を引き上げるか、互換性を確認した別のビルド・ネイティブ連携にするかを判断する。ネイティブ直結なら API 24 を維持できる、とは現時点で判断しない。
+単独検証は評価アプリを分けた。本体組み込み #28 では SDK の要件に合わせ API 30 へ引き上げる。 API 判定の `if` を Dart に書くだけでは、依存ライブラリの `minSdk` 要件を回避できない。
+本体では ARM64 のときだけ AI を初期化し、それ以外の ABI では解析を利用不可として表示する。ネイティブ直結なら API 24 を維持できる、とは現時点で判断しない。
 
 ## 3. 全体構成
 
