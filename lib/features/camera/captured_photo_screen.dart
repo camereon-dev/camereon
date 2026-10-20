@@ -1,192 +1,298 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart'; // kIsWeb を利用するために追加
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// 撮影した写真の確認画面。ドラッグによる複数領域の黒塗り選択をサポート。
+import '../../core/photo/android_photo_saver.dart';
+import '../../core/photo/hide_region.dart';
+import '../../core/photo/image_photo_processor.dart';
+import '../../core/photo/photo_images.dart';
+import '../../core/photo/photo_processor.dart';
+import '../../core/photo/photo_saver.dart';
+
+/// 正規化した画像の画素座標で編集し、確認した JPEG だけを保存する。
 class CapturedPhotoScreen extends StatefulWidget {
-  const CapturedPhotoScreen({super.key, required this.photo});
+  const CapturedPhotoScreen({
+    super.key,
+    required this.photo,
+    this.processor,
+    this.saver,
+  });
 
   final XFile photo;
+  final PhotoProcessor? processor;
+  final PhotoSaver? saver;
 
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
 
 class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
-  // ドラッグ開始位置
-  Offset? _startPoint;
-  // 現在ドラッグ中の選択領域
-  Rect? _currentSelection;
-  // 確定した黒塗り領域のリスト
-  final List<Rect> _selectedRects = [];
+  late final PhotoProcessor _processor = widget.processor ?? ImagePhotoProcessor();
+  late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
+  SourcePhoto? _source;
+  RedactedJpeg? _preview;
+  final List<HideRegion> _regions = [];
+  Offset? _start;
+  HideRegion? _drag;
+  bool _busy = true;
+  bool _loadFailed = false;
+  bool _saved = false;
+  bool _allowPop = false;
+  SaveFailureReason? _saveFailure;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
-    // Web環境以外の場合のみ、一時ファイルを削除する
-    if (!kIsWeb) {
-      File(widget.photo.path).delete().ignore();
-    }
+    File(widget.photo.path).delete().ignore();
     super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _busy = true;
+      _loadFailed = false;
+    });
+    try {
+      final source = await _processor.normalize(await widget.photo.readAsBytes());
+      if (!mounted) return;
+      setState(() => _source = source);
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _retake() async {
+    if (_busy) return;
+    if (_regions.isNotEmpty && !_saved) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('編集を破棄しますか？'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('編集を続ける')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('破棄する')),
+          ],
+        ),
+      );
+      if (discard != true || !mounted) return;
+    }
+    setState(() => _allowPop = true);
+    await Future<void>.delayed(Duration.zero);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _prepare() async {
+    final source = _source;
+    if (_busy || source == null) return;
+    setState(() {
+      _busy = true;
+      _start = null;
+      _drag = null;
+    });
+    try {
+      final jpeg = await _processor.redact(source, List.of(_regions));
+      if (mounted) setState(() => _preview = jpeg);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('画像を加工できませんでした。選択を保持しています。もう一度お試しください。')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _save() async {
+    final jpeg = _preview;
+    if (_busy || jpeg == null || _saved) return;
+    setState(() {
+      _busy = true;
+      _saveFailure = null;
+    });
+    SaveResult result;
+    try {
+      result = await _saver.save(jpeg);
+    } catch (_) {
+      result = const SaveFailed(SaveFailureReason.failed);
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _saved = result is SaveSucceeded;
+      if (result case SaveFailed(:final reason)) _saveFailure = reason;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: GestureDetector(
-                    onPanStart: (details) {
-                      setState(() {
-                        _startPoint = details.localPosition;
-                        _currentSelection =
-                            Rect.fromPoints(_startPoint!, _startPoint!);
-                      });
-                    },
-                    onPanUpdate: (details) {
-                      if (_startPoint == null) return;
-                      setState(() {
-                        _currentSelection = Rect.fromPoints(
-                            _startPoint!, details.localPosition);
-                      });
-                    },
-                    onPanEnd: (details) {
-                      if (_currentSelection != null) {
-                        setState(() {
-                          _selectedRects.add(_currentSelection!);
-                          _currentSelection = null;
-                          _startPoint = null;
-                        });
-                      }
-                    },
-                    child: Stack(
-                      children: [
-                        // 下層：画像表示（Web環境ではダミー画像、実機環境では撮影写真）
-                        kIsWeb
-                            ? Image.network(
-                                'https://picsum.photos/400/500',
-                                fit: BoxFit.contain,
-                                semanticLabel: '撮影した写真（ダミー）',
-                              )
-                            : Image.file(
-                                File(widget.photo.path),
-                                fit: BoxFit.contain,
-                                semanticLabel: '撮影した写真',
-                              ),
-                        // 上層：黒塗り描画レイヤー
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: SelectionPainter(
-                              selectedRects: _selectedRects,
-                              currentSelection: _currentSelection,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+    final source = _source;
+    final preview = _preview;
+    return PopScope(
+      canPop: !_busy && (_allowPop || _regions.isEmpty || _saved),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _retake();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: source == null
+                    ? Center(child: _loadFailed
+                        ? const Text('写真を読み込めませんでした。撮り直すか再試行してください。')
+                        : const CircularProgressIndicator())
+                    : preview != null
+                    ? Image.memory(preview.bytes, fit: BoxFit.contain, semanticLabel: '保存する加工済み写真')
+                    : _editor(source),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
+              Flexible(
+                flex: 0,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(52),
-                            foregroundColor: Colors.white,
+                      if (_busy) const LinearProgressIndicator(),
+                      if (_saved) ...[
+                        const Text('写真を保存しました', textAlign: TextAlign.center),
+                        FilledButton(onPressed: _retake, child: const Text('もう一枚')),
+                      ] else if (preview != null) ...[
+                        const Text('隠し忘れがないか確認してください。安全を完全に保証するものではありません。'),
+                        if (_saveFailure != null) Text(
+                          _saveFailure == SaveFailureReason.permissionDenied
+                              ? '保存が許可されていません。設定から許可して再試行してください。'
+                              : '保存できませんでした。空き容量を確認して再試行してください。',
+                        ),
+                        if (_saveFailure == SaveFailureReason.permissionDenied)
+                          TextButton(
+                            onPressed: _busy ? null : _openSettings,
+                            child: const Text('設定を開く'),
                           ),
-                          icon: const Icon(Icons.replay_rounded),
-                          label: const Text('撮り直す'),
+                        FilledButton(onPressed: _busy ? null : _save, child: const Text('写真に保存')),
+                        TextButton(onPressed: _busy ? null : () => setState(() {
+                          _preview = null;
+                          _saveFailure = null;
+                        }), child: const Text('編集へ戻る')),
+                      ] else ...[
+                        Text('${_regions.length}箇所の領域を選択中', textAlign: TextAlign.center),
+                        const Text('画像上をドラッグして黒塗り範囲を選択してください', textAlign: TextAlign.center),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          children: [
+                            TextButton(onPressed: _busy || _regions.isEmpty ? null : () => setState(() {
+                              _regions.removeLast(); _drag = null; _start = null;
+                            }), child: const Text('取り消す')),
+                            TextButton(onPressed: _busy || _regions.isEmpty ? null : () => setState(() {
+                              _regions.clear(); _drag = null; _start = null;
+                            }), child: const Text('すべてリセット')),
+                          ],
                         ),
-                      ),
-                      if (_selectedRects.isNotEmpty) ...[
-                        const SizedBox(width: 12),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _selectedRects.clear();
-                            });
-                          },
-                          icon: const Icon(Icons.undo, color: Colors.white),
-                          tooltip: '選択をクリア',
-                        ),
+                        FilledButton(onPressed: _busy || source == null ? null : _prepare, child: const Text('保存前に確認')),
+                        if (_loadFailed) TextButton(onPressed: _busy ? null : _load, child: const Text('再試行')),
+                        TextButton(onPressed: _busy ? null : _retake, child: const Text('撮り直す')),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _selectedRects.isEmpty
-                        ? '画像上をドラッグして黒塗り範囲を選択してください'
-                        : '${_selectedRects.length}箇所の領域を選択中',
-                    textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Future<void> _openSettings() async {
+    try {
+      await const MethodChannel('dev.camereon/app_settings').invokeMethod<void>('open');
+    } catch (_) {
+      // 権限エラーと編集状態を残し、再試行できるようにする。
+    }
+  }
+
+  Widget _editor(SourcePhoto source) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = math.min(constraints.maxWidth / source.width, constraints.maxHeight / source.height);
+      final size = Size(source.width * scale, source.height * scale);
+      final rect = Alignment.center.inscribe(size, Offset.zero & constraints.biggest);
+      Offset pixel(Offset point) => (point - rect.topLeft) / scale;
+      return GestureDetector(
+        key: const ValueKey('photo-canvas'),
+        behavior: HitTestBehavior.opaque,
+        onPanDown: _busy ? null : (details) {
+          setState(() {
+            _start = rect.contains(details.localPosition) ? pixel(details.localPosition) : null;
+            _drag = null;
+          });
+        },
+        onPanUpdate: _busy ? null : (details) {
+          final start = _start;
+          if (start == null) return;
+          setState(() => _drag = HideRegion.fromRect(
+            Rect.fromPoints(start, pixel(details.localPosition)),
+            imageWidth: source.width, imageHeight: source.height,
+          ));
+        },
+        onPanEnd: _busy ? null : (_) => setState(() {
+          if (_drag != null) _regions.add(_drag!);
+          _drag = null; _start = null;
+        }),
+        onPanCancel: () => setState(() { _drag = null; _start = null; }),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fromRect(
+              rect: rect,
+              child: Image.memory(source.bytes, fit: BoxFit.fill, semanticLabel: '撮影した写真'),
+            ),
+            Positioned.fromRect(
+              rect: rect,
+              child: IgnorePointer(child: CustomPaint(painter: SelectionPainter(
+                regions: List.unmodifiable([..._regions, if (_drag != null) _drag!]),
+                imageWidth: source.width,
+                imageHeight: source.height,
+              ))),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }
 
-/// 選択領域（確定した黒塗り＋ドラッグ中のプレビュー）を描画するペインター
 class SelectionPainter extends CustomPainter {
-  SelectionPainter({
-    required this.selectedRects,
-    this.currentSelection,
-  });
-
-  final List<Rect> selectedRects;
-  final Rect? currentSelection;
+  SelectionPainter({required this.regions, required this.imageWidth, required this.imageHeight});
+  final List<HideRegion> regions;
+  final int imageWidth;
+  final int imageHeight;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 確定済みの黒塗り描画
-    final blackPaint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.fill;
-
-    for (final rect in selectedRects) {
-      canvas.drawRect(rect, blackPaint);
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.scale(size.width / imageWidth, size.height / imageHeight);
+    final paint = Paint()..color = Colors.black;
+    for (final region in regions) {
+      canvas.drawRect(region.toRect(), paint);
     }
-
-    // 現在ドラッグ中の選択枠（赤枠ガイド）描画
-    if (currentSelection != null) {
-      final borderPaint = Paint()
-        ..color = Colors.redAccent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
-
-      final fillPaint = Paint()
-        ..color = Colors.black.withOpacity(0.5)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRect(currentSelection!, fillPaint);
-      canvas.drawRect(currentSelection!, borderPaint);
-    }
+    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant SelectionPainter oldDelegate) {
-    return oldDelegate.selectedRects != selectedRects ||
-        oldDelegate.currentSelection != currentSelection;
-  }
+  bool shouldRepaint(covariant SelectionPainter oldDelegate) =>
+      oldDelegate.imageWidth != imageWidth || oldDelegate.imageHeight != imageHeight ||
+      oldDelegate.regions != regions;
 }
