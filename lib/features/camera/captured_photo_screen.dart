@@ -54,7 +54,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
 
   @override
   void dispose() {
-    File(widget.photo.path).delete().ignore();
+    if (widget.photo.path.isNotEmpty) {
+      File(widget.photo.path).delete().ignore();
+    }
     super.dispose();
   }
 

@@ -161,14 +161,7 @@ class _CameraScreenState extends State<CameraScreen>
         const Duration(seconds: 10),
       );
       if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (context) => PhotoAnalysisEntry(
-            loadImage: photo.readAsBytes,
-            child: CapturedPhotoScreen(photo: photo),
-          ),
-        ),
-      );
+      await _editPhoto(photo);
     } catch (e) {
       debugPrint('camera: failed to take picture: $e');
       if (!mounted) return;
@@ -180,6 +173,41 @@ class _CameraScreenState extends State<CameraScreen>
       if (mounted) setState(() => _isCapturing = false);
     }
   }
+
+  Future<void> _openSample() async {
+    if (_isCapturing) return;
+    setState(() => _isCapturing = true);
+    try {
+      final data = await rootBundle.load(
+        'tools/vlm-eval/fixtures/parcel_ja.png',
+      );
+      if (!mounted) return;
+      await _editPhoto(
+        XFile.fromData(
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+          mimeType: 'image/png',
+          name: 'camereon_sample.png',
+        ),
+      );
+    } catch (e) {
+      debugPrint('camera: failed to open sample: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('サンプルを開けませんでした。もう一度お試しください。')),
+      );
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
+    }
+  }
+
+  Future<void> _editPhoto(XFile photo) => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (context) => PhotoAnalysisEntry(
+        loadImage: photo.readAsBytes,
+        child: CapturedPhotoScreen(photo: photo),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -205,6 +233,15 @@ class _CameraScreenState extends State<CameraScreen>
                 canSwitch: issue == null && _canSwitchCamera && !_isCapturing,
                 onShoot: _takePicture,
                 onSwitch: _switchCamera,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TextButton.icon(
+                  key: const ValueKey('open-sample'),
+                  onPressed: _isCapturing ? null : _openSample,
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('サンプルで試す'),
+                ),
               ),
             ],
           ),
