@@ -60,6 +60,8 @@ class AnalysisCancelled implements Exception {
 }
 
 abstract interface class AnalysisModelStore {
+  int get downloadSize;
+  Future<int> downloadedBytes();
   Future<bool> isReady();
   Future<void> download({
     required void Function(int received, int total) onProgress,

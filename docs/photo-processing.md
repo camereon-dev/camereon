@@ -1,5 +1,7 @@
 # 画像処理（Issue #10）
 
+`FlutterPhotoProcessor` を撮影後画面の標準実装として使う。プレビュー・解析と同じ端末デコーダーで元解像度の画素と向きを確定し、個人情報のメタデータを引き継がないPNGを作る。大きさの上限はデコード前に検査する。黒塗りと保存用JPEGは以下の `ImagePhotoProcessor` へ委譲する。
+
 `ImagePhotoProcessor` は既存の `PhotoProcessor` を実装する。
 画面、カメラ、保存先、ファイル操作には依存しない。
 

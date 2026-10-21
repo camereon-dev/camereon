@@ -7,9 +7,10 @@ import 'package:flutter/services.dart';
 
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
-import '../../core/photo/image_photo_processor.dart';
+import '../../core/photo/flutter_photo_processor.dart';
 import '../../core/photo/photo_images.dart';
 import '../../core/photo/photo_processor.dart';
+import '../../core/photo/photo_processing_exception.dart';
 import '../../core/photo/photo_saver.dart';
 
 /// 正規化した画像の画素座標で編集し、確認した JPEG だけを保存する。
@@ -31,7 +32,7 @@ class CapturedPhotoScreen extends StatefulWidget {
 
 class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   late final PhotoProcessor _processor =
-      widget.processor ?? ImagePhotoProcessor();
+      widget.processor ?? FlutterPhotoProcessor();
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
   SourcePhoto? _source;
   RedactedJpeg? _preview;
@@ -40,6 +41,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   HideRegion? _drag;
   bool _busy = true;
   bool _loadFailed = false;
+  String _loadError = '写真を読み込めませんでした。撮り直すか再試行してください。';
   bool _processingFailed = false;
   int? _pointer;
   bool _saved = false;
@@ -71,8 +73,17 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       );
       if (!mounted) return;
       setState(() => _source = source);
-    } catch (_) {
-      if (mounted) setState(() => _loadFailed = true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loadFailed = true;
+          _loadError =
+              error is PhotoProcessingException &&
+                  error.reason == PhotoProcessingFailure.imageTooLarge
+              ? '写真のサイズが対応上限を超えています。解像度を下げて撮り直してください。'
+              : '写真を読み込めませんでした。撮り直すか再試行してください。';
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -163,7 +174,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
                 child: source == null
                     ? Center(
                         child: _loadFailed
-                            ? const Text('写真を読み込めませんでした。撮り直すか再試行してください。')
+                            ? Text(_loadError)
                             : const CircularProgressIndicator(),
                       )
                     : preview != null

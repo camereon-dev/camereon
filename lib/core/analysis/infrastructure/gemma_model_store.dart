@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -86,78 +87,171 @@ class GemmaModelStore implements AnalysisModelStore {
   }
 
   @override
+  int get downloadSize => expectedBytes;
+
+  Map<String, Object> get _partialIdentity => {
+    'url': _downloadUrl.toString(),
+    'bytes': expectedBytes,
+    'sha256': expectedSha256,
+  };
+
+  Future<int?> _partialLength(File target) async {
+    try {
+      final identity = jsonDecode(
+        await File('${target.path}.part.json').readAsString(),
+      );
+      if (identity is! Map ||
+          _partialIdentity.entries.any((e) => identity[e.key] != e.value)) {
+        return null;
+      }
+      final length = await File('${target.path}.part').length();
+      return length <= expectedBytes ? length : null;
+    } on FileSystemException {
+      return null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  @override
+  Future<int> downloadedBytes() async =>
+      await _partialLength(await modelFile) ?? 0;
+
+  Future<void> _clearPartial(File target) async {
+    for (final suffix in ['.part', '.part.json', '.part.json.tmp']) {
+      final file = File('${target.path}$suffix');
+      if (await file.exists()) await file.delete();
+    }
+  }
+
+  @override
   Future<void> download({
     required void Function(int received, int total) onProgress,
   }) async {
     if (_downloading) throw const AnalysisFailure(AnalysisFailureKind.busy);
     _downloading = true;
     final generation = ++_generation;
-    File? partial;
+    File? target;
     IOSink? sink;
-    final client = _createClient()
-      ..connectionTimeout = const Duration(seconds: 30);
-    _client = client;
+    HttpClient? client;
+    var discardPartial = false;
     void checkCancelled() {
       if (generation != _generation) throw const AnalysisCancelled();
     }
 
     try {
+      target = await modelFile;
+      await target.parent.create(recursive: true);
+      final partial = File('${target.path}.part');
+      final previousLength = await _partialLength(target);
+      if (previousLength == null) await _clearPartial(target);
+      var received = previousLength ?? 0;
+      onProgress(received, expectedBytes);
+      checkCancelled();
       final free = await _device.invokeMethod<int>('availableStorageBytes');
       checkCancelled();
-      if (free == null || free < expectedBytes + GemmaModelSpec.workingBytes) {
+      if (free == null ||
+          free < expectedBytes - received + GemmaModelSpec.workingBytes) {
         throw const AnalysisFailure(AnalysisFailureKind.storage);
       }
-      final target = await modelFile;
-      await target.parent.create(recursive: true);
-      partial = File('${target.path}.part');
-      final request = await client.getUrl(_downloadUrl);
-      final response = await request.close().timeout(
-        const Duration(seconds: 60),
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        throw const AnalysisFailure(AnalysisFailureKind.network);
+      if (previousLength == null) {
+        final identity = File('${target.path}.part.json.tmp');
+        await identity.writeAsString(jsonEncode(_partialIdentity), flush: true);
+        await identity.rename('${target.path}.part.json');
       }
-      if (response.contentLength >= 0 &&
-          response.contentLength != expectedBytes) {
-        throw const AnalysisFailure(AnalysisFailureKind.integrity);
-      }
-      sink = partial.openWrite();
-      var received = 0;
-      var lastProgress = DateTime.now();
-      onProgress(0, expectedBytes);
-      await for (final chunk in response.timeout(const Duration(seconds: 60))) {
+      if (received < expectedBytes) {
+        client = _createClient()
+          ..connectionTimeout = const Duration(seconds: 30)
+          ..autoUncompress = false;
+        _client = client;
+        final request = await client.getUrl(_downloadUrl);
+        request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
+        if (received > 0) {
+          request.headers.set(HttpHeaders.rangeHeader, 'bytes=$received-');
+        }
         checkCancelled();
-        received += chunk.length;
-        if (received > expectedBytes) {
+        final response = await request.close().timeout(
+          const Duration(seconds: 60),
+        );
+        checkCancelled();
+        if (response.statusCode == HttpStatus.requestedRangeNotSatisfiable) {
           throw const AnalysisFailure(AnalysisFailureKind.integrity);
         }
-        sink.add(chunk);
-        // Apply backpressure; do not queue a multi-GB file in memory.
-        await sink.flush();
-        if (DateTime.now().difference(lastProgress).inMilliseconds > 150) {
+        if (response.statusCode == HttpStatus.partialContent) {
+          final range = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$').firstMatch(
+            response.headers.value(HttpHeaders.contentRangeHeader) ?? '',
+          );
+          if (range == null ||
+              int.parse(range[1]!) != received ||
+              int.parse(range[2]!) != expectedBytes - 1 ||
+              int.parse(range[3]!) != expectedBytes) {
+            // No new bytes have been written: retain the known prefix.
+            throw const AnalysisFailure(AnalysisFailureKind.network);
+          }
+        } else if (response.statusCode == HttpStatus.ok) {
+          // Some servers ignore Range. Never append a full response to a prefix.
+          received = 0;
           onProgress(received, expectedBytes);
-          lastProgress = DateTime.now();
+        } else {
+          throw const AnalysisFailure(AnalysisFailureKind.network);
+        }
+        final encoding = response.headers.value(
+          HttpHeaders.contentEncodingHeader,
+        );
+        if (encoding != null && encoding != 'identity') {
+          throw const AnalysisFailure(AnalysisFailureKind.network);
+        }
+        if (response.contentLength >= 0 &&
+            response.contentLength != expectedBytes - received) {
+          throw const AnalysisFailure(AnalysisFailureKind.integrity);
+        }
+        sink = partial.openWrite(
+          mode: received > 0 ? FileMode.append : FileMode.write,
+        );
+        var buffered = 0;
+        var lastProgress = DateTime.now();
+        await for (final chunk in response.timeout(
+          const Duration(seconds: 60),
+        )) {
+          checkCancelled();
+          received += chunk.length;
+          if (received > expectedBytes) {
+            throw const AnalysisFailure(AnalysisFailureKind.integrity);
+          }
+          sink.add(chunk);
+          buffered += chunk.length;
+          // Bound pending writes without flushing on every network packet.
+          if (buffered >= 1024 * 1024) {
+            await sink.flush();
+            buffered = 0;
+          }
+          if (DateTime.now().difference(lastProgress).inMilliseconds > 150) {
+            onProgress(received, expectedBytes);
+            lastProgress = DateTime.now();
+          }
+        }
+        await sink.close();
+        sink = null;
+        checkCancelled();
+        onProgress(received, expectedBytes);
+        if (received != expectedBytes) {
+          // A truncated transfer is resumable, not evidence of a bad prefix.
+          throw const AnalysisFailure(AnalysisFailureKind.network);
         }
       }
-      await sink.close();
-      sink = null;
       checkCancelled();
       onProgress(received, expectedBytes);
-      if (received != expectedBytes) {
-        throw const AnalysisFailure(AnalysisFailureKind.integrity);
-      }
-      final path = partial.path;
-      if (await _checksumInWorker(path) != expectedSha256) {
+      if (await _checksumInWorker(partial.path) != expectedSha256) {
         throw const AnalysisFailure(AnalysisFailureKind.integrity);
       }
       checkCancelled();
       await partial.rename(target.path);
-      _verifiedStamp = null;
-      // Mark ready only after a verified file is atomically published.
+      await _clearPartial(target);
       final stat = await target.stat();
       _verifiedStamp =
           '${target.path}:${stat.size}:${stat.modified.microsecondsSinceEpoch}';
-    } on AnalysisFailure {
+    } on AnalysisFailure catch (error) {
+      discardPartial = error.kind == AnalysisFailureKind.integrity;
       rethrow;
     } on AnalysisCancelled {
       rethrow;
@@ -168,14 +262,14 @@ class GemmaModelStore implements AnalysisModelStore {
       if (generation != _generation) throw const AnalysisCancelled();
       throw const AnalysisFailure(AnalysisFailureKind.network);
     } finally {
-      client.close(force: true);
+      client?.close(force: true);
       try {
         await sink?.close();
       } catch (_) {
-        /* Already closed on failure. */
+        // Keep the persisted prefix; final SHA-256 still gates publication.
       }
       try {
-        if (partial != null && await partial.exists()) await partial.delete();
+        if (discardPartial && target != null) await _clearPartial(target);
       } finally {
         if (identical(_client, client)) _client = null;
         _downloading = false;
@@ -197,8 +291,7 @@ class GemmaModelStore implements AnalysisModelStore {
     _verifiedStamp = null;
     final file = await modelFile;
     if (await file.exists()) await file.delete();
-    final partial = File('${file.path}.part');
-    if (await partial.exists()) await partial.delete();
+    await _clearPartial(file);
     // LiteRT-LM keeps its derived caches in Application Support, not in models/.
     final root = await _supportDirectory();
     await for (final entity in root.list(followLinks: false)) {
