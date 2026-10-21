@@ -25,12 +25,12 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
   AnalysisImage? _image;
   bool _ready = false;
   bool _checking = true;
-  bool _downloading = false;
+  bool get _downloading => services.downloads.active;
   bool _running = false;
   bool _deleting = false;
   bool _cancelling = false;
-  int _received = 0;
-  int _total = 0;
+  int get _received => services.downloads.received;
+  int get _total => services.downloads.total;
   String? _notice;
   String _text = '';
   AnalysisPhase _phase = AnalysisPhase.loadingModel;
@@ -42,6 +42,7 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
   @override
   void initState() {
     super.initState();
+    services.downloads.addListener(_downloadChanged);
     unawaited(_prepare());
   }
 
@@ -53,6 +54,7 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
       final ready =
           services.analyzer.isSupported && await services.models.isReady();
       if (mounted) setState(() => _ready = ready);
+      await services.downloads.restore();
     } catch (_) {
       if (mounted) {
         setState(() => _notice = '写真またはモデルを確認できませんでした。画面を開き直してください。');
@@ -79,36 +81,31 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
     };
   }
 
-  Future<void> _download() async {
+  void _downloadChanged() {
+    if (!mounted) return;
+    final transfer = services.downloads;
     setState(() {
-      _downloading = true;
-      _notice = null;
-      _received = 0;
-      _total = 0;
-    });
-    try {
-      await services.models.download(
-        onProgress: (received, total) {
-          if (mounted) {
-            setState(() {
-              _received = received;
-              _total = total;
-            });
-          }
-        },
-      );
-      if (mounted) {
-        setState(() {
-          _ready = true;
-          _notice = '解析用データの準備ができました。';
-        });
+      if (transfer.completed) {
+        _ready = true;
+        _notice = '解析用データの準備ができました。';
+      } else if (transfer.error != null) {
+        _notice = transfer.error is AnalysisCancelled
+            ? '一時停止しました。取得済みデータを残しています。'
+            : _message(transfer.error!);
+      } else if (transfer.active) {
+        _notice = null;
       }
-    } catch (error) {
-      if (mounted) setState(() => _notice = _message(error));
-    } finally {
-      if (mounted) setState(() => _downloading = false);
-    }
+    });
   }
+
+  String get _remainingLabel {
+    final remaining = services.downloads.remaining;
+    return remaining == null
+        ? ''
+        : ' ・ 残り約${(remaining.inSeconds / 60).ceil()}分';
+  }
+
+  void _download() => unawaited(services.downloads.start());
 
   Future<void> _analyze() async {
     final image = _image;
@@ -180,6 +177,7 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
     });
     try {
       await services.models.delete();
+      services.downloads.reset();
       if (mounted) {
         setState(() {
           _ready = false;
@@ -195,7 +193,7 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
 
   @override
   void dispose() {
-    if (_downloading) services.models.cancelDownload();
+    services.downloads.removeListener(_downloadChanged);
     if (_running) unawaited(services.analyzer.cancel());
     super.dispose();
   }
@@ -244,9 +242,13 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
                 FilledButton.icon(
                   onPressed: _working ? null : _download,
                   icon: const Icon(Icons.download_rounded),
-                  label: const Text('解析用データをダウンロード'),
+                  label: Text(_received > 0 ? 'ダウンロードを再開' : '解析用データをダウンロード'),
                 ),
             ],
+            if (!_downloading && !_ready && _received > 0)
+              Text(
+                '${(_received / 1000000).toStringAsFixed(0)} MB 取得済み。続きから再開できます。',
+              ),
             if (_downloading) ...[
               LinearProgressIndicator(
                 value: _total > 0 ? _received / _total : null,
@@ -255,11 +257,18 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
               Text(
                 _total > 0 && _received == _total
                     ? '取得したデータを検証しています…'
-                    : '${(_received / 1000000).toStringAsFixed(0)} MB を取得しました',
+                    : '${(_received / 1000000).toStringAsFixed(0)} / ${(_total / 1000000).toStringAsFixed(0)} MB（${(_received / _total * 100).toStringAsFixed(1)}%）',
               ),
+              if (services.downloads.bytesPerSecond case final speed?)
+                Text(
+                  '${(speed / 1000000).toStringAsFixed(1)} MB/秒$_remainingLabel',
+                ),
+              const Text('アプリ内で別の画面に移動しても取得は続きます。アプリ終了後も取得済みの続きから再開できます。'),
               OutlinedButton(
-                onPressed: services.models.cancelDownload,
-                child: const Text('準備を中止'),
+                onPressed: services.downloads.pausing
+                    ? null
+                    : services.downloads.pause,
+                child: Text(services.downloads.pausing ? '一時停止しています…' : '一時停止'),
               ),
             ],
             if (supported && _ready) ...[

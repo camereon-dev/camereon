@@ -7,8 +7,40 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _RealHttp extends HttpOverrides {}
+
+class Headers implements HttpHeaders {
+  Headers([Map<String, String> values = const {}]) : values = Map.of(values);
+  final Map<String, String> values;
+  @override
+  void set(String name, Object value, {bool preserveHeaderCase = false}) {
+    values[name.toLowerCase()] = value.toString();
+  }
+
+  @override
+  String? value(String name) => values[name.toLowerCase()];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class Response extends Stream<List<int>> implements HttpClientResponse {
-  Response(this.chunks, {this.statusCode = 200, this.contentLength = 4});
+  Response(
+    this.chunks, {
+    this.statusCode = 200,
+    this.contentLength = 4,
+    Map<String, String> headers = const {},
+    this.delay = Duration.zero,
+  }) : headers = Headers(headers);
+  final Duration delay;
+  @override
+  final Headers headers;
+  Stream<List<int>> get stream async* {
+    for (final chunk in chunks) {
+      if (delay != Duration.zero) await Future<void>.delayed(delay);
+      yield chunk;
+    }
+  }
+
   final List<List<int>> chunks;
   @override
   final int statusCode;
@@ -20,7 +52,7 @@ class Response extends Stream<List<int>> implements HttpClientResponse {
     Function? onError,
     void Function()? onDone,
     bool? cancelOnError,
-  }) => Stream.fromIterable(chunks).listen(
+  }) => stream.listen(
     onData,
     onError: onError,
     onDone: onDone,
@@ -34,6 +66,8 @@ class Request implements HttpClientRequest {
   Request(this.response);
   final Response response;
   @override
+  final Headers headers = Headers();
+  @override
   Future<HttpClientResponse> close() async => response;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -45,13 +79,18 @@ class Client implements HttpClient {
     [3, 4],
   ]);
   int requests = 0;
+  final sentHeaders = <Headers>[];
+  @override
+  set autoUncompress(bool value) {}
   bool closed = false;
   @override
   set connectionTimeout(Duration? timeout) {}
   @override
   Future<HttpClientRequest> getUrl(Uri url) async {
     requests++;
-    return Request(response);
+    final request = Request(response);
+    sentHeaders.add(request.headers);
+    return request;
   }
 
   @override
@@ -125,9 +164,6 @@ void main() {
       [9, 9, 9, 9],
     ]),
     Response([
-      [1, 2],
-    ], contentLength: -1),
-    Response([
       [1, 2, 3, 4, 5],
     ], contentLength: -1),
     Response([
@@ -182,6 +218,271 @@ void main() {
     );
     await store.download(onProgress: (_, _) {});
     expect(await store.isReady(), isTrue);
+  });
+
+  test('interrupted transfer resumes after a new store is created', () async {
+    client.response = Response([
+      [1, 2],
+    ], contentLength: -1);
+    await expectLater(
+      store.download(onProgress: (_, _) {}),
+      throwsA(failure(AnalysisFailureKind.network)),
+    );
+    expect(await store.downloadedBytes(), 2);
+    final resumed = GemmaModelStore(
+      supportDirectory: () async => root,
+      createClient: () => client,
+      device: channel,
+      expectedBytes: 4,
+      expectedSha256: sha256.convert([1, 2, 3, 4]).toString(),
+      downloadUrl: Uri.parse('https://example.invalid/model'),
+    );
+    client.response = Response(
+      [
+        [3, 4],
+      ],
+      statusCode: 206,
+      contentLength: 2,
+      headers: {'content-range': 'bytes 2-3/4'},
+    );
+    final progress = <int>[];
+    // Only the remaining bytes plus working space are required.
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => GemmaModelSpec.workingBytes + 2,
+    );
+    await resumed.download(onProgress: (received, _) => progress.add(received));
+    expect(client.sentHeaders.last.value('range'), 'bytes=2-');
+    expect(progress.first, 2);
+    expect(progress.last, 4);
+    expect(await resumed.isReady(), isTrue);
+    expect(await resumed.downloadedBytes(), 0);
+    expect(
+      await File('${(await resumed.modelFile).path}.part.json').exists(),
+      isFalse,
+    );
+  });
+
+  test('pause preserves the prefix and resumes with HTTP Range', () async {
+    client.response = Response([
+      [1, 2],
+      [3, 4],
+    ], delay: const Duration(milliseconds: 180));
+    await expectLater(
+      store.download(
+        onProgress: (received, _) {
+          if (received == 2) store.cancelDownload();
+        },
+      ),
+      throwsA(isA<AnalysisCancelled>()),
+    );
+    expect(await store.downloadedBytes(), 2);
+    expect(await store.isReady(), isFalse);
+    client.response = Response(
+      [
+        [3, 4],
+      ],
+      statusCode: 206,
+      contentLength: 2,
+      headers: {'content-range': 'bytes 2-3/4'},
+    );
+    await store.download(onProgress: (_, _) {});
+    expect(client.sentHeaders.last.value('range'), 'bytes=2-');
+    expect(await store.isReady(), isTrue);
+  });
+
+  test(
+    'a server ignoring Range is restarted without duplicating the prefix',
+    () async {
+      client.response = Response([
+        [1, 2],
+      ], contentLength: -1);
+      await expectLater(
+        store.download(onProgress: (_, _) {}),
+        throwsA(failure(AnalysisFailureKind.network)),
+      );
+      client.response = Response([
+        [1, 2, 3, 4],
+      ]);
+      final progress = <int>[];
+      await store.download(onProgress: (bytes, _) => progress.add(bytes));
+      expect(progress.take(2), [2, 0]);
+      expect(await File(await store.verifiedPath()).readAsBytes(), [
+        1,
+        2,
+        3,
+        4,
+      ]);
+    },
+  );
+
+  test('a wrong Content-Range cannot be appended to a saved prefix', () async {
+    client.response = Response([
+      [1, 2],
+    ], contentLength: -1);
+    await expectLater(
+      store.download(onProgress: (_, _) {}),
+      throwsA(failure(AnalysisFailureKind.network)),
+    );
+    client.response = Response(
+      [
+        [3, 4],
+      ],
+      statusCode: 206,
+      contentLength: 2,
+      headers: {'content-range': 'bytes 0-1/4'},
+    );
+    await expectLater(
+      store.download(onProgress: (_, _) {}),
+      throwsA(failure(AnalysisFailureKind.network)),
+    );
+    expect(await store.downloadedBytes(), 2);
+    expect(await File('${(await store.modelFile).path}.part').readAsBytes(), [
+      1,
+      2,
+    ]);
+    await store.delete();
+    expect(await store.downloadedBytes(), 0);
+  });
+
+  test(
+    'a complete paused file is verified without another network transfer',
+    () async {
+      await expectLater(
+        store.download(
+          onProgress: (received, _) {
+            if (received == 4) store.cancelDownload();
+          },
+        ),
+        throwsA(isA<AnalysisCancelled>()),
+      );
+      expect(await store.downloadedBytes(), 4);
+      final requests = client.requests;
+      await store.download(onProgress: (_, _) {});
+      expect(client.requests, requests);
+      expect(await store.isReady(), isTrue);
+    },
+  );
+
+  test(
+    'a checksum mismatch after resume discards the corrupt checkpoint',
+    () async {
+      client.response = Response([
+        [9, 9],
+      ], contentLength: -1);
+      await expectLater(
+        store.download(onProgress: (_, _) {}),
+        throwsA(failure(AnalysisFailureKind.network)),
+      );
+      client.response = Response(
+        [
+          [3, 4],
+        ],
+        statusCode: 206,
+        contentLength: 2,
+        headers: {'content-range': 'bytes 2-3/4'},
+      );
+      await expectLater(
+        store.download(onProgress: (_, _) {}),
+        throwsA(failure(AnalysisFailureKind.integrity)),
+      );
+      expect(await store.downloadedBytes(), 0);
+      expect(
+        await File('${(await store.modelFile).path}.part').exists(),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'an update preserves the legacy partial of the pinned production model',
+    () async {
+      final production = GemmaModelStore(
+        supportDirectory: () async => root,
+        createClient: () => client,
+        device: channel,
+      );
+      final target = await production.modelFile;
+      await target.parent.create(recursive: true);
+      await File('${target.path}.part').writeAsBytes([1, 2]);
+      expect(await production.downloadedBytes(), 2);
+      await expectLater(
+        production.download(
+          onProgress: (received, _) {
+            expect(received, 2);
+            production.cancelDownload();
+          },
+        ),
+        throwsA(isA<AnalysisCancelled>()),
+      );
+      expect(await production.downloadedBytes(), 2);
+      expect(client.requests, 0);
+      // A custom/different model cannot adopt that unlabelled checkpoint.
+      expect(await store.downloadedBytes(), 0);
+    },
+  );
+
+  test('a checkpoint with a different identity is restarted safely', () async {
+    client.response = Response([
+      [1, 2],
+    ], contentLength: -1);
+    await expectLater(
+      store.download(onProgress: (_, _) {}),
+      throwsA(failure(AnalysisFailureKind.network)),
+    );
+    final target = await store.modelFile;
+    await File('${target.path}.part.json').writeAsString('{}');
+    expect(await store.downloadedBytes(), 0);
+    client.response = Response([
+      [1, 2, 3, 4],
+    ]);
+    await store.download(onProgress: (_, _) {});
+    expect(client.sentHeaders.last.value('range'), isNull);
+    expect(await store.isReady(), isTrue);
+  });
+
+  test('real HTTP streaming resumes a truncated body using Range', () async {
+    final ranges = <String?>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      ranges.add(request.headers.value(HttpHeaders.rangeHeader));
+      if (ranges.length == 1) {
+        request.response.add([1, 2]);
+      } else {
+        request.response.statusCode = HttpStatus.partialContent;
+        request.response.headers.set(
+          HttpHeaders.contentRangeHeader,
+          'bytes 2-3/4',
+        );
+        request.response.contentLength = 2;
+        request.response.add([3, 4]);
+      }
+      await request.response.close();
+    });
+    GemmaModelStore freshStore() => GemmaModelStore(
+      supportDirectory: () async => root,
+      createClient: () => _RealHttp().createHttpClient(null),
+      device: channel,
+      expectedBytes: 4,
+      expectedSha256: sha256.convert([1, 2, 3, 4]).toString(),
+      downloadUrl: Uri.parse('http://127.0.0.1:${server.port}/model'),
+    );
+    final first = freshStore();
+    await expectLater(
+      first.download(onProgress: (_, _) {}),
+      throwsA(failure(AnalysisFailureKind.network)),
+    );
+    expect(await first.downloadedBytes(), 2);
+    final resumed = freshStore();
+    await resumed.download(onProgress: (_, _) {});
+    expect(ranges, [null, 'bytes=2-']);
+    expect(await File(await resumed.verifiedPath()).readAsBytes(), [
+      1,
+      2,
+      3,
+      4,
+    ]);
   });
 
   test('simultaneous download and deletion are refused', () async {

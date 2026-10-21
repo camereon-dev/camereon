@@ -16,14 +16,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 class Models implements AnalysisModelStore {
+  @override
+  int get downloadSize => 4;
+  int saved = 0;
+  @override
+  Future<int> downloadedBytes() async => saved;
   bool ready = true;
   bool deleted = false;
   int cancellations = 0;
+  int transfers = 0;
   Completer<void>? pending;
   @override
   Future<bool> isReady() async => ready;
   @override
   Future<void> download({required void Function(int, int) onProgress}) async {
+    transfers++;
+    saved = 2;
     onProgress(2, 4);
     await pending?.future;
     ready = true;
@@ -40,6 +48,7 @@ class Models implements AnalysisModelStore {
   @override
   Future<void> delete() async {
     ready = false;
+    saved = 0;
     deleted = true;
   }
 }
@@ -154,12 +163,13 @@ void main() {
     await open(tester, models, Analyzer());
     await tester.tap(find.text('解析用データをダウンロード'));
     await tester.pump();
-    await tester.tap(find.text('準備を中止'));
+    await tester.ensureVisible(find.text('一時停止'));
+    await tester.tap(find.text('一時停止'));
     await tester.pumpAndSettle();
     expect(models.cancellations, 1);
-    expect(find.text('中止しました。'), findsOneWidget);
+    expect(find.text('一時停止しました。取得済みデータを残しています。'), findsOneWidget);
     models.pending = null;
-    await tester.tap(find.text('解析用データをダウンロード'));
+    await tester.tap(find.text('ダウンロードを再開'));
     await tester.pumpAndSettle();
     expect(find.text('写真を解析する'), findsOneWidget);
     await tester.ensureVisible(find.text('解析の設定'));
@@ -172,6 +182,53 @@ void main() {
     expect(models.deleted, isTrue);
     expect(find.text('解析用データをダウンロード'), findsOneWidget);
   });
+
+  testWidgets(
+    'download continues across navigation and reopening shares its progress',
+    (tester) async {
+      final models = Models()
+        ..ready = false
+        ..pending = Completer<void>();
+      final services = AnalysisServices(models: models, analyzer: Analyzer());
+      final bytes = img.encodePng(img.Image(width: 40, height: 30));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PhotoAnalysisEntry(
+            loadImage: () async => bytes,
+            services: services,
+            child: const Center(child: Text('編集画面')),
+          ),
+        ),
+      );
+      Future<void> enter() async {
+        await tester.runAsync(() async {
+          await tester.tap(find.text('端末内で写真を解析'));
+          await tester.pump();
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+        });
+        await tester.pump(const Duration(seconds: 1));
+      }
+
+      await enter();
+      await tester.ensureVisible(find.text('解析用データをダウンロード'));
+      await tester.tap(find.text('解析用データをダウンロード'));
+      await tester.pump();
+      expect(services.downloads.active, isTrue);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(models.cancellations, 0);
+      expect(services.downloads.active, isTrue);
+      await enter();
+      expect(find.text('一時停止'), findsOneWidget);
+      expect(services.downloads.received, 2);
+      expect(models.transfers, 1);
+      models.pending!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('写真を解析する'), findsOneWidget);
+      expect(models.cancellations, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'leaving a running analysis cancels it without stale UI updates',
