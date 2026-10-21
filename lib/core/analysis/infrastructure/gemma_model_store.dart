@@ -97,12 +97,21 @@ class GemmaModelStore implements AnalysisModelStore {
 
   Future<int?> _partialLength(File target) async {
     try {
-      final identity = jsonDecode(
-        await File('${target.path}.part.json').readAsString(),
-      );
-      if (identity is! Map ||
-          _partialIdentity.entries.any((e) => identity[e.key] != e.value)) {
-        return null;
+      final metadata = File('${target.path}.part.json');
+      if (await metadata.exists()) {
+        final identity = jsonDecode(await metadata.readAsString());
+        if (identity is! Map ||
+            _partialIdentity.entries.any((e) => identity[e.key] != e.value)) {
+          return null;
+        }
+      } else {
+        // Beta 52 wrote this exact pinned model without a sidecar. Preserve an
+        // in-flight transfer across the update, never adopt a different model.
+        if (expectedBytes != GemmaModelSpec.bytes ||
+            expectedSha256 != GemmaModelSpec.sha256Hex ||
+            _downloadUrl.toString() != GemmaModelSpec.url) {
+          return null;
+        }
       }
       final length = await File('${target.path}.part').length();
       return length <= expectedBytes ? length : null;
@@ -154,7 +163,8 @@ class GemmaModelStore implements AnalysisModelStore {
           free < expectedBytes - received + GemmaModelSpec.workingBytes) {
         throw const AnalysisFailure(AnalysisFailureKind.storage);
       }
-      if (previousLength == null) {
+      if (previousLength == null ||
+          !await File('${target.path}.part.json').exists()) {
         final identity = File('${target.path}.part.json.tmp');
         await identity.writeAsString(jsonEncode(_partialIdentity), flush: true);
         await identity.rename('${target.path}.part.json');

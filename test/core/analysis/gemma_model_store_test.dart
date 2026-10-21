@@ -394,6 +394,53 @@ void main() {
     },
   );
 
+  test(
+    'an update preserves the legacy partial of the pinned production model',
+    () async {
+      final production = GemmaModelStore(
+        supportDirectory: () async => root,
+        createClient: () => client,
+        device: channel,
+      );
+      final target = await production.modelFile;
+      await target.parent.create(recursive: true);
+      await File('${target.path}.part').writeAsBytes([1, 2]);
+      expect(await production.downloadedBytes(), 2);
+      await expectLater(
+        production.download(
+          onProgress: (received, _) {
+            expect(received, 2);
+            production.cancelDownload();
+          },
+        ),
+        throwsA(isA<AnalysisCancelled>()),
+      );
+      expect(await production.downloadedBytes(), 2);
+      expect(client.requests, 0);
+      // A custom/different model cannot adopt that unlabelled checkpoint.
+      expect(await store.downloadedBytes(), 0);
+    },
+  );
+
+  test('a checkpoint with a different identity is restarted safely', () async {
+    client.response = Response([
+      [1, 2],
+    ], contentLength: -1);
+    await expectLater(
+      store.download(onProgress: (_, _) {}),
+      throwsA(failure(AnalysisFailureKind.network)),
+    );
+    final target = await store.modelFile;
+    await File('${target.path}.part.json').writeAsString('{}');
+    expect(await store.downloadedBytes(), 0);
+    client.response = Response([
+      [1, 2, 3, 4],
+    ]);
+    await store.download(onProgress: (_, _) {});
+    expect(client.sentHeaders.last.value('range'), isNull);
+    expect(await store.isReady(), isTrue);
+  });
+
   test('real HTTP streaming resumes a truncated body using Range', () async {
     final ranges = <String?>[];
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
