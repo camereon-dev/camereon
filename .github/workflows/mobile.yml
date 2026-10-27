@@ -61,6 +61,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: camereon-beta
+          compression-level: 0
           path: dist/beta/
           if-no-files-found: error
           retention-days: 30

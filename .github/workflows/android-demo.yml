@@ -42,6 +42,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: camereon-android-demo
+          compression-level: 0
           path: |
             dist/camereon-demo.apk
             dist/camereon-demo.apk.sha256

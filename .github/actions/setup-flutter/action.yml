@@ -44,8 +44,19 @@ runs:
     - if: inputs.android == 'true'
       uses: gradle/actions/setup-gradle@v6
       with:
-        # OSS の actions/cache ベース。main 以外は読み取りのみ
-        cache-provider: basic
+        # Use standard GitHub caches with restore keys, including on PR merge refs.
+        cache-provider: external
+    - if: inputs.android == 'true'
+      name: Cache Gradle dependencies
+      uses: actions/cache@v6
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'pubspec.lock', 'android/**/*.gradle*', 'android/gradle.properties', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-deps-v1-${{ runner.os }}-${{ runner.arch }}-
+          setup-java-${{ runner.os }}-${{ runner.arch == 'X64' && 'x64' || runner.arch }}-gradle-
     - if: inputs.android == 'true'
       name: Cache Gradle task outputs
       uses: actions/cache@v6
