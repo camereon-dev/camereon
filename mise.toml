@@ -14,8 +14,24 @@ run = [
 
 [tasks.device-test]
 description = "接続中の Android 端末・エミュレーターで起動・編集・保存テスト"
-run = "flutter test integration_test/app_test.dart integration_test/gallery_save_test.dart integration_test/photo_edit_save_test.dart integration_test/text_regions_device_test.dart"
+run = "flutter test integration_test/app_test.dart integration_test/gallery_save_test.dart integration_test/photo_edit_save_test.dart integration_test/text_regions_device_test.dart integration_test/object_regions_device_test.dart"
 
 [tasks.apk]
 description = "デモ APK を dist/ に作る"
 run = "bash scripts/build-android-demo.sh"
+
+[tasks.detector-apk]
+description = "人物・画面検出を同梱した別IDのARM64 APKを作る"
+run = "bash scripts/build-android-detectors.sh"
+
+[tasks.detector-install]
+description = "検出器プレビューAPKをUSB接続端末へインストールする"
+run = "bash scripts/install-android-detectors.sh"
+
+[tasks.detector-debug-apk]
+description = "デバッガー接続可能な検出器Debug APKを作る"
+run = "bash scripts/build-android-detectors.sh --debug"
+
+[tasks.detector-debug-install]
+description = "検出器Debug APKをビルドして接続端末へインストールする"
+run = "bash scripts/install-android-detectors.sh --debug"
