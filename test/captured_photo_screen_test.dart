@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
@@ -185,6 +186,10 @@ void main() {
       processor.fail = false;
       await tester.tap(find.text('保存前に確認'));
       await tester.pumpAndSettle();
+      expect(
+        find.text('隠し忘れがないか確認してください。安全を完全に保証するものではありません。'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('写真に保存'));
       await tester.pumpAndSettle();
       expect(find.text('写真を保存しました'), findsNothing);
@@ -207,6 +212,57 @@ void main() {
       expect(identical(saver.received, processor.jpeg), isTrue);
     },
   );
+
+  testWidgets('save success can return to camera and delete temp file', (
+    tester,
+  ) async {
+    final file = File(
+      '${Directory.systemTemp.path}/camereon-captured-screen-${DateTime.now().microsecondsSinceEpoch}.jpg',
+    );
+    addTearDown(() async {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    });
+    await file.writeAsBytes([0x01, 0x02, 0x03]);
+    final processor = FakeProcessor(200, 100);
+    final saver = FakeSaver();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => CapturedPhotoScreen(
+                    photo: XFile(file.path),
+                    processor: processor,
+                    saver: saver,
+                  ),
+                ),
+              ),
+              child: const Text('編集を開く'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('編集を開く'));
+    await tester.pumpAndSettle();
+    await select(tester);
+    await tester.tap(find.text('保存前に確認'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('写真に保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('写真を保存しました'), findsOneWidget);
+
+    await tester.tap(find.text('もう一枚'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('編集を開く'), findsOneWidget);
+    expect(await file.exists(), isFalse);
+  });
 
   testWidgets('retake and system back ask before discarding edits', (
     tester,
