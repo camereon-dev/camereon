@@ -1,0 +1,405 @@
+{
+  "date": "2026-10-27",
+  "base_main": "74049eb",
+  "host": "Apple M3 / CPU",
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.11",
+    "device": "cpu",
+    "threads": 4,
+    "python_socket_connections_blocked": true,
+    "packages": {
+      "ultralytics": "8.4.89",
+      "torch": "2.14.1",
+      "opencv-python": "4.12.0.88",
+      "rapidocr-onnxruntime": "1.4.4",
+      "onnxruntime": "1.31.1"
+    }
+  },
+  "models": [
+    {
+      "name": "yolo26n.pt",
+      "bytes": 5544453,
+      "sha256": "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef"
+    },
+    {
+      "name": "yolo26s.pt",
+      "bytes": 20422725,
+      "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b"
+    },
+    {
+      "name": "face_detection_yunet_2023mar.onnx",
+      "bytes": 232589,
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+    },
+    {
+      "name": "ch_PP-OCRv4_det_infer.onnx",
+      "bytes": 4745517,
+      "sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9"
+    }
+  ],
+  "parameters": {
+    "object_conf": 0.25,
+    "face_conf": 0.6,
+    "text_box_thresh": 0.5,
+    "text_recognition": false,
+    "repeats": 3,
+    "warmup_per_image_config": 1
+  },
+  "photos": [
+    {
+      "id": "photo-1",
+      "dimensions": [
+        1568,
+        882
+      ],
+      "runs": {
+        "yolo26n-640": {
+          "detections": 4,
+          "wall_ms": [
+            19.73,
+            19.89,
+            20.17
+          ],
+          "median_ms": 19.89
+        },
+        "yolo26n-1280": {
+          "detections": 7,
+          "wall_ms": [
+            69.89,
+            68.73,
+            68.51
+          ],
+          "median_ms": 68.73
+        },
+        "yolo26s-640": {
+          "detections": 8,
+          "wall_ms": [
+            39.67,
+            39.86,
+            40.06
+          ],
+          "median_ms": 39.86
+        },
+        "yolo26s-1280": {
+          "detections": 7,
+          "wall_ms": [
+            143.13,
+            139.74,
+            139.3
+          ],
+          "median_ms": 139.74
+        },
+        "yunet-native": {
+          "detections": 0,
+          "wall_ms": [
+            19.12,
+            17.97,
+            17.95
+          ],
+          "median_ms": 17.97
+        },
+        "yunet-rotations-tiles": {
+          "detections": 1,
+          "wall_ms": [
+            259.52,
+            263.81,
+            261.74
+          ],
+          "median_ms": 261.74
+        },
+        "text-640": {
+          "detections": 0,
+          "wall_ms": [
+            19.19,
+            18.95,
+            18.68
+          ],
+          "median_ms": 18.95
+        },
+        "text-1536": {
+          "detections": 1,
+          "wall_ms": [
+            161.85,
+            131.74,
+            161.67
+          ],
+          "median_ms": 161.67
+        },
+        "ppocrv5-960": {
+          "detections": 1,
+          "wall_ms": [
+            76.42,
+            68.88,
+            68.36
+          ],
+          "median_ms": 68.88
+        },
+        "ppocrv5-1536": {
+          "detections": 2,
+          "wall_ms": [
+            205.62,
+            175.37,
+            174.57
+          ],
+          "median_ms": 175.37
+        },
+        "ppocrv5-contour-960": {
+          "detections": 1,
+          "wall_ms": [
+            71.28,
+            68.07,
+            69.34
+          ],
+          "median_ms": 69.34
+        },
+        "ppocrv5-contour-1536": {
+          "detections": 2,
+          "wall_ms": [
+            175.68,
+            174.75,
+            176.45
+          ],
+          "median_ms": 175.68
+        }
+      }
+    },
+    {
+      "id": "photo-2",
+      "dimensions": [
+        1568,
+        882
+      ],
+      "runs": {
+        "yolo26n-640": {
+          "detections": 9,
+          "wall_ms": [
+            20.73,
+            20.09,
+            20.3
+          ],
+          "median_ms": 20.3
+        },
+        "yolo26n-1280": {
+          "detections": 10,
+          "wall_ms": [
+            90.81,
+            83.13,
+            83.18
+          ],
+          "median_ms": 83.18
+        },
+        "yolo26s-640": {
+          "detections": 10,
+          "wall_ms": [
+            47.42,
+            45.67,
+            48.39
+          ],
+          "median_ms": 47.42
+        },
+        "yolo26s-1280": {
+          "detections": 11,
+          "wall_ms": [
+            142.13,
+            151.33,
+            154.01
+          ],
+          "median_ms": 151.33
+        },
+        "yunet-native": {
+          "detections": 0,
+          "wall_ms": [
+            18.26,
+            18.75,
+            18.18
+          ],
+          "median_ms": 18.26
+        },
+        "yunet-rotations-tiles": {
+          "detections": 0,
+          "wall_ms": [
+            256.23,
+            256.25,
+            284.76
+          ],
+          "median_ms": 256.25
+        },
+        "text-640": {
+          "detections": 1,
+          "wall_ms": [
+            19.68,
+            19.56,
+            19.18
+          ],
+          "median_ms": 19.56
+        },
+        "text-1536": {
+          "detections": 12,
+          "wall_ms": [
+            127.45,
+            123.46,
+            125.33
+          ],
+          "median_ms": 125.33
+        },
+        "ppocrv5-960": {
+          "detections": 11,
+          "wall_ms": [
+            71.91,
+            68.9,
+            68.89
+          ],
+          "median_ms": 68.9
+        },
+        "ppocrv5-1536": {
+          "detections": 10,
+          "wall_ms": [
+            175.37,
+            174.17,
+            174.53
+          ],
+          "median_ms": 174.53
+        },
+        "ppocrv5-contour-960": {
+          "detections": 12,
+          "wall_ms": [
+            70.33,
+            69.3,
+            68.51
+          ],
+          "median_ms": 69.3
+        },
+        "ppocrv5-contour-1536": {
+          "detections": 15,
+          "wall_ms": [
+            174.79,
+            174.27,
+            175.57
+          ],
+          "median_ms": 174.79
+        }
+      }
+    },
+    {
+      "id": "photo-3",
+      "dimensions": [
+        1567,
+        1175
+      ],
+      "runs": {
+        "yolo26n-640": {
+          "detections": 6,
+          "wall_ms": [
+            24.97,
+            24.63,
+            24.98
+          ],
+          "median_ms": 24.97
+        },
+        "yolo26n-1280": {
+          "detections": 15,
+          "wall_ms": [
+            114.81,
+            100.73,
+            94.45
+          ],
+          "median_ms": 100.73
+        },
+        "yolo26s-640": {
+          "detections": 17,
+          "wall_ms": [
+            50.07,
+            50.76,
+            50.72
+          ],
+          "median_ms": 50.72
+        },
+        "yolo26s-1280": {
+          "detections": 15,
+          "wall_ms": [
+            191.66,
+            201.74,
+            270.59
+          ],
+          "median_ms": 201.74
+        },
+        "yunet-native": {
+          "detections": 2,
+          "wall_ms": [
+            25.6,
+            24.78,
+            24.08
+          ],
+          "median_ms": 24.78
+        },
+        "yunet-rotations-tiles": {
+          "detections": 4,
+          "wall_ms": [
+            403.57,
+            377.6,
+            370.51
+          ],
+          "median_ms": 377.6
+        },
+        "text-640": {
+          "detections": 0,
+          "wall_ms": [
+            25.98,
+            26.28,
+            26.42
+          ],
+          "median_ms": 26.28
+        },
+        "text-1536": {
+          "detections": 1,
+          "wall_ms": [
+            201.4,
+            169.11,
+            169.42
+          ],
+          "median_ms": 169.42
+        },
+        "ppocrv5-960": {
+          "detections": 0,
+          "wall_ms": [
+            93.66,
+            98.41,
+            96.54
+          ],
+          "median_ms": 96.54
+        },
+        "ppocrv5-1536": {
+          "detections": 0,
+          "wall_ms": [
+            241.44,
+            233.94,
+            233.97
+          ],
+          "median_ms": 233.97
+        },
+        "ppocrv5-contour-960": {
+          "detections": 0,
+          "wall_ms": [
+            98.98,
+            96.9,
+            91.69
+          ],
+          "median_ms": 96.9
+        },
+        "ppocrv5-contour-1536": {
+          "detections": 0,
+          "wall_ms": [
+            232.21,
+            259.63,
+            245.21
+          ],
+          "median_ms": 245.21
+        }
+      }
+    }
+  ],
+  "android_execution": false,
+  "text_v5_model_sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d"
+}
