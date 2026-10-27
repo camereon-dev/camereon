@@ -18,11 +18,13 @@ class CapturedPhotoScreen extends StatefulWidget {
   const CapturedPhotoScreen({
     super.key,
     required this.photo,
+    this.onSourceLoaded,
     this.processor,
     this.saver,
   });
 
   final XFile photo;
+  final ValueChanged<SourcePhoto>? onSourceLoaded;
   final PhotoProcessor? processor;
   final PhotoSaver? saver;
 
@@ -73,6 +75,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       );
       if (!mounted) return;
       setState(() => _source = source);
+      widget.onSourceLoaded?.call(source);
     } catch (error) {
       if (mounted) {
         setState(() {

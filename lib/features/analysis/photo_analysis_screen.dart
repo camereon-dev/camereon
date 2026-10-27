@@ -77,7 +77,9 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
       AnalysisFailureKind.network => 'ダウンロードできませんでした。通信状態を確認して、もう一度お試しください。',
       AnalysisFailureKind.integrity => '取得したデータを確認できませんでした。もう一度ダウンロードしてください。',
       AnalysisFailureKind.inference =>
-        '解析を完了できませんでした。ほかのアプリを閉じるか、互換モードでお試しください。',
+        _backend == AnalysisBackend.compatible
+            ? '互換モードでも解析を完了できませんでした。ほかのアプリを閉じて、もう一度お試しください。'
+            : '解析を完了できませんでした。ほかのアプリを閉じるか、互換モードでお試しください。',
     };
   }
 
@@ -125,20 +127,29 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
       _result = null;
     });
     try {
-      final result = await services.analyzer.describe(
-        image,
-        backend: _backend,
-        onPhase: (phase) {
-          if (mounted) setState(() => _phase = phase);
-        },
-        onText: (text) {
-          if (mounted && !_cancelling) setState(() => _text = text);
-        },
-      );
+      SceneDescription result;
+      try {
+        result = await _describe(image);
+      } on AnalysisFailure catch (error) {
+        if (error.kind != AnalysisFailureKind.inference ||
+            _backend != AnalysisBackend.automatic ||
+            _cancelling ||
+            !mounted) {
+          rethrow;
+        }
+        // The previous describe has released its chat and model before retrying.
+        setState(() {
+          _backend = AnalysisBackend.compatible;
+          _text = '';
+          _notice = '通常モードで解析できなかったため、互換モードで再試行しています。';
+        });
+        result = await _describe(image);
+      }
       if (mounted) {
         setState(() {
           _result = result;
           _text = result.text;
+          if (_notice != null) _notice = '互換モードで解析しました。';
         });
       }
     } catch (error) {
@@ -157,6 +168,18 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
       }
     }
   }
+
+  Future<SceneDescription> _describe(AnalysisImage image) =>
+      services.analyzer.describe(
+        image,
+        backend: _backend,
+        onPhase: (phase) {
+          if (mounted) setState(() => _phase = phase);
+        },
+        onText: (text) {
+          if (mounted && !_cancelling) setState(() => _text = text);
+        },
+      );
 
   Future<void> _cancelAnalysis() async {
     setState(() => _cancelling = true);
@@ -345,6 +368,9 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
                     onPressed: _working ? null : _deleteModel,
                     icon: const Icon(Icons.delete_outline),
                     label: const Text('解析用データを削除'),
+                  ),
+                  const Text(
+                    'アプリの上書き更新では解析用データを引き継ぎます。アンインストールやアプリのデータ消去後は、再ダウンロードが必要です。',
                   ),
                 ],
               ),
