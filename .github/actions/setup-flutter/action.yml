@@ -66,12 +66,6 @@ runs:
         key: gradle-tasks-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'pubspec.lock', 'android/**/*.gradle*', 'android/gradle.properties', 'android/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.sha }}
         restore-keys: |
           gradle-tasks-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'pubspec.lock', 'android/**/*.gradle*', 'android/gradle.properties', 'android/gradle/wrapper/gradle-wrapper.properties') }}-
-    - if: inputs.android == 'true'
-      name: Cache Android CMake
-      uses: actions/cache@v6
-      with:
-        path: ${{ env.ANDROID_HOME }}/cmake/3.22.1
-        key: android-cmake-${{ runner.os }}-${{ runner.arch }}-3.22.1
     - id: ndk
       if: inputs.android == 'true'
       name: Resolve Flutter NDK version
@@ -81,6 +75,13 @@ runs:
           "$FLUTTER_ROOT/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt")
         echo "path=$ANDROID_HOME/ndk/$version" >> "$GITHUB_OUTPUT"
         echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "cmake=$ANDROID_HOME/cmake/3.22.1" >> "$GITHUB_OUTPUT"
+    - if: inputs.android == 'true'
+      name: Cache Android CMake
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.ndk.outputs.cmake }}
+        key: android-cmake-${{ runner.os }}-${{ runner.arch }}-3.22.1
     - if: inputs.android == 'true'
       name: Cache Android NDK
       uses: actions/cache@v6
