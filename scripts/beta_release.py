@@ -87,8 +87,9 @@ def package():
     expected = ("dev.camereon.camereon.demo", str(int(required("GITHUB_RUN_NUMBER"))), version)
     if not package_info or package_info.groups() != expected:
         raise ValueError("APK package or version does not match the beta release")
-    if "native-code: 'arm64-v8a'" not in manifest:
-        raise ValueError("Beta APK must target ARM64 Android devices")
+    native_code = re.search(r"^native-code: (.+)$", manifest, re.MULTILINE)
+    if not native_code or native_code.group(1).strip() != "'arm64-v8a'":
+        raise ValueError("Beta APK must contain ARM64 native libraries only")
     BETA_DIR.mkdir(parents=True, exist_ok=True)
     apk = BETA_DIR / APK_NAME
     shutil.copyfile(source, apk)
@@ -159,9 +160,10 @@ def publish():
         notes = BETA_DIR / "release-notes.md"
         notes.write_text(
             f"camereon {metadata['version']} のベータ版です。\n\n"
-            "現在は起動画面とアプリの説明を確認できます。撮影・編集・画像保存は今後追加予定です。\n\n"
-            f"Android 7.0 以上の ARM64 端末で `{APK_NAME}` を開いてインストールしてください。\n"
-            "以前のデモ APK を使っていた場合は、初回のみアンインストールが必要です。"
+            "撮影後に写真を読み込めない問題への互換性修正と、AIモデルの一時停止・途中再開を追加しました。画面を移動しても取得は継続し、アプリ終了後も保存済みの続きから再開できます。\n\n"
+            "撮影した写真をドラッグして複数箇所を黒塗りし、保存前に確認してギャラリーへ JPEG として保存できます。取り消し・全リセットにも対応しています。\n\n起動画面の「サンプルで試す」から、架空の配送ラベルで黒塗り・保存を体験できます。カメラの許可や AI モデルは不要です。\n\n"
+            f"Android 11 以上の ARM64 端末で `{APK_NAME}` を開いてインストールしてください。\n"
+            "任意の追加機能として、Gemma 4 による端末内の写真の内容説明を利用できます。初回の AI 利用には約2.6GBのモデル取得と作業領域が必要です。写真は端末内で処理します。自動検出・自動黒塗りには対応していません。\n"
             "以後のベータ版は同じ署名鍵で更新できます。\n\n"
             f"ソース: `{commit}`\n"
         )

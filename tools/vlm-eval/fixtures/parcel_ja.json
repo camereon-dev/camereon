@@ -1,0 +1,53 @@
+{
+  "id": "parcel_label_ja",
+  "file": "image_04.png",
+  "expected": "A brown parcel with a white Japanese delivery label. The label contains a fictional recipient name, address and phone number.",
+  "sha256": "c7170ea9e094093a55f097b42312a07f23ac3386d81e99d5b359f0a188e70a83",
+  "ocr_source": "synthetic_ground_truth_not_paddle_output",
+  "ocr_blocks": [
+    {
+      "id": "b1",
+      "text": "お届け先",
+      "bounds": [
+        80,
+        210,
+        192,
+        236
+      ]
+    },
+    {
+      "id": "b2",
+      "text": "山田 花子 様",
+      "bounds": [
+        80,
+        269,
+        232,
+        296
+      ]
+    },
+    {
+      "id": "b3",
+      "text": "東京都サンプル区一丁目2-3",
+      "bounds": [
+        80,
+        329,
+        427,
+        356
+      ]
+    },
+    {
+      "id": "b4",
+      "text": "電話 03-0000-1234",
+      "bounds": [
+        80,
+        390,
+        310,
+        415
+      ]
+    }
+  ],
+  "font_sha256": "33119a596d1bfae91165585c90c6e9752cf2c9120b45c18388fb81724b3ec64b",
+  "font_name": "NotoSansJP-VariableFont_wght.ttf",
+  "font_size": 28,
+  "image_generator": "Pillow 12.3.0; original synthetic fixture"
+}

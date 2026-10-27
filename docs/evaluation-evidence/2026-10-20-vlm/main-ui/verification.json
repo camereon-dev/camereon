@@ -1,0 +1,25 @@
+{
+  "runtime": "Android API 31 ARM64 emulator",
+  "ram_mib": 6144,
+  "fixture": "tools/vlm-eval/fixtures/parcel_ja.png",
+  "verified": [
+    "analysis screen launch",
+    "synthetic preview image",
+    "model missing state",
+    "insufficient storage error before download"
+  ],
+  "inference_completed": false,
+  "physical_install": "INSTALL_FAILED_USER_RESTRICTED (device-side approval pending)",
+  "release_preview_apk": {
+    "bytes": 61255192,
+    "sha256": "9d6a85fb561d2b65d2821d400194f72bc467cae3245cc27dff62efafca2d5e05"
+  },
+  "badging": [
+    "package: name='dev.camereon.camereon.demo.ai_preview' versionCode='1' versionName='0.1.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+    "sdkVersion:'30'",
+    "targetSdkVersion:'36'",
+    "application: label='camereon AI preview' icon='res/9w.png'",
+    "launchable-activity: name='dev.camereon.camereon.demo.MainActivity'  label='' icon=''",
+    "native-code: 'arm64-v8a' 'armeabi-v7a' 'x86_64'"
+  ]
+}

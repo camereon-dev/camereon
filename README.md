@@ -4,13 +4,34 @@
 
 [アプリ紹介・ダウンロード](https://camereon-dev.github.io/camereon/)
 
-Android と iOS 向けに Flutter で開発する。起動するとすぐにカメラが開き、撮影した写真を確認・撮り直しできる。隠す加工と画像保存は次の段階で追加する。
+Android と iOS 向けに Flutter で開発する。起動するとすぐにカメラが開く。撮影した写真をドラッグして複数箇所を黒塗りし、保存前に確認して Android のギャラリーへ新しい JPEG として保存できる。取り消し・全リセット・撮り直しに対応する。起動画面の「サンプルで試す」から、カメラの許可や AI モデルなしで架空の配送ラベルを編集できる。撮影後には Gemma 4 による端末内の内容説明も利用できる。
 
 ## 今回の範囲
 
 [ベータ版の取得・運用](docs/beta-releases.md) / [今回の定義・完了条件](docs/bootstrap-definition.md) / [プロダクト全体の MVP 定義](docs/mvp-definition.md) / [検証記録](docs/verification.md) / [今後のアイデア](docs/ideas.md)
 
 チームで作業を分担する場合は [共有仕様と分担の進め方](docs/team-development.md) を参照する。
+
+撮影後の自動検出は [オンデバイス解析の設計案](docs/ai-analysis-design.md) を参照する。OCR と VLM の単独検証、共通の入出力、本体への結合方針をまとめている。
+
+本体の解析機能・実機プレビュー・チームの担当範囲は [Gemma 4 組み込み手順](docs/gemma-integration.md) を参照する。
+
+## 写真を用意せずに試す
+
+1. 起動画面で「サンプルで試す」をタップする。カメラの許可や AI モデルは不要。
+2. 架空の配送ラベルの名前・住所など、2 箇所をドラッグして隠す。
+3. 「取り消す」で直前の 1 箇所を戻し、必要な範囲を調整する。
+4. 「保存前に確認」で隠し忘れを確認し、「写真に保存」をタップする。
+5. 端末の写真アプリで `Pictures/camereon` の新しい JPEG を開く。
+
+サンプルは本プロジェクトで作成した合成画像。[出典・利用範囲](tools/vlm-eval/fixtures/README.md)を参照。
+
+## AI 用データの取得
+
+初回のみ約 2.6 GB のモデルを取得する。Wi-Fi 環境を推奨する。進捗・転送速度・残り時間の目安を表示する。
+「一時停止」しても保存済みのデータを保持し、「ダウンロードを再開」で続きから取得できる。
+アプリ内で編集画面やカメラへ戻っても取得は続く。OS の制限やアプリ終了で通信が止まった場合も、次回は保存済みの続きから再開できる。
+黒塗りと保存だけならモデルの取得は不要。
 
 ## 起動する
 
@@ -24,7 +45,7 @@ flutter devices
 flutter run -d <device-id>
 ```
 
-Android は Android Studio・SDK と、Emulator または USB 接続した実機が必要。現時点の最小対応は Android 7.0（API 24）、ビルド用 SDK は API 36。
+Android は Android Studio・SDK と、Emulator または USB 接続した実機が必要。現時点の最小対応は Android 11（API 30）、ビルド用 SDK は API 36。
 初回は `flutter doctor --android-licenses` でライセンスを確認する。実機では開発者向けオプションの USB デバッグを有効にして、接続を許可する。
 
 iOS は macOS・Xcode と、iOS Simulator または USB 接続した iPhone が必要。iPhoneでの実行にはAppleの署名設定が必要になる。初回起動時にカメラへのアクセスを許可する。
@@ -46,8 +67,9 @@ iOS Simulator は Xcode の **Open Developer Tool → Simulator** から起動�
 mise run check   # format・analyze・widget test
 ```
 
-widget test は偽のカメラ（`CameraPlatform` の差し替え）を使い、起動直後のプレビュー、撮影と撮り直し、カメラの切り替え、権限拒否・カメラなしの表示、小さい画面と文字拡大時のレイアウトを確認する。
-端末上でカメラ画面が起動することは integration test で確認する。撮影はカメラの実装に依存するため、実機で確認する。
+widget test は偽のカメラ（`CameraPlatform` の差し替え）を使い、起動直後のプレビュー、撮影と撮り直し、カメラの切り替え、権限拒否・カメラなしの表示、サンプルからの編集、小さい画面と文字拡大時のレイアウトを確認する。
+画像処理では向き・解像度・黒塗り・メタデータ除去、編集画面では座標変換・取り消し・失敗時の状態保持を自動テストで確認する。
+integration test はカメラ起動、サンプルの編集・保存、人工画像を使った編集から保存・一時ファイル削除、MediaStore への保存と不正入力の拒否を確認する。実機での撮影操作は別途確認する。
 
 ```sh
 # 起動済みの Android Emulator または実機
@@ -58,7 +80,7 @@ iOS上で確認する場合は `flutter test integration_test/app_test.dart -d <
 
 ## Android のベータ版を取得する
 
-[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-arm64.apk` をダウンロードしてインストールする。Android 7.0 以上の ARM64 端末に対応する。
+[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-arm64.apk` をダウンロードしてインストールする。Android 11 以上の ARM64 端末に対応する。
 
 ベータ版は固定の署名鍵で署名する。以前の debug 署名のデモ APK を入れていた場合は、初回のみ `camereon demo` をアンインストールする。以降のベータ版は上書き更新できる。
 
@@ -105,7 +127,7 @@ Android のビルド設定（`android/`・`mise.toml`・`pubspec`・ビルドス
 
 通常の CI は Emulator の準備・起動、端末テストを行わない。
 端末上の起動確認が必要なときは、PR に `device-test` ラベルを付けるか、Actions の **Android device tests** から **Run workflow** を選ぶ。
-この手動ワークフローで integration test と APK のインストール・起動を確認し、`android-startup-screenshot` を取得できる（14 日間保存）。手動テストの完了を待たずに通常の APK 配布を進められる。
+この手動ワークフローでカメラ起動・編集・ギャラリー保存の integration test と APK のインストール・起動を確認し、`android-startup-screenshot` を取得できる（14 日間保存）。手動テストの完了を待たずに通常の APK 配布を進められる。
 初回やキャッシュがない実行では依存の取得に時間がかかる。通常の APK ビルドは10分、配布 job 全体は15分でタイムアウトする。
 
 ## ユーザー・チーム側の準備

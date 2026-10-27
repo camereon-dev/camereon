@@ -1,0 +1,84 @@
+{
+  "status": "completed",
+  "started_at": "2026-10-20T07:44:14.201007Z",
+  "packages": {
+    "flutter_edge_ai": "2.4.1",
+    "flutter_edge_ai_litertlm": "1.15.0"
+  },
+  "model": {
+    "name": "SmolVLM2 500M",
+    "model_type": "general",
+    "repository": "litert-community/SmolVLM2-500M",
+    "revision": "78a25681a0811230bfa3079504a717e9a4a139d1",
+    "filename": "SmolVLM2-500M.litertlm",
+    "size": 360822960,
+    "sha256": "b808b328d845a600a33c5295f93d9217487317bd334dbc91b2a8d50e26e60ad0",
+    "license": "apache-2.0"
+  },
+  "prompt": "Briefly describe the objects, colors and visible text in the attached image. If no image is attached, reply only NO_IMAGE. Do not assess safety or privacy risks.",
+  "context_tokens": 2048,
+  "max_output_tokens": 160,
+  "cases": [
+    {
+      "index": 0,
+      "image_id": null,
+      "image_attached": false,
+      "session_ms": 502,
+      "input_ms": 2,
+      "status": "completed",
+      "first_output_ms": 1825,
+      "total_ms": 3995,
+      "output": " The image contains a list of objects, colors, and text. However, the description does not contain any information about the objects, colors, or text. Therefore, the description is as follows:\n\nNO_IMAGE.",
+      "rss_bytes": 925421568,
+      "max_rss_bytes": 927150080
+    },
+    {
+      "index": 1,
+      "image_id": "red_circle",
+      "image_attached": true,
+      "session_ms": 3,
+      "input_ms": 0,
+      "status": "completed",
+      "first_output_ms": 3554,
+      "total_ms": 7119,
+      "output": " The image depicts a large red circle on a white background. The circle is the only object in the image, and it is located in the center. The circle is a simple, solid shape, and it is not colored or shaded. The image does not contain any text or other objects, and there is no indication of any safety or privacy risks.",
+      "rss_bytes": 1173741568,
+      "max_rss_bytes": 1174081536
+    },
+    {
+      "index": 2,
+      "image_id": "blue_bars",
+      "image_attached": true,
+      "session_ms": 3,
+      "input_ms": 0,
+      "status": "completed",
+      "first_output_ms": 2934,
+      "total_ms": 10388,
+      "output": " The image is of a simple, clean, and professional-looking document. Here is a description of the image:\n\n## Image Description\n\n## Description\n\nThe image is of a document, which appears to be a standard business document. The document is formatted in a professional and clean style, with a white background. The document contains three rectangular blocks of text, each of which is in a different shade of blue.\n\n## Analysis\n\n### Description\n1. **Structure and Layout**:\n   - The document has a clean and professional layout, with a white background.\n   - The text is in a different shade of blue, which could be to differentiate between the different sections or to highlight important information.\n\n2. **Color and Shade**:\n   - The text is in",
+      "rss_bytes": 1175543808,
+      "max_rss_bytes": 1181876224
+    },
+    {
+      "index": 3,
+      "image_id": "parcel_label",
+      "image_attached": true,
+      "session_ms": 6,
+      "input_ms": 0,
+      "status": "completed",
+      "first_output_ms": 2894,
+      "total_ms": 5282,
+      "output": " DELIVERY HANAKO SAMPLE 123 EXAMPLE STREET SAMPLE CITY 000-0000",
+      "rss_bytes": 1177460736,
+      "max_rss_bytes": 1183870976
+    }
+  ],
+  "semantic_review": "pending",
+  "phase": "finished",
+  "rss_bytes": 448864256,
+  "max_rss_bytes": 1183870976,
+  "load_ms": 1668,
+  "requested_backend": "cpu",
+  "active_backend": "cpu",
+  "active_vision_backend": "cpu",
+  "completed_at": "2026-10-20T07:44:43.411272Z"
+}

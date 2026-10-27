@@ -1,0 +1,50 @@
+[
+  {
+    "time": 1792518516.292574,
+    "memory": [
+      "Native Heap:   231440                         233876",
+      "Graphics:   199306                         199306",
+      "TOTAL PSS:   736130            TOTAL RSS:   758786       TOTAL SWAP PSS:   101681"
+    ]
+  },
+  {
+    "time": 1792518519.5650291,
+    "memory": [
+      "Native Heap:   365928                         368768",
+      "Graphics:  1488022                        1488022",
+      "TOTAL PSS:  2198941            TOTAL RSS:  2218626       TOTAL SWAP PSS:   101633"
+    ]
+  },
+  {
+    "time": 1792518522.759369,
+    "memory": [
+      "Native Heap:   990628                         993464",
+      "Graphics:    59933                          59933",
+      "TOTAL PSS:  1557757            TOTAL RSS:  1585713       TOTAL SWAP PSS:   101458"
+    ]
+  },
+  {
+    "time": 1792518525.9260921,
+    "memory": [
+      "Native Heap:   990348                         993180",
+      "Graphics:    59933                          59933",
+      "TOTAL PSS:  1661065            TOTAL RSS:  1689069       TOTAL SWAP PSS:   101454"
+    ]
+  },
+  {
+    "time": 1792518529.121027,
+    "memory": [
+      "Native Heap:  1080508                        1083340",
+      "Graphics:    59933                          59933",
+      "TOTAL PSS:  2103315            TOTAL RSS:  2131321       TOTAL SWAP PSS:   101454"
+    ]
+  },
+  {
+    "time": 1792518532.2532558,
+    "memory": [
+      "Native Heap:   197556                         200320",
+      "Graphics:    59933                          59933",
+      "TOTAL PSS:   488753            TOTAL RSS:   504117       TOTAL SWAP PSS:   105583"
+    ]
+  }
+]

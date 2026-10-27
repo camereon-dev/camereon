@@ -113,6 +113,11 @@ void main() {
     await tester.pumpWidget(const CamereonApp());
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('撮影する'));
+    await tester.pump();
+    // Read failure for the fake camera's nonexistent file uses real IO.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
     await tester.pumpAndSettle();
 
     expect(camera.pictures, 1);
@@ -166,6 +171,53 @@ void main() {
 
     expect(find.text('カメラが見つかりません'), findsOneWidget);
   });
+
+  for (final denied in [false, true]) {
+    testWidgets('カメラ${denied ? '権限なし' : 'なし'}でもサンプルを編集できる', (tester) async {
+      useCamera(
+        FakeCameraPlatform(
+          cameras: denied ? const [_back] : const [],
+          error: denied
+              ? CameraException('CameraAccessDenied', 'denied')
+              : null,
+        ),
+      );
+      await tester.pumpWidget(const CamereonApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('open-sample')));
+      await tester.pump();
+      // Asset loading and image normalization use real asynchronous IO/isolate work.
+      for (var i = 0; i < 100; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+        if (find.bySemanticsLabel('撮影した写真').evaluate().isNotEmpty) break;
+      }
+      await tester.pumpAndSettle();
+
+      expect(camera.pictures, 0);
+      expect(find.bySemanticsLabel('撮影した写真'), findsOneWidget);
+      expect(find.text('0箇所の領域を選択中'), findsOneWidget);
+      final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      await tester.dragFrom(rect.center, const Offset(30, 30));
+      await tester.pump();
+      expect(find.text('1箇所の領域を選択中'), findsOneWidget);
+      await tester.tap(find.text('取り消す'));
+      await tester.pump();
+      expect(find.text('0箇所の領域を選択中'), findsOneWidget);
+      await tester.tap(find.text('撮り直す'));
+      await tester.pumpAndSettle();
+      expect(find.text('サンプルで試す'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextButton>(find.byKey(const ValueKey('open-sample')))
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('小さい画面で文字を拡大してもレイアウトが崩れない', (tester) async {
     tester.view.physicalSize = const Size(320, 568);
