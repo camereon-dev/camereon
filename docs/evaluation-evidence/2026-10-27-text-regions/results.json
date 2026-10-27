@@ -1,0 +1,591 @@
+{
+  "date": "2026-10-27",
+  "environment": {
+    "flutter": "3.47.7",
+    "dart": "3.13.5",
+    "host": "Apple Silicon Mac",
+    "device": "Android Emulator ARM64",
+    "android": "17",
+    "api": 37,
+    "build": "debug",
+    "onnxruntime": "1.24.3",
+    "intra_op_threads": 2
+  },
+  "offline": {
+    "airplane_mode_on": "1",
+    "wifi_on": "0",
+    "mobile_data": "0",
+    "active_network_during_test": "Active default network: none"
+  },
+  "tests": {
+    "unit_widget": 104,
+    "android_detection_and_ui": 2,
+    "android_offline_exit_code": 0,
+    "existing_android_integration": 6,
+    "release_build": true,
+    "release_candidate_ui_and_apply": true,
+    "candidate_toggle_android_save": true
+  },
+  "methods": [
+    {
+      "method": "paddle_detector",
+      "iou_threshold": 0.3,
+      "cases": [
+        {
+          "image": "parcel",
+          "first_ms": 586.089,
+          "median_warm_ms": 137.771,
+          "expected": 4,
+          "predicted": 4,
+          "tp": 4,
+          "fp": 0,
+          "fn": 0,
+          "boxes": [
+            [
+              73,
+              201,
+              199,
+              243
+            ],
+            [
+              75,
+              261,
+              240,
+              302
+            ],
+            [
+              77,
+              324,
+              433,
+              360
+            ],
+            [
+              77,
+              384,
+              315,
+              421
+            ]
+          ]
+        },
+        {
+          "image": "large_source",
+          "first_ms": 321.436,
+          "median_warm_ms": 291.656,
+          "expected": 4,
+          "predicted": 4,
+          "tp": 4,
+          "fp": 0,
+          "fn": 0,
+          "boxes": [
+            [
+              153,
+              407,
+              394,
+              485
+            ],
+            [
+              152,
+              525,
+              475,
+              604
+            ],
+            [
+              156,
+              652,
+              862,
+              718
+            ],
+            [
+              156,
+              770,
+              630,
+              839
+            ]
+          ]
+        },
+        {
+          "image": "rotated_90",
+          "first_ms": 134.98,
+          "median_warm_ms": 133.876,
+          "expected": 4,
+          "predicted": 6,
+          "tp": 4,
+          "fp": 2,
+          "fn": 0,
+          "boxes": [
+            [
+              45,
+              53,
+              182,
+              531
+            ],
+            [
+              458,
+              54,
+              562,
+              524
+            ],
+            [
+              273,
+              73,
+              320,
+              439
+            ],
+            [
+              213,
+              73,
+              260,
+              325
+            ],
+            [
+              396,
+              73,
+              441,
+              203
+            ],
+            [
+              337,
+              79,
+              379,
+              241
+            ]
+          ]
+        },
+        {
+          "image": "low_contrast",
+          "first_ms": 129.635,
+          "median_warm_ms": 143.129,
+          "expected": 4,
+          "predicted": 4,
+          "tp": 4,
+          "fp": 0,
+          "fn": 0,
+          "boxes": [
+            [
+              73,
+              201,
+              199,
+              243
+            ],
+            [
+              75,
+              261,
+              240,
+              302
+            ],
+            [
+              77,
+              324,
+              433,
+              360
+            ],
+            [
+              77,
+              384,
+              315,
+              421
+            ]
+          ]
+        },
+        {
+          "image": "document",
+          "first_ms": 139.895,
+          "median_warm_ms": 143.511,
+          "expected": 8,
+          "predicted": 8,
+          "tp": 8,
+          "fp": 0,
+          "fn": 0,
+          "boxes": [
+            [
+              37,
+              45,
+              379,
+              88
+            ],
+            [
+              38,
+              110,
+              381,
+              153
+            ],
+            [
+              38,
+              175,
+              379,
+              218
+            ],
+            [
+              38,
+              240,
+              380,
+              284
+            ],
+            [
+              37,
+              305,
+              379,
+              349
+            ],
+            [
+              37,
+              370,
+              380,
+              413
+            ],
+            [
+              37,
+              435,
+              380,
+              479
+            ],
+            [
+              37,
+              500,
+              382,
+              544
+            ]
+          ]
+        },
+        {
+          "image": "blank",
+          "first_ms": 145.775,
+          "median_warm_ms": 139.239,
+          "expected": 0,
+          "predicted": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "boxes": []
+        },
+        {
+          "image": "texture_no_text",
+          "first_ms": 143.846,
+          "median_warm_ms": 134.156,
+          "expected": 0,
+          "predicted": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "boxes": []
+        }
+      ],
+      "totals": {
+        "tp": 24,
+        "fp": 2,
+        "fn": 0
+      },
+      "precision": 0.9230769230769231,
+      "recall": 1.0
+    },
+    {
+      "method": "edge_density",
+      "iou_threshold": 0.3,
+      "cases": [
+        {
+          "image": "parcel",
+          "first_ms": 69.951,
+          "median_warm_ms": 56.17,
+          "expected": 4,
+          "predicted": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "boxes": []
+        },
+        {
+          "image": "large_source",
+          "first_ms": 125.637,
+          "median_warm_ms": 116.102,
+          "expected": 4,
+          "predicted": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "boxes": []
+        },
+        {
+          "image": "rotated_90",
+          "first_ms": 66.391,
+          "median_warm_ms": 50.472,
+          "expected": 4,
+          "predicted": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "boxes": []
+        },
+        {
+          "image": "low_contrast",
+          "first_ms": 46.211,
+          "median_warm_ms": 46.935,
+          "expected": 4,
+          "predicted": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "boxes": []
+        },
+        {
+          "image": "document",
+          "first_ms": 54.137,
+          "median_warm_ms": 50.285,
+          "expected": 8,
+          "predicted": 8,
+          "tp": 8,
+          "fp": 0,
+          "fn": 0,
+          "boxes": [
+            [
+              24,
+              48,
+              384,
+              72
+            ],
+            [
+              24,
+              96,
+              384,
+              144
+            ],
+            [
+              48,
+              168,
+              384,
+              216
+            ],
+            [
+              24,
+              240,
+              384,
+              264
+            ],
+            [
+              24,
+              312,
+              384,
+              336
+            ],
+            [
+              48,
+              360,
+              384,
+              408
+            ],
+            [
+              24,
+              432,
+              384,
+              480
+            ],
+            [
+              24,
+              504,
+              384,
+              528
+            ]
+          ]
+        },
+        {
+          "image": "blank",
+          "first_ms": 47.478,
+          "median_warm_ms": 48.137,
+          "expected": 0,
+          "predicted": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "boxes": []
+        },
+        {
+          "image": "texture_no_text",
+          "first_ms": 46.575,
+          "median_warm_ms": 46.208,
+          "expected": 0,
+          "predicted": 26,
+          "tp": 0,
+          "fp": 26,
+          "fn": 0,
+          "boxes": [
+            [
+              24,
+              24,
+              72,
+              72
+            ],
+            [
+              288,
+              24,
+              336,
+              120
+            ],
+            [
+              480,
+              24,
+              528,
+              72
+            ],
+            [
+              96,
+              48,
+              120,
+              96
+            ],
+            [
+              552,
+              48,
+              600,
+              72
+            ],
+            [
+              168,
+              96,
+              216,
+              120
+            ],
+            [
+              336,
+              96,
+              456,
+              168
+            ],
+            [
+              528,
+              96,
+              600,
+              144
+            ],
+            [
+              72,
+              120,
+              168,
+              168
+            ],
+            [
+              216,
+              120,
+              240,
+              168
+            ],
+            [
+              24,
+              168,
+              96,
+              288
+            ],
+            [
+              504,
+              192,
+              576,
+              216
+            ],
+            [
+              120,
+              288,
+              168,
+              336
+            ],
+            [
+              408,
+              288,
+              456,
+              336
+            ],
+            [
+              168,
+              336,
+              192,
+              384
+            ],
+            [
+              264,
+              336,
+              312,
+              408
+            ],
+            [
+              528,
+              336,
+              600,
+              360
+            ],
+            [
+              360,
+              360,
+              384,
+              408
+            ],
+            [
+              456,
+              360,
+              528,
+              408
+            ],
+            [
+              120,
+              384,
+              168,
+              432
+            ],
+            [
+              192,
+              432,
+              240,
+              456
+            ],
+            [
+              528,
+              432,
+              576,
+              480
+            ],
+            [
+              312,
+              456,
+              360,
+              480
+            ],
+            [
+              408,
+              480,
+              528,
+              600
+            ],
+            [
+              24,
+              504,
+              120,
+              624
+            ],
+            [
+              216,
+              552,
+              264,
+              600
+            ]
+          ]
+        }
+      ],
+      "totals": {
+        "tp": 8,
+        "fp": 26,
+        "fn": 16
+      },
+      "precision": 0.23529411764705882,
+      "recall": 0.3333333333333333
+    }
+  ],
+  "base_commit": "ffd16c7728f678bb41a9e6bc106c9a085904df2f",
+  "apk": {
+    "variant": "release, android-arm64, same debug signing configuration",
+    "before": {
+      "bytes": 61468120,
+      "sha256": "4899a0c5744764b3849f8be476a3ff18224e51e9f3c88a58110725c9c0e82c4b",
+      "build": "flutter build apk --release --target-platform android-arm64"
+    },
+    "after_bytes": 92107899,
+    "after_sha256": "de6d35837c9b80598d2baf695fd61ad97b5cbec13ae1bbd844c5f990402a0f93",
+    "increase_bytes": 30639779,
+    "bundled_model_sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d"
+  }
+}

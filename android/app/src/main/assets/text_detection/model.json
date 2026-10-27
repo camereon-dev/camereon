@@ -1,0 +1,12 @@
+{
+  "model": "PP-OCRv5_mobile_det_onnx",
+  "purpose": "text detection only; no recognition model or dictionary",
+  "repository": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx",
+  "revision": "e6f4fa85f00e168c862bc462aebca69eef9b3d3d",
+  "file": "inference.onnx",
+  "bytes": 4826518,
+  "sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+  "license": "Apache-2.0",
+  "runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.24.3",
+  "runtime_license": "MIT"
+}

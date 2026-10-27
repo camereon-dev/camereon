@@ -134,3 +134,28 @@ CAMEREON_AI_PREVIEW=1 mise run device-test
 実機で未確認: 実カメラの向き・反転、初回／繰り返し時間、ピークメモリ、発熱、連続撮影、Gemma推論との共存性能。今回のエミュレーター結果から実機性能を保証しない。
 
 Issue全体の実機確認は未完了。一括適用、MediaPipe比較、統合リスク判定は今回の対象外。
+
+## origin/main 統合の確認（2026-10-27）
+
+統合元: `origin/main` の `e8cfcba`（文字領域検出 #36、配布CI・APK名の更新 #35）。Issue #13側の親は `72f238b`。作業開始時に未コミット変更はなかった。
+
+競合した5ファイルは、次の意図で統合した。
+
+- Android Gradle: 同梱ML Kitと文字検出用ONNX Runtimeを両方保持。mainのProGuard設定も保持。
+- MainActivity: 顔・文字の両ハンドラーを登録・解放し、mainのバージョン情報チャネルも保持。
+- PhotoAnalysisEntry: mainの「編集画面で読み込めたSourcePhotoをGemmaへ渡す」「読み込み失敗中は解析へ進めない」と、顔検出側の画面被覆通知・二重遷移防止を両立。
+- CapturedPhotoScreen: 顔・手動編集の履歴を保持し、文字候補の選択・解除・一括適用・再検出はmainの仕様を維持。保存時は両方の範囲を合わせ、全リセットは両方の選択と顔・手動の履歴を消す。片側の解除で相手の同座標範囲を消さない。顔の一括適用は追加していない。
+- mise.toml: 文字検出の端末テストを追加しつつ顔テスト用タスクを保持。今回のFlutter実行では `--concurrency` はintegration testで無効という警告が出たため、device-testは各ファイルを独立コマンドとして順に実行する配列に変更した。過去の `--concurrency=1` 指定だけを直列実行の保証とはしない。
+
+CI・配布処理、GemmaのCPUフォールバック・エラー表示、アプリバージョン表示もmainから維持した。スクロールする操作パネルに合わせてテストは可視化後に操作し、文字候補の配置検査はスクロールによる全体移動を除いて比較する。
+
+確認結果:
+
+- `mise run check`: 静的解析・整形・全120テスト成功。顔と文字が同じ範囲の場合の個別解除、顔の取り消し、文字一括適用、保存、全リセットの混在回帰テストを追加。
+- `mise run apk`: release APKビルド成功。同梱ML Kit・ONNX Runtime・既存Gemma依存が共存。
+- オフラインのPixel_10aエミュレーターで `app_test.dart`、`gallery_save_test.dart`、`photo_edit_save_test.dart`、`text_regions_device_test.dart`、`face_detection_test.dart` の全9結合テスト成功。検証用アプリIDを使用し、Gemmaモデルの準備はしない。
+- 実際の文字モデルで候補表示→個別切り替え・一括適用→JPEG保存が成功。実際の顔モデルでも候補表示→個別適用・解除→保存先JPEG読み戻し・黒塗り検査が成功。
+- 顔評価の既知の制約（2人の原寸画像で3候補）は変わらず、隠さず記録。保存画像ハッシュは前回と同じ `641acf590915697ecb1507af6f776a992cfe64c9c36a4e34623b7479b94047c2`。
+- 配布スクリプトはPython 3.15で `python -m unittest discover -s scripts/tests` の9テスト成功。macOS標準Python 3.9ではテスト側の `TestCase.enterContext` がなく起動時に失敗したため、対応ランタイムで確認した。スクリプトを古いPython向けに改変していない。
+
+実機固有の向き・反転や性能の未確認事項は変わらない。

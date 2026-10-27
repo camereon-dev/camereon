@@ -123,6 +123,7 @@ void main() {
     expect(camera.pictures, 1);
     expect(find.text('撮り直す'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('撮り直す'));
     await tester.tap(find.text('撮り直す'));
     await tester.pumpAndSettle();
 
@@ -206,6 +207,7 @@ void main() {
       await tester.tap(find.text('取り消す'));
       await tester.pump();
       expect(find.text('0箇所の領域を選択中'), findsOneWidget);
+      await tester.ensureVisible(find.text('撮り直す'));
       await tester.tap(find.text('撮り直す'));
       await tester.pumpAndSettle();
       expect(find.text('サンプルで試す'), findsOneWidget);

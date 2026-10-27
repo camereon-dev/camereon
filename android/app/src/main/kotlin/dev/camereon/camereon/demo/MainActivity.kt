@@ -19,6 +19,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var faces: MlKitFaceDetectionHandler? = null
+    private var textRegionChannel: TextRegionChannel? = null
     private val savePermissionRequestCode = 731
     private var saveInProgress = false
     private var pendingSaveBytes: ByteArray? = null
@@ -27,10 +28,24 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         faces = MlKitFaceDetectionHandler(flutterEngine.dartExecutor.binaryMessenger)
+        textRegionChannel = TextRegionChannel(this, flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/analysis_device")
             .setMethodCallHandler { call, result ->
                 if (call.method == "availableStorageBytes") {
                     result.success(StatFs(filesDir.absolutePath).availableBytes)
+                } else {
+                    result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/app_info")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "version") {
+                    @Suppress("DEPRECATION")
+                    val info = packageManager.getPackageInfo(packageName, 0)
+                    result.success(mapOf(
+                        "versionName" to (info.versionName ?: ""),
+                        "versionCode" to info.longVersionCode.toString(),
+                    ))
                 } else {
                     result.notImplemented()
                 }
@@ -108,6 +123,8 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         faces?.close()
         faces = null
+        textRegionChannel?.close()
+        textRegionChannel = null
         pendingSaveResult?.let { finishSave(it, "failed") }
         pendingSaveResult = null
         pendingSaveBytes = null

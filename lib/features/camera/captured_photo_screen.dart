@@ -11,6 +11,9 @@ import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
 import '../analysis/face_detection_controller.dart';
 import '../analysis/photo_analysis_entry.dart';
 import 'photo_edit_state.dart';
+import '../../core/detection/android_text_region_detector.dart';
+import '../../core/detection/region_detector.dart';
+import '../detection/candidate_overlay.dart';
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
 import '../../core/photo/flutter_photo_processor.dart';
@@ -24,15 +27,19 @@ class CapturedPhotoScreen extends StatefulWidget {
   const CapturedPhotoScreen({
     super.key,
     required this.photo,
+    this.onSourceLoaded,
     this.processor,
     this.saver,
     this.faceDetector,
+    this.detector,
   });
 
   final XFile photo;
+  final ValueChanged<SourcePhoto>? onSourceLoaded;
   final PhotoProcessor? processor;
   final PhotoSaver? saver;
   final PhotoFaceDetector? faceDetector;
+  final RegionDetector? detector;
 
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
@@ -43,6 +50,15 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   late final PhotoProcessor _processor =
       widget.processor ?? FlutterPhotoProcessor();
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
+  late final RegionDetector _detector =
+      widget.detector ?? AndroidTextRegionDetector();
+  List<RegionCandidate> _candidates = [];
+  bool _detecting = false;
+  String? _detectionMessage;
+  int _detectionEpoch = 0;
+  final Set<HideRegion> _selectedCandidateRegions = {};
+  List<HideRegion> get _redactions =>
+      <HideRegion>{..._regions, ..._selectedCandidateRegions}.toList();
   SourcePhoto? _source;
   RedactedJpeg? _preview;
   final _edits = PhotoEditState();
@@ -91,6 +107,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     WidgetsBinding.instance.removeObserver(this);
     _faces.removeListener(_faceChanged);
     _faces.dispose();
+    _detectionEpoch++;
     if (widget.photo.path.isNotEmpty) {
       File(widget.photo.path).delete().ignore();
     }
@@ -116,6 +133,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       } else {
         _faces.markDeferred();
       }
+      widget.onSourceLoaded?.call(source);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -134,7 +152,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   Future<void> _retake() async {
     if (_busy) return;
-    if (_regions.isNotEmpty && !_saved) {
+    if (_redactions.isNotEmpty && !_saved) {
       final discard = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -159,11 +177,136 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
+  Future<void> _detectText() async {
+    final source = _source;
+    if (_busy || _detecting || source == null) return;
+    final epoch = ++_detectionEpoch;
+    setState(() {
+      _detecting = true;
+      _detectionMessage = null;
+    });
+    try {
+      final result = await _detector.detect(source);
+      if (!mounted ||
+          epoch != _detectionEpoch ||
+          !identical(source, _source) ||
+          _preview != null) {
+        return;
+      }
+      setState(() {
+        bool same(RegionCandidate a, RegionCandidate b) =>
+            a.kind == b.kind && a.region == b.region;
+        final previous = _candidates;
+        // Retain numbering for matching candidates, even if a rescan returns a
+        // different order. Keep selected older candidates available to deselect.
+        _candidates = [
+          for (final candidate in previous)
+            if (_selectedCandidateRegions.contains(candidate.region) ||
+                result.candidates.any((next) => same(candidate, next)))
+              candidate,
+          for (final candidate in result.candidates)
+            if (!previous.any((old) => same(candidate, old))) candidate,
+        ];
+        _detectionMessage = result.candidates.isEmpty
+            ? '文字候補が見つかりませんでした。見落としもあるため、ご自身でも確認してください。'
+            : result.truncated
+            ? '候補が多いため200件まで表示しています。画像全体も確認してください。'
+            : '番号ボタンを押すたびに、その候補の黒塗りを切り替えられます。';
+      });
+    } catch (_) {
+      if (mounted && epoch == _detectionEpoch) {
+        setState(
+          () => _detectionMessage = '文字候補を検出できませんでした。再試行するか、ドラッグして選択してください。',
+        );
+      }
+    } finally {
+      if (mounted && epoch == _detectionEpoch) {
+        setState(() => _detecting = false);
+      }
+    }
+  }
+
+  void _toggleCandidate(RegionCandidate candidate) {
+    if (_busy) return;
+    setState(() {
+      if (!_selectedCandidateRegions.remove(candidate.region)) {
+        _selectedCandidateRegions.add(candidate.region);
+      }
+    });
+  }
+
+  void _applyAllCandidates() {
+    if (_busy) return;
+    setState(
+      () => _selectedCandidateRegions.addAll(
+        _candidates.map((candidate) => candidate.region),
+      ),
+    );
+  }
+
+  Widget _candidateControls() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      OutlinedButton.icon(
+        onPressed: _busy || _detecting || _source == null ? null : _detectText,
+        icon: const Icon(Icons.text_fields),
+        label: Text(_detecting ? '文字候補を探しています…' : '文字の候補を探す'),
+      ),
+      if (_detecting) const LinearProgressIndicator(),
+      if (_detectionMessage != null) Text(_detectionMessage!),
+      if (_candidates.isNotEmpty) ...[
+        Text('${_candidates.length}件の候補（選択中は黒塗り・もう一度押すと解除）'),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 96),
+          child: SingleChildScrollView(
+            child: Wrap(
+              spacing: 8,
+              children: [
+                for (var i = 0; i < _candidates.length; i++)
+                  FilterChip(
+                    key: ValueKey('candidate-toggle-$i'),
+                    label: Text(
+                      '${_candidates[i].kind == CandidateKind.text ? '文字' : '顔'}候補 ${i + 1}',
+                    ),
+                    selected: _selectedCandidateRegions.contains(
+                      _candidates[i].region,
+                    ),
+                    showCheckmark: false,
+                    avatar: Icon(
+                      _selectedCandidateRegions.contains(_candidates[i].region)
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      size: 18,
+                    ),
+                    onSelected: _busy
+                        ? null
+                        : (_) => _toggleCandidate(_candidates[i]),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed:
+              _busy ||
+                  _candidates.every(
+                    (c) => _selectedCandidateRegions.contains(c.region),
+                  )
+              ? null
+              : _applyAllCandidates,
+          child: const Text('候補をすべて適用'),
+        ),
+      ],
+    ],
+  );
+
   Future<void> _prepare() async {
     final source = _source;
     if (_busy || source == null) return;
     _faces.cancel();
     setState(() {
+      _detectionEpoch++;
+      _detecting = false;
       _busy = true;
       _processingFailed = false;
       _pointer = null;
@@ -171,7 +314,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       _drag = null;
     });
     try {
-      final jpeg = await _processor.redact(source, List.of(_regions));
+      final jpeg = await _processor.redact(source, List.of(_redactions));
       if (mounted) setState(() => _preview = jpeg);
     } catch (_) {
       if (mounted) setState(() => _processingFailed = true);
@@ -206,7 +349,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     final source = _source;
     final preview = _preview;
     return PopScope(
-      canPop: !_busy && (_allowPop || _regions.isEmpty || _saved),
+      canPop: !_busy && (_allowPop || _redactions.isEmpty || _saved),
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _retake();
       },
@@ -275,7 +418,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                         if (_processingFailed)
                           const Text('画像を加工できませんでした。選択を保持しています。もう一度お試しください。'),
                         Text(
-                          '${_regions.length}箇所の領域を選択中',
+                          '${_redactions.length}箇所の領域を選択中',
                           textAlign: TextAlign.center,
                         ),
                         const Text(
@@ -283,6 +426,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                           textAlign: TextAlign.center,
                         ),
                         if (source != null) _faceControls(source),
+                        _candidateControls(),
                         Wrap(
                           alignment: WrapAlignment.center,
                           children: [
@@ -298,9 +442,11 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                             ),
                             TextButton(
                               onPressed:
-                                  _busy || (_regions.isEmpty && !_edits.canUndo)
+                                  _busy ||
+                                      (_redactions.isEmpty && !_edits.canUndo)
                                   ? null
                                   : () => setState(() {
+                                      _selectedCandidateRegions.clear();
                                       _edits.reset();
                                       _drag = null;
                                       _start = null;
@@ -459,7 +605,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
               child: IgnorePointer(
                 child: CustomPaint(
                   painter: SelectionPainter(
-                    regions: List.unmodifiable([..._regions, ?_drag]),
+                    regions: List.unmodifiable([..._redactions, ?_drag]),
                     imageWidth: source.width,
                     imageHeight: source.height,
                   ),
@@ -469,16 +615,29 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             Positioned.fromRect(
               rect: rect,
               child: IgnorePointer(
-                child: CustomPaint(
-                  painter: FaceCandidatePainter(
-                    candidates: _faces.candidates,
-                    applied: {
-                      for (final c in _faces.candidates)
-                        if (_edits.isApplied(c.id)) c.id,
-                    },
-                    imageWidth: source.width,
-                    imageHeight: source.height,
-                  ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CustomPaint(
+                      painter: FaceCandidatePainter(
+                        candidates: _faces.candidates,
+                        applied: {
+                          for (final c in _faces.candidates)
+                            if (_edits.isApplied(c.id)) c.id,
+                        },
+                        imageWidth: source.width,
+                        imageHeight: source.height,
+                      ),
+                    ),
+                    CandidateOverlay(
+                      candidates: _candidates,
+                      selectedRegions: Set.unmodifiable(
+                        _selectedCandidateRegions,
+                      ),
+                      imageWidth: source.width,
+                      imageHeight: source.height,
+                    ),
+                  ],
                 ),
               ),
             ),

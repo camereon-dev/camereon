@@ -79,6 +79,7 @@ android {
 
     buildTypes {
         release {
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName(if (isBetaBuild) "beta" else "debug")
         }
     }
@@ -94,7 +95,9 @@ flutter {
     source = "../.."
 }
 
-// Bundled model: first use never waits for a model download.
+// Both detection engines bundle their models for offline use.
 dependencies {
     implementation("com.google.mlkit:face-detection:16.1.7")
+    // Detection model only: Apache-2.0 PP-OCRv5 + MIT ONNX Runtime.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
 }

@@ -26,6 +26,16 @@ Android 向けに Flutter で開発する。起動するとすぐにカメラが
 
 サンプルは本プロジェクトで作成した合成画像。[出典・利用範囲](tools/vlm-eval/fixtures/README.md)を参照。
 
+## 文字の候補を探す
+
+編集画面の「文字の候補を探す」で、文字が写っていそうな場所を黄色い枠で表示する。
+番号ボタンは順番・位置を保ったまま、押すたびに黒塗りの選択・解除を切り替えられる。
+選択中はチェックと色で表示する。「候補をすべて適用」で一括選択もできる。
+候補だけでは保存画像を変更しない。手動で追加した範囲は候補を解除しても残る。
+文字の内容は読まず、検出モデルはAPKへ同梱するため、追加ダウンロードなし・オフラインで使える。
+見落としや誤検出があるため、写真全体を確認し、手動選択や取り消しも使って調整する。
+方式比較・速度・APKサイズ・ライセンスは [文字領域検出](docs/text-region-detection.md) を参照。
+
 ## AI 用データの取得
 
 初回のみ約 2.6 GB のモデルを取得する。Wi-Fi 環境を推奨する。進捗・転送速度・残り時間の目安を表示する。
@@ -74,7 +84,7 @@ mise run device-test -- -d <android-device-id>
 
 ## Android のベータ版を取得する
 
-[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-arm64.apk` をダウンロードしてインストールする。Android 11 以上の ARM64 端末に対応する。
+[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-<バージョン>-arm64.apk` をダウンロードしてインストールする。Android 11 以上の ARM64 端末に対応する。
 
 ベータ版は固定の署名鍵で署名する。以前の debug 署名のデモ APK を入れていた場合は、初回のみ `camereon demo` をアンインストールする。以降のベータ版は上書き更新できる。
 

@@ -3,17 +3,22 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../core/analysis/analysis_services.dart';
+import '../../core/photo/photo_images.dart';
 import 'photo_analysis_screen.dart';
 
-/// #9 の編集画面を変更せず、撮影後の画面に解析への入口を合成する。
+/// Analysis uses the exact pixels successfully loaded by the editor.
 class PhotoAnalysisEntry extends StatefulWidget {
   const PhotoAnalysisEntry({
     super.key,
-    required this.child,
+    this.child,
+    this.editorBuilder,
     required this.loadImage,
     this.services,
-  });
-  final Widget child;
+  }) : assert((child == null) != (editorBuilder == null));
+
+  final Widget? child;
+  final Widget Function(ValueChanged<SourcePhoto> onSourceLoaded)?
+  editorBuilder;
   final Future<Uint8List> Function() loadImage;
   final AnalysisServices? services;
 
@@ -23,27 +28,41 @@ class PhotoAnalysisEntry extends StatefulWidget {
 
 class _PhotoAnalysisEntryState extends State<PhotoAnalysisEntry> {
   bool _covered = false;
+  SourcePhoto? _source;
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: AnalysisEntryVisibility(covered: _covered, child: widget.child),
+    body: AnalysisEntryVisibility(
+      covered: _covered,
+      child:
+          widget.editorBuilder?.call(
+            (source) => setState(() => _source = source),
+          ) ??
+          widget.child!,
+    ),
     bottomNavigationBar: SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
         child: FilledButton.icon(
-          onPressed: _covered
+          onPressed:
+              _covered || (widget.editorBuilder != null && _source == null)
               ? null
               : () async {
                   setState(() => _covered = true);
-                  await Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => PhotoAnalysisScreen(
-                        loadImage: widget.loadImage,
-                        services: widget.services,
+                  try {
+                    await Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => PhotoAnalysisScreen(
+                          loadImage: () async =>
+                              _source?.bytes ?? await widget.loadImage(),
+                          services: widget.services,
+                        ),
                       ),
-                    ),
-                  );
-                  if (mounted) setState(() => _covered = false);
+                    );
+                  } finally {
+                    if (mounted) setState(() => _covered = false);
+                  }
                 },
           icon: const Icon(Icons.auto_awesome_rounded),
           label: const Text('端末内で写真を解析'),
