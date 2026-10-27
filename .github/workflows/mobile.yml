@@ -17,15 +17,16 @@ concurrency:
 jobs:
   quality:
     name: Format, analyze and widget tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - run: python3 -m unittest discover -s scripts/tests -v
       - uses: ./.github/actions/setup-flutter
       - run: flutter pub get --enforce-lockfile
       - run: dart format --output=none --set-exit-if-changed lib test integration_test
-      - run: flutter analyze
-      - run: flutter test --coverage
+      - run: flutter analyze --no-pub
+      - run: flutter test --no-pub --coverage
       - uses: actions/upload-artifact@v7
         with:
           name: coverage
@@ -36,8 +37,7 @@ jobs:
   beta:
     name: Build signed Android beta
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -71,8 +71,8 @@ jobs:
   publish_beta:
     name: Publish beta GitHub Release
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: beta
-    runs-on: ubuntu-latest
+    needs: [quality, beta]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write

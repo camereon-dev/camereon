@@ -11,8 +11,11 @@ runs:
   steps:
     - uses: jdx/mise-action@v5
       with:
-        install_args: ${{ inputs.android == 'true' && 'flutter java' || 'flutter' }}
+        install_args: flutter
         cache: true
+        # Include Flutter's first-run tool snapshot, not just the raw SDK.
+        cache_save_post: true
+        cache_key: flutter-v2-${{ runner.os }}-${{ runner.arch }}-ubuntu24-${{ hashFiles('mise.toml') }}
     - name: Export Flutter SDK path
       shell: bash
       run: echo "FLUTTER_ROOT=$(mise where flutter)" >> "$GITHUB_ENV"
@@ -22,10 +25,42 @@ runs:
         path: ~/.pub-cache
         key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
     - if: inputs.android == 'true'
+      name: Use preinstalled JDK matching mise.toml
+      shell: bash
+      run: |
+        python3 - <<'PYTHON'
+        import os, re, tomllib
+        from pathlib import Path
+        requested = tomllib.loads(Path('mise.toml').read_text())['tools']['java']
+        match = re.fullmatch(r'temurin-(\d+)', requested)
+        if not match:
+            raise SystemExit(f'Expected a Temurin major in mise.toml, got {requested}')
+        java_home = os.environ[f'JAVA_HOME_{match[1]}_X64']
+        with open(os.environ['GITHUB_ENV'], 'a') as out:
+            out.write(f'JAVA_HOME={java_home}\n')
+        with open(os.environ['GITHUB_PATH'], 'a') as out:
+            out.write(f'{java_home}/bin\n')
+        PYTHON
+    - if: inputs.android == 'true'
       uses: gradle/actions/setup-gradle@v6
       with:
         # OSS の actions/cache ベース。main 以外は読み取りのみ
         cache-provider: basic
+    - if: inputs.android == 'true'
+      name: Cache Gradle task outputs
+      uses: actions/cache@v6
+      with:
+        # Separate from the immutable dependency cache managed by setup-gradle.
+        path: ~/.gradle/camereon-build-cache
+        key: gradle-tasks-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'pubspec.lock', 'android/**/*.gradle*', 'android/gradle.properties', 'android/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.sha }}
+        restore-keys: |
+          gradle-tasks-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'pubspec.lock', 'android/**/*.gradle*', 'android/gradle.properties', 'android/gradle/wrapper/gradle-wrapper.properties') }}-
+    - if: inputs.android == 'true'
+      name: Cache Android CMake
+      uses: actions/cache@v6
+      with:
+        path: ${{ env.ANDROID_HOME }}/cmake/3.22.1
+        key: android-cmake-${{ runner.os }}-${{ runner.arch }}-3.22.1
     - id: ndk
       if: inputs.android == 'true'
       name: Resolve Flutter NDK version

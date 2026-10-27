@@ -6,9 +6,9 @@
 ## 公開の流れ
 
 1. PR の解析・画面テストと、変更内容に応じた Android のビルド・端末確認を行い、レビュー後に `main` へマージする。
-2. `main` の解析・画面テストが成功すると、ARM64 の APK を固定のベータ署名鍵でビルドする。
+2. `main` へのpushで解析・画面テストと、固定のベータ署名鍵でのARM64 APKビルドを並行実行する。
 3. APK の署名、アプリ ID、バージョン、SHA-256 を検証する。
-4. APK と SHA-256 を GitHub Pre-release に添付し、自動公開する。
+4. テストとAPKビルドの両方が成功したら、APK と SHA-256 を GitHub Pre-release に添付し、自動公開する。
 
 Emulator の起動は公開の前提にしない。端末テストは PR に `device-test` ラベルを付けるか、**Android device tests** を必要なときに手動実行する。
 PR や `main` 以外のブランチには、ベータ署名鍵を渡さず、Release を公開しない。
@@ -36,7 +36,9 @@ Release 公開 job だけが `contents: write` を持つ。ビルド job はリ�
 
 公開先: [GitHub Releases](https://github.com/camereon-dev/camereon/releases)
 
-公開するファイルは `camereon-beta-arm64.apk` と `camereon-beta-arm64.apk.sha256`。
+公開するファイルは `camereon-beta-<バージョン>-arm64.apk` と同名の `.sha256`。
+例: `camereon-beta-0.1.0-beta.73-arm64.apk`。端末のダウンロード一覧でもバージョンを区別できる。
+Pagesは新形式と既存の `camereon-beta-arm64.apk` の両方に対応する。
 Android 11 以上の ARM64 端末で利用できる。アプリ ID は `dev.camereon.camereon.demo`、表示名は `camereon beta`。
 正式版を出すタイミングでは、配布先・アプリ ID・バージョン方針を改めて決める。
 
@@ -71,3 +73,18 @@ Secrets は値を後から取得できないため、バックアップを保持
 
 通常の PR・手動テスト用のデモ APK は debug 署名。公開ベータ版とは署名が異なる。
 Android demo APK の CI は別 ID `dev.camereon.camereon.demo.ai_preview` でビルドし、既存のベータ版と共存できる。
+
+## CIの所要時間
+
+通常のキャッシュが利用できる実行で、mainへのpushからベータ公開まで4分以内を目標にする。
+2026-10-27のrun 40467294020は約11分03秒で、テストジョブ3分16秒のうち
+SDK準備が2分20秒、APKジョブ7分25秒のうち準備が2分54秒を占めていた。
+テストとビルドの直列待ちに加え、ubuntu-latestのOS変更でSDKキャッシュも外れていた。
+
+- Ubuntu 24.04を明示し、Flutter SDKはテスト・ビルドで同じキャッシュを利用する。Flutterツールの初回コンパイル後に保存する。
+- CIのJDKはmise.tomlで指定したTemurinのメジャーに合うランナー同梱版を使用する。
+- Gradleの依存キャッシュとは別にタスク出力をコミットごとに保存し、次の実行では入力が一致するタスクだけ再利用する。CMakeも保存する。
+- テストとビルドを並行実行し、公開ジョブは両方の成功を待つ。解析・テストには `--no-pub` を渡す。APKビルドはRelease用のプラグイン登録を再生成するため、自動pub処理を維持する。
+
+SDKや依存の更新直後、キャッシュの削除・失効、GitHubのランナー待ち時間が長い場合は別途計測する。
+キャッシュがない実行も含めた4分の保証ではない。Pagesのデプロイはリリースワークフロー成功後に別途実行される。

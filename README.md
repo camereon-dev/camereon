@@ -74,7 +74,7 @@ mise run device-test -- -d <android-device-id>
 
 ## Android のベータ版を取得する
 
-[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-arm64.apk` をダウンロードしてインストールする。Android 11 以上の ARM64 端末に対応する。
+[GitHub Releases](https://github.com/camereon-dev/camereon/releases) の最新の **Pre-release** を開き、`camereon-beta-<バージョン>-arm64.apk` をダウンロードしてインストールする。Android 11 以上の ARM64 端末に対応する。
 
 ベータ版は固定の署名鍵で署名する。以前の debug 署名のデモ APK を入れていた場合は、初回のみ `camereon demo` をアンインストールする。以降のベータ版は上書き更新できる。
 
