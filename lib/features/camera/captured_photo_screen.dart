@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
 import '../../core/photo/flutter_photo_processor.dart';
+import '../../core/photo/ios_photo_saver.dart';
 import '../../core/photo/photo_images.dart';
 import '../../core/photo/photo_processor.dart';
 import '../../core/photo/photo_processing_exception.dart';
@@ -33,7 +34,8 @@ class CapturedPhotoScreen extends StatefulWidget {
 class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   late final PhotoProcessor _processor =
       widget.processor ?? FlutterPhotoProcessor();
-  late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
+  late final PhotoSaver _saver =
+      widget.saver ?? (Platform.isIOS ? IosPhotoSaver() : AndroidPhotoSaver());
   SourcePhoto? _source;
   RedactedJpeg? _preview;
   final List<HideRegion> _regions = [];
