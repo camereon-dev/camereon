@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-27",
+  "applicationId": "dev.camereon.camereon.demo.detector_preview",
+  "version": "0.1.0+1",
+  "minSdk": 30,
+  "abi": "arm64-v8a",
+  "apk": {
+    "bytes": 122997811,
+    "sha256": "b8a72a640453d573722ed34b9672d3a7b8137eccfd6dd12b45bf03fc17694d51"
+  },
+  "model": {
+    "model": "YOLO26s",
+    "source": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s.pt",
+    "source_sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+    "file": "yolo26s.onnx",
+    "bytes": 38106089,
+    "sha256": "37d160a608d6220748a8cf17312c9d96090e037e3e4bffc0f36a7bfa89d15a98",
+    "export": {
+      "ultralytics": "8.4.89",
+      "onnx": "1.23.2",
+      "opset": 17,
+      "dynamic": true,
+      "simplify": false,
+      "nms": false,
+      "quantize": null
+    },
+    "input": "RGB float32 / 255; letterbox 114, stride32; long sides 640 and 1280",
+    "output": "[1,300,6] xyxy, confidence, COCO class id",
+    "classes": {
+      "0": "person",
+      "62": "screen",
+      "63": "screen",
+      "67": "screen"
+    },
+    "confidence": 0.25,
+    "merge_iou": 0.7,
+    "license": "AGPL-3.0",
+    "runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.24.3"
+  },
+  "checks": {
+    "format_analyze_widget_tests": 108,
+    "android_blank_and_private_photo_integration_tests": 2,
+    "source_coordinate_bounds": true,
+    "private_photo_1_people_and_phone": true,
+    "private_photo_2_screens": true,
+    "private_photo_3_tv": true,
+    "editor_detection_redaction_media_store_save": true,
+    "temporary_editor_image_cleanup": true,
+    "release_build": true,
+    "apk_model_sha256": true,
+    "apk_arm64_only": true,
+    "release_install": true,
+    "release_system_photo_picker": true,
+    "release_real_photo_detection_display": true,
+    "release_media_store_save": true,
+    "release_signature_verified": true
+  },
+  "device": "Android 12 / API31 / ARM64 emulator",
+  "physical_device_tested": false,
+  "private_fixtures_in_apk": false
+}

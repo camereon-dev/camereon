@@ -213,6 +213,7 @@ void main() {
   ) async {
     await open(tester, FakeProcessor(200, 100), FakeSaver());
     await select(tester);
+    await tester.ensureVisible(find.text('撮り直す'));
     await tester.tap(find.text('撮り直す'));
     await tester.pumpAndSettle();
     expect(find.text('編集を破棄しますか？'), findsOneWidget);

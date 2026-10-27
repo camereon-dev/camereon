@@ -33,12 +33,14 @@ class CandidatePainter extends CustomPainter {
     this.candidates,
     this.imageWidth,
     this.imageHeight,
-    this.selectedRegions,
-  );
+    this.selectedRegions, {
+    this.labels,
+  });
   final List<RegionCandidate> candidates;
   final int imageWidth;
   final int imageHeight;
   final Set<HideRegion> selectedRegions;
+  final List<String>? labels;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -65,7 +67,7 @@ class CandidatePainter extends CustomPainter {
       canvas.drawRect(rect, outline);
       final label = TextPainter(
         text: TextSpan(
-          text: '${i + 1}',
+          text: labels?[i] ?? '${i + 1}',
           style: TextStyle(
             color: Colors.black,
             backgroundColor: color,
@@ -84,6 +86,7 @@ class CandidatePainter extends CustomPainter {
   bool shouldRepaint(covariant CandidatePainter oldDelegate) =>
       oldDelegate.candidates != candidates ||
       oldDelegate.selectedRegions != selectedRegions ||
+      oldDelegate.labels != labels ||
       oldDelegate.imageWidth != imageWidth ||
       oldDelegate.imageHeight != imageHeight;
 }

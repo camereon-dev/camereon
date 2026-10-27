@@ -20,6 +20,7 @@ run = [
   "flutter test integration_test/gallery_save_test.dart",
   "flutter test integration_test/photo_edit_save_test.dart",
   "flutter test integration_test/text_regions_device_test.dart",
+  "flutter test integration_test/object_regions_device_test.dart",
 ]
 
 [tasks.apk]
@@ -29,3 +30,19 @@ run = "bash scripts/build-android-demo.sh"
 [tasks.face-test]
 description = "同意済み顔画像を指定して同梱ML Kitを検証（docs/face-detection.md参照）"
 run = "flutter test integration_test/face_detection_test.dart"
+
+[tasks.detector-apk]
+description = "人物・画面検出を同梱した別IDのARM64 APKを作る"
+run = "bash scripts/build-android-detectors.sh"
+
+[tasks.detector-install]
+description = "検出器プレビューAPKをUSB接続端末へインストールする"
+run = "bash scripts/install-android-detectors.sh"
+
+[tasks.detector-debug-apk]
+description = "デバッガー接続可能な検出器Debug APKを作る"
+run = "bash scripts/build-android-detectors.sh --debug"
+
+[tasks.detector-debug-install]
+description = "検出器Debug APKをビルドして接続端末へインストールする"
+run = "bash scripts/install-android-detectors.sh --debug"

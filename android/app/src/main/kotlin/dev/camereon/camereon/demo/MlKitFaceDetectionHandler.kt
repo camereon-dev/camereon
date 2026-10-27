@@ -74,9 +74,9 @@ class MlKitFaceDetectionHandler(messenger: BinaryMessenger) {
                     val r = face.boundingBox
                     listOf(r.left, r.top, r.right, r.bottom)
                 })
-            main.post { busy = false; result.success(response) }
+            main.post { busy = false; if (!closed) result.success(response) }
         } catch (_: Exception) {
-            main.post { busy = false; result.error("detectionFailed", "Face detection failed", null) }
+            main.post { busy = false; if (!closed) result.error("detectionFailed", "Face detection failed", null) }
         } finally {
             bitmap?.recycle()
             detector?.close()

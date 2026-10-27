@@ -40,8 +40,9 @@ class FakeDetector implements RegionDetector {
 Future<void> open(
   WidgetTester tester,
   FakeDetector detector,
-  existing.FakeProcessor processor,
-) async {
+  existing.FakeProcessor processor, {
+  RegionDetector? objectDetector,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       home: CapturedPhotoScreen(
@@ -49,6 +50,7 @@ Future<void> open(
         processor: processor,
         saver: existing.FakeSaver(),
         detector: detector,
+        objectDetector: objectDetector,
       ),
     ),
   );
@@ -62,6 +64,43 @@ Future<void> tap(WidgetTester tester, String text) async {
 }
 
 void main() {
+  testWidgets(
+    'text and object rescans preserve the other kind and its selection',
+    (tester) async {
+      final text = FakeDetector();
+      final objects = FakeDetector();
+      final person = RegionCandidate(
+        kind: CandidateKind.person,
+        region: HideRegion.fromRect(
+          const Rect.fromLTRB(20, 70, 90, 95),
+          imageWidth: 200,
+          imageHeight: 100,
+        )!,
+      );
+      objects.candidates
+        ..clear()
+        ..add(person);
+      await open(
+        tester,
+        text,
+        existing.FakeProcessor(200, 100),
+        objectDetector: objects,
+      );
+      await tap(tester, '文字の候補を探す');
+      await tap(tester, '文字候補 1');
+      await tap(tester, '人物・画面の候補を探す');
+      expect(find.text('人物候補 5'), findsOneWidget);
+      await tap(tester, '人物候補 5');
+      await tap(tester, '文字の候補を探す');
+      await tap(tester, '人物・画面の候補を探す');
+      expect(
+        existing.painter(tester).regions,
+        containsAll([text.candidates.first.region, person.region]),
+      );
+      expect(find.byType(FilterChip), findsNWidgets(5));
+    },
+  );
+
   testWidgets(
     'four fixed buttons toggle independently without changing order or position',
     (tester) async {

@@ -9,7 +9,10 @@ val betaPassword = System.getenv("CAMEREON_BETA_PASSWORD")
 val isBetaBuild = !betaKeystorePath.isNullOrBlank()
 // Opt-in install for physical AI verification, without replacing a beta app.
 val isAiPreview = System.getenv("CAMEREON_AI_PREVIEW") == "1"
+val isDetectorPreview = System.getenv("CAMEREON_DETECTOR_PREVIEW") == "1"
 require(!(isBetaBuild && isAiPreview)) { "AI preview cannot be published as a beta" }
+require(!(isBetaBuild && isDetectorPreview)) { "Detector preview cannot be published as a beta" }
+require(!(isAiPreview && isDetectorPreview)) { "Select one preview application" }
 
 if (isBetaBuild) {
     require(!betaPassword.isNullOrBlank()) { "Beta signing password is required" }
@@ -40,8 +43,13 @@ android {
 
     defaultConfig {
         // Keep the demo separate from a future production app.
-        applicationId = if (isAiPreview) "dev.camereon.camereon.demo.ai_preview" else "dev.camereon.camereon.demo"
+        applicationId = when {
+            isDetectorPreview -> "dev.camereon.camereon.demo.detector_preview"
+            isAiPreview -> "dev.camereon.camereon.demo.ai_preview"
+            else -> "dev.camereon.camereon.demo"
+        }
         manifestPlaceholders["appName"] = when {
+            isDetectorPreview -> "camereon detector"
             isAiPreview -> "camereon AI preview"
             isBetaBuild -> "camereon beta"
             else -> "camereon demo"

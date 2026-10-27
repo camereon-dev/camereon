@@ -12,6 +12,7 @@ import '../analysis/face_detection_controller.dart';
 import '../analysis/photo_analysis_entry.dart';
 import 'photo_edit_state.dart';
 import '../../core/detection/android_text_region_detector.dart';
+import '../../core/detection/android_object_region_detector.dart';
 import '../../core/detection/region_detector.dart';
 import '../detection/candidate_overlay.dart';
 import '../../core/photo/android_photo_saver.dart';
@@ -32,6 +33,7 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.saver,
     this.faceDetector,
     this.detector,
+    this.objectDetector,
   });
 
   final XFile photo;
@@ -40,6 +42,7 @@ class CapturedPhotoScreen extends StatefulWidget {
   final PhotoSaver? saver;
   final PhotoFaceDetector? faceDetector;
   final RegionDetector? detector;
+  final RegionDetector? objectDetector;
 
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
@@ -52,6 +55,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
   late final RegionDetector _detector =
       widget.detector ?? AndroidTextRegionDetector();
+  late final RegionDetector _objectDetector =
+      widget.objectDetector ?? AndroidObjectRegionDetector();
+  String _detectionSubject = '文字';
   List<RegionCandidate> _candidates = [];
   bool _detecting = false;
   String? _detectionMessage;
@@ -177,16 +183,19 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
-  Future<void> _detectText() async {
+  Future<void> _detect({bool objects = false}) async {
     final source = _source;
     if (_busy || _detecting || source == null) return;
     final epoch = ++_detectionEpoch;
     setState(() {
       _detecting = true;
+      _detectionSubject = objects ? '人物・画面' : '文字';
       _detectionMessage = null;
     });
     try {
-      final result = await _detector.detect(source);
+      final result = await (objects ? _objectDetector : _detector).detect(
+        source,
+      );
       if (!mounted ||
           epoch != _detectionEpoch ||
           !identical(source, _source) ||
@@ -197,26 +206,31 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         bool same(RegionCandidate a, RegionCandidate b) =>
             a.kind == b.kind && a.region == b.region;
         final previous = _candidates;
+        final scannedKinds = objects
+            ? {CandidateKind.person, CandidateKind.screen}
+            : {CandidateKind.text};
         // Retain numbering for matching candidates, even if a rescan returns a
         // different order. Keep selected older candidates available to deselect.
         _candidates = [
           for (final candidate in previous)
-            if (_selectedCandidateRegions.contains(candidate.region) ||
+            if (!scannedKinds.contains(candidate.kind) ||
+                _selectedCandidateRegions.contains(candidate.region) ||
                 result.candidates.any((next) => same(candidate, next)))
               candidate,
           for (final candidate in result.candidates)
             if (!previous.any((old) => same(candidate, old))) candidate,
         ];
         _detectionMessage = result.candidates.isEmpty
-            ? '文字候補が見つかりませんでした。見落としもあるため、ご自身でも確認してください。'
+            ? '$_detectionSubject候補が見つかりませんでした。見落としもあるため、ご自身でも確認してください。'
             : result.truncated
-            ? '候補が多いため200件まで表示しています。画像全体も確認してください。'
+            ? '候補が多いため一部のみ表示しています。画像全体も確認してください。'
             : '番号ボタンを押すたびに、その候補の黒塗りを切り替えられます。';
       });
     } catch (_) {
       if (mounted && epoch == _detectionEpoch) {
         setState(
-          () => _detectionMessage = '文字候補を検出できませんでした。再試行するか、ドラッグして選択してください。',
+          () => _detectionMessage =
+              '$_detectionSubject候補を検出できませんでした。再試行するか、ドラッグして選択してください。',
         );
       }
     } finally {
@@ -248,9 +262,24 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       OutlinedButton.icon(
-        onPressed: _busy || _detecting || _source == null ? null : _detectText,
+        onPressed: _busy || _detecting || _source == null
+            ? null
+            : () => _detect(objects: true),
+        icon: const Icon(Icons.person_search_outlined),
+        label: Text(
+          _detecting && _detectionSubject == '人物・画面'
+              ? '人物・画面の候補を探しています…'
+              : '人物・画面の候補を探す',
+        ),
+      ),
+      OutlinedButton.icon(
+        onPressed: _busy || _detecting || _source == null
+            ? null
+            : () => _detect(),
         icon: const Icon(Icons.text_fields),
-        label: Text(_detecting ? '文字候補を探しています…' : '文字の候補を探す'),
+        label: Text(
+          _detecting && _detectionSubject == '文字' ? '文字候補を探しています…' : '文字の候補を探す',
+        ),
       ),
       if (_detecting) const LinearProgressIndicator(),
       if (_detectionMessage != null) Text(_detectionMessage!),
@@ -265,9 +294,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                 for (var i = 0; i < _candidates.length; i++)
                   FilterChip(
                     key: ValueKey('candidate-toggle-$i'),
-                    label: Text(
-                      '${_candidates[i].kind == CandidateKind.text ? '文字' : '顔'}候補 ${i + 1}',
-                    ),
+                    label: Text('${_candidates[i].kind.label}候補 ${i + 1}'),
                     selected: _selectedCandidateRegions.contains(
                       _candidates[i].region,
                     ),
@@ -677,59 +704,25 @@ class SelectionPainter extends CustomPainter {
       oldDelegate.regions != regions;
 }
 
-class FaceCandidatePainter extends CustomPainter {
+/// Faces and other detector candidates share the same drawing/coordinate code.
+/// The prefix keeps face numbering distinct from text/person/screen numbering.
+class FaceCandidatePainter extends CandidatePainter {
   FaceCandidatePainter({
-    required this.candidates,
-    required this.applied,
-    required this.imageWidth,
-    required this.imageHeight,
-  });
-  final List<FaceCandidate> candidates;
-  final Set<String> applied;
-  final int imageWidth;
-  final int imageHeight;
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.clipRect(Offset.zero & size);
-    final sx = size.width / imageWidth;
-    final sy = size.height / imageHeight;
-    for (var i = 0; i < candidates.length; i++) {
-      final candidate = candidates[i];
-      final r = candidate.region;
-      final rect = Rect.fromLTRB(
-        r.left * sx,
-        r.top * sy,
-        r.right * sx,
-        r.bottom * sy,
-      );
-      final color = applied.contains(candidate.id)
-          ? Colors.greenAccent
-          : Colors.amber;
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
-      );
-      final label = TextPainter(
-        text: TextSpan(
-          text: '${i + 1}',
-          style: TextStyle(
-            color: color,
-            backgroundColor: Colors.black,
-            fontSize: 16,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      label.paint(canvas, rect.topLeft);
-      label.dispose();
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant FaceCandidatePainter oldDelegate) => true;
+    required List<FaceCandidate> candidates,
+    required Set<String> applied,
+    required int imageWidth,
+    required int imageHeight,
+  }) : super(
+         [
+           for (final c in candidates)
+             RegionCandidate(kind: CandidateKind.face, region: c.region),
+         ],
+         imageWidth,
+         imageHeight,
+         {
+           for (final c in candidates)
+             if (applied.contains(c.id)) c.region,
+         },
+         labels: [for (var i = 0; i < candidates.length; i++) '顔${i + 1}'],
+       );
 }

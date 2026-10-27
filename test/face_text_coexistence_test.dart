@@ -1,5 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:camereon/core/analysis/face_detection.dart';
+import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,61 @@ import 'face_candidate_screen_test.dart' as face;
 import 'text_region_candidates_test.dart' as text;
 
 void main() {
+  testWidgets(
+    'face, person and text selections stay independent on one shared region',
+    (tester) async {
+      final processor = editor.FakeProcessor(200, 100);
+      final faces = face.ControlledFaces();
+      final texts = text.FakeDetector();
+      final objects = text.FakeDetector();
+      final shared = texts.candidates.first.region;
+      objects.candidates
+        ..clear()
+        ..add(RegionCandidate(kind: CandidateKind.person, region: shared));
+      faces.result.complete([FaceCandidate('face-0', shared)]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CapturedPhotoScreen(
+            photo: XFile.fromData(processor.source.bytes),
+            processor: processor,
+            saver: editor.FakeSaver(),
+            faceDetector: faces,
+            detector: texts,
+            objectDetector: objects,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await editor.select(
+        tester,
+        start: const Offset(.05, .85),
+        end: const Offset(.2, .95),
+      );
+      final manual = editor.painter(tester).regions.single;
+      await text.tap(tester, '人物・画面の候補を探す');
+      await text.tap(tester, '人物候補 1');
+      await text.tap(tester, '顔 1：適用');
+      await text.tap(tester, '文字の候補を探す');
+      await text.tap(tester, '文字候補 2');
+      expect(editor.painter(tester).regions, [manual, shared]);
+      await text.tap(tester, '顔 1：解除');
+      await text.tap(tester, '人物候補 1');
+      expect(editor.painter(tester).regions, [manual, shared]);
+      await text.tap(tester, '文字候補 2');
+      expect(editor.painter(tester).regions, [manual]);
+      await text.tap(tester, '人物・画面の候補を探す');
+      expect(find.text('文字候補 2'), findsOneWidget);
+      expect(editor.painter(tester).regions, [manual]);
+      final painter = tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((w) => w.painter)
+          .whereType<FaceCandidatePainter>()
+          .single;
+      expect(painter.labels, ['顔1']);
+      expect(painter.candidates.single.kind, CandidateKind.face);
+    },
+  );
+
   testWidgets(
     'overlapping face/text remain independent through history and save',
     (tester) async {
