@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/app_version.dart';
 import 'captured_photo_screen.dart';
 
 enum _CameraIssue { permissionDenied, noCamera, failed }
@@ -242,6 +243,7 @@ class _CameraScreenState extends State<CameraScreen>
                     ? const SizedBox.expand()
                     : _Preview(controller: controller),
               ),
+              const AppVersion(),
               _ControlBar(
                 canShoot: controller != null && !_isCapturing,
                 canSwitch: issue == null && _canSwitchCamera && !_isCapturing,

@@ -12,7 +12,6 @@ import subprocess
 import sys
 
 
-APK_NAME = "camereon-beta-arm64.apk"
 BETA_DIR = Path("dist/beta")
 
 
@@ -32,6 +31,12 @@ def build_version():
     if not match:
         raise ValueError("pubspec.yaml must contain a numeric base version")
     return f"{match[1]}-beta.{int(number)}"
+
+
+def apk_name(version):
+    if not re.fullmatch(r"\d+\.\d+\.\d+-beta\.\d+", version):
+        raise ValueError("Invalid beta version for APK filename")
+    return f"camereon-beta-{version}-arm64.apk"
 
 
 def output(name, value):
@@ -61,6 +66,7 @@ def android_tool(name):
 
 def package():
     version = build_version()
+    name = apk_name(version)
     commit = required("GITHUB_SHA")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("Invalid source commit")
@@ -91,14 +97,14 @@ def package():
     if not native_code or native_code.group(1).strip() != "'arm64-v8a'":
         raise ValueError("Beta APK must contain ARM64 native libraries only")
     BETA_DIR.mkdir(parents=True, exist_ok=True)
-    apk = BETA_DIR / APK_NAME
+    apk = BETA_DIR / name
     shutil.copyfile(source, apk)
     digest = hashlib.sha256(apk.read_bytes()).hexdigest()
-    apk.with_name(APK_NAME + ".sha256").write_text(f"{digest}  {APK_NAME}\n")
+    apk.with_name(name + ".sha256").write_text(f"{digest}  {name}\n")
     metadata = {
         "version": version, "tag": f"v{version}", "commit": commit,
         "build_number": int(required("GITHUB_RUN_NUMBER")),
-        "apk_name": APK_NAME, "sha256": digest, "certificate_sha256": expected_cert,
+        "apk_name": name, "sha256": digest, "certificate_sha256": expected_cert,
     }
     (BETA_DIR / "release.json").write_text(json.dumps(metadata, indent=2) + "\n")
     output("tag", metadata["tag"])
@@ -140,18 +146,19 @@ def publish():
     tag, commit = metadata["tag"], metadata["commit"]
     if metadata["version"] != build_version() or tag != f"v{build_version()}" or commit != required("GITHUB_SHA"):
         raise ValueError("Release metadata does not match this workflow run")
-    if metadata["apk_name"] != APK_NAME:
+    name = apk_name(metadata["version"])
+    if metadata["apk_name"] != name:
         raise ValueError("Unexpected release APK name")
-    apk = BETA_DIR / APK_NAME
-    checksum = apk.with_name(APK_NAME + ".sha256")
+    apk = BETA_DIR / name
+    checksum = apk.with_name(name + ".sha256")
     digest = hashlib.sha256(apk.read_bytes()).hexdigest()
-    if digest != metadata["sha256"] or checksum.read_text() != f"{digest}  {APK_NAME}\n":
+    if digest != metadata["sha256"] or checksum.read_text() != f"{digest}  {name}\n":
         raise ValueError("Release APK checksum mismatch")
     check_tag(repo, tag, commit)
     existing = api(f"repos/{repo}/releases/tags/{tag}", optional=True)
     if existing and existing["target_commitish"] != commit:
         raise ValueError("Existing release targets a different source commit")
-    expected_assets = {APK_NAME, APK_NAME + ".sha256"}
+    expected_assets = {name, name + ".sha256"}
     if existing and not existing["draft"]:
         if not existing["prerelease"] or not expected_assets.issubset({a["name"] for a in existing["assets"]}):
             raise ValueError("Published release is not a complete beta release")
@@ -162,7 +169,7 @@ def publish():
             f"camereon {metadata['version']} のベータ版です。\n\n"
             "撮影後に写真を読み込めない問題への互換性修正と、AIモデルの一時停止・途中再開を追加しました。画面を移動しても取得は継続し、アプリ終了後も保存済みの続きから再開できます。\n\n"
             "撮影した写真をドラッグして複数箇所を黒塗りし、保存前に確認してギャラリーへ JPEG として保存できます。取り消し・全リセットにも対応しています。\n\n起動画面の「サンプルで試す」から、架空の配送ラベルで黒塗り・保存を体験できます。カメラの許可や AI モデルは不要です。\n\n"
-            f"Android 11 以上の ARM64 端末で `{APK_NAME}` を開いてインストールしてください。\n"
+            f"Android 11 以上の ARM64 端末で `{name}` を開いてインストールしてください。\n"
             "任意の追加機能として、Gemma 4 による端末内の写真の内容説明を利用できます。初回の AI 利用には約2.6GBのモデル取得と作業領域が必要です。写真は端末内で処理します。自動検出・自動黒塗りには対応していません。\n"
             "以後のベータ版は同じ署名鍵で更新できます。\n\n"
             f"ソース: `{commit}`\n"
