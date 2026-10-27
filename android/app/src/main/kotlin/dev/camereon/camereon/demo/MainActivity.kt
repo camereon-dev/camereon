@@ -18,6 +18,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var textRegionChannel: TextRegionChannel? = null
     private val savePermissionRequestCode = 731
     private var saveInProgress = false
     private var pendingSaveBytes: ByteArray? = null
@@ -25,6 +26,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        textRegionChannel = TextRegionChannel(this, flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/analysis_device")
             .setMethodCallHandler { call, result ->
                 if (call.method == "availableStorageBytes") {
@@ -104,6 +106,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        textRegionChannel?.close()
+        textRegionChannel = null
         pendingSaveResult?.let { finishSave(it, "failed") }
         pendingSaveResult = null
         pendingSaveBytes = null
