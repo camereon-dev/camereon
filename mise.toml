@@ -27,3 +27,11 @@ run = "bash scripts/build-android-detectors.sh"
 [tasks.detector-install]
 description = "検出器プレビューAPKをUSB接続端末へインストールする"
 run = "bash scripts/install-android-detectors.sh"
+
+[tasks.detector-debug-apk]
+description = "デバッガー接続可能な検出器Debug APKを作る"
+run = "bash scripts/build-android-detectors.sh --debug"
+
+[tasks.detector-debug-install]
+description = "検出器Debug APKをビルドして接続端末へインストールする"
+run = "bash scripts/install-android-detectors.sh --debug"

@@ -24,6 +24,20 @@ mise run detector-install -- <device-id>
 
 ビルド済みAPKは `adb -s <device-id> install -r dist/camereon-detector-arm64.apk` でも導入できる。インストール先端末の承認表示が出た場合は端末で操作する。
 
+### Debug版
+
+```sh
+mise run detector-debug-install -- <device-id>
+# 起動中のDebug版へ接続（ブレークポイント・ホットリロード）
+mise exec -- flutter attach -d <device-id> --app-id dev.camereon.camereon.demo.detector_preview
+```
+
+Debug版は毎回ビルドして上書きする。生成物は `dist/camereon-detector-debug-arm64.apk` とチェックサム。Release版と同じプレビューID・ローカル鍵なので、アプリ内データを保持して切り替えられる。`android:debuggable=true` のAPKを生成し、Release APKとは別名で保持する。
+
+VS Codeでは `camereon detector (debug)` を選んで起動できる。既に起動している場合は `Attach to camereon detector` を選ぶ。Kotlin側はAndroid Studioの「Attach debugger to Android process」から `dev.camereon.camereon.demo.detector_preview` へ接続する。
+
+2026-10-27、Debug APKをARM64エミュレーターへ上書きして起動し、APKとインストール先のDEBUGGABLEフラグ、`run-as`、JDWP、FlutterのVM接続とホットリロード成功を確認した。CLIは接続解除し、アプリを起動したまま保持した。Debug APKは213,053,148 bytes。詳細は[Debug導入の確認記録](evaluation-evidence/2026-10-27-detectors/android-debug-deployment.json)に残す。
+
 ## 使い方
 
 1. 起動画面で撮影するか「写真を選ぶ」で画像を開く。カメラの許可を与えなくても写真選択・サンプル編集は利用できる。
