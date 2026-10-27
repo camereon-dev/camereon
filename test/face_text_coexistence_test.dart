@@ -45,10 +45,30 @@ void main() {
       await text.tap(tester, '人物候補 1');
       await text.tap(tester, '顔 1：適用');
       await text.tap(tester, '文字の候補を探す');
+      expect(
+        tester
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '文字候補 2'))
+            .selected,
+        isFalse,
+        reason:
+            'A selected person must not preselect text at the same coordinates',
+      );
       await text.tap(tester, '文字候補 2');
       expect(editor.painter(tester).regions, [manual, shared]);
       await text.tap(tester, '顔 1：解除');
       await text.tap(tester, '人物候補 1');
+      expect(
+        tester
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '人物候補 1'))
+            .selected,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '文字候補 2'))
+            .selected,
+        isTrue,
+      );
       expect(editor.painter(tester).regions, [manual, shared]);
       await text.tap(tester, '文字候補 2');
       expect(editor.painter(tester).regions, [manual]);

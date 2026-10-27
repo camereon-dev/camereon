@@ -62,7 +62,12 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   bool _detecting = false;
   String? _detectionMessage;
   int _detectionEpoch = 0;
-  final Set<HideRegion> _selectedCandidateRegions = {};
+  // Selection belongs to a candidate, not its geometry. Person/text candidates
+  // can share a rectangle and must still toggle independently.
+  final Set<RegionCandidate> _selectedCandidates = {};
+  Set<HideRegion> get _selectedCandidateRegions => {
+    for (final candidate in _selectedCandidates) candidate.region,
+  };
   List<HideRegion> get _redactions =>
       <HideRegion>{..._regions, ..._selectedCandidateRegions}.toList();
   SourcePhoto? _source;
@@ -214,7 +219,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         _candidates = [
           for (final candidate in previous)
             if (!scannedKinds.contains(candidate.kind) ||
-                _selectedCandidateRegions.contains(candidate.region) ||
+                _selectedCandidates.contains(candidate) ||
                 result.candidates.any((next) => same(candidate, next)))
               candidate,
           for (final candidate in result.candidates)
@@ -243,19 +248,15 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   void _toggleCandidate(RegionCandidate candidate) {
     if (_busy) return;
     setState(() {
-      if (!_selectedCandidateRegions.remove(candidate.region)) {
-        _selectedCandidateRegions.add(candidate.region);
+      if (!_selectedCandidates.remove(candidate)) {
+        _selectedCandidates.add(candidate);
       }
     });
   }
 
   void _applyAllCandidates() {
     if (_busy) return;
-    setState(
-      () => _selectedCandidateRegions.addAll(
-        _candidates.map((candidate) => candidate.region),
-      ),
-    );
+    setState(() => _selectedCandidates.addAll(_candidates));
   }
 
   Widget _candidateControls() => Column(
@@ -295,12 +296,10 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                   FilterChip(
                     key: ValueKey('candidate-toggle-$i'),
                     label: Text('${_candidates[i].kind.label}候補 ${i + 1}'),
-                    selected: _selectedCandidateRegions.contains(
-                      _candidates[i].region,
-                    ),
+                    selected: _selectedCandidates.contains(_candidates[i]),
                     showCheckmark: false,
                     avatar: Icon(
-                      _selectedCandidateRegions.contains(_candidates[i].region)
+                      _selectedCandidates.contains(_candidates[i])
                           ? Icons.check_circle
                           : Icons.radio_button_unchecked,
                       size: 18,
@@ -315,10 +314,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         ),
         TextButton(
           onPressed:
-              _busy ||
-                  _candidates.every(
-                    (c) => _selectedCandidateRegions.contains(c.region),
-                  )
+              _busy || _candidates.every((c) => _selectedCandidates.contains(c))
               ? null
               : _applyAllCandidates,
           child: const Text('候補をすべて適用'),
@@ -473,7 +469,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                                       (_redactions.isEmpty && !_edits.canUndo)
                                   ? null
                                   : () => setState(() {
-                                      _selectedCandidateRegions.clear();
+                                      _selectedCandidates.clear();
                                       _edits.reset();
                                       _drag = null;
                                       _start = null;
