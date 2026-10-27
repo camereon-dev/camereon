@@ -33,6 +33,19 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/app_info")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "version") {
+                    @Suppress("DEPRECATION")
+                    val info = packageManager.getPackageInfo(packageName, 0)
+                    result.success(mapOf(
+                        "versionName" to (info.versionName ?: ""),
+                        "versionCode" to info.longVersionCode.toString(),
+                    ))
+                } else {
+                    result.notImplemented()
+                }
+            }
         // カメラ権限を「今後表示しない」で拒否された場合に、アプリの設定画面へ案内する
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/app_settings")
             .setMethodCallHandler { call, result ->

@@ -22,6 +22,18 @@ Release 公開 job だけが `contents: write` を持つ。ビルド job はリ�
 - Android の `versionCode` も同じ実行番号を使い、後のベータ版へ更新できるようにする。
 - タグは、その APK を作ったコミットを指す。
 
+カメラ画面に、インストール済みAPKのバージョン名とビルド番号を表示する。
+問題報告時には、この表示を添える。
+
+### モデルを残して更新する
+
+新しいベータAPKは、既存のベータ版をアンインストールせずに開いて上書き更新する。
+同じアプリID・同じ署名鍵での更新なら、取得済みモデルと途中ダウンロードを引き継ぐ。
+モデルはアプリの内部領域 `files/ai/models/` に保存する。
+アンインストールやAndroid設定でのアプリのデータ消去を行うと、この領域も消えるため、
+約2.6GBの再ダウンロードが必要になる。
+[Androidのアプリ専用領域の仕様](https://developer.android.com/training/data-storage/app-specific)も参照。
+
 公開先: [GitHub Releases](https://github.com/camereon-dev/camereon/releases)
 
 公開するファイルは `camereon-beta-arm64.apk` と `camereon-beta-arm64.apk.sha256`。
