@@ -155,6 +155,23 @@ void main() {
     expect(find.text('互換モードで解析しました。'), findsOneWidget);
   });
 
+  testWidgets('failure reports a fixed stage and backend without SDK details', (
+    tester,
+  ) async {
+    final analyzer = Analyzer()
+      ..failure = const AnalysisFailure(
+        AnalysisFailureKind.inference,
+        stage: AnalysisFailureStage.loadingModel,
+      );
+    await open(tester, Models(), analyzer);
+    await tester.tap(find.text('写真を解析する'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('確認コード: loadingModel/compatible'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('missing model failure does not retry inference', (tester) async {
     final analyzer = Analyzer()
       ..failure = const AnalysisFailure(AnalysisFailureKind.missingModel);

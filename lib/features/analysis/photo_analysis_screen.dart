@@ -67,7 +67,7 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
   String _message(Object error) {
     if (error is AnalysisCancelled) return '中止しました。';
     if (error is! AnalysisFailure) return '処理を完了できませんでした。もう一度お試しください。';
-    return switch (error.kind) {
+    final message = switch (error.kind) {
       AnalysisFailureKind.unsupported =>
         'この端末は写真の解析に対応していません。Android 11 以上・ARM64 の端末が必要です。',
       AnalysisFailureKind.busy => '前の処理を終了しています。少し待ってからお試しください。',
@@ -81,6 +81,9 @@ class _PhotoAnalysisScreenState extends State<PhotoAnalysisScreen> {
             ? '互換モードでも解析を完了できませんでした。ほかのアプリを閉じて、もう一度お試しください。'
             : '解析を完了できませんでした。ほかのアプリを閉じるか、互換モードでお試しください。',
     };
+    return error.stage == null
+        ? message
+        : '$message\n確認コード: ${error.stage!.name}/${_backend.name}';
   }
 
   void _downloadChanged() {
