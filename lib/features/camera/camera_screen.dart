@@ -4,12 +4,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../analysis/photo_analysis_entry.dart';
 import 'captured_photo_screen.dart';
 
 enum _CameraIssue { permissionDenied, noCamera, failed }
 
 const _appSettings = MethodChannel('dev.camereon/app_settings');
+const _photoPicker = MethodChannel('dev.camereon/photo_picker');
 
 /// 起動直後に表示するカメラ画面。開いたらすぐにプレビューを始めて撮影できる。
 class CameraScreen extends StatefulWidget {
@@ -200,12 +200,26 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
+  Future<void> _openPhoto() async {
+    if (_isCapturing) return;
+    setState(() => _isCapturing = true);
+    try {
+      final bytes = await _photoPicker.invokeMethod<Uint8List>('pick');
+      if (bytes == null || !mounted) return;
+      await _editPhoto(XFile.fromData(bytes, name: 'selected_photo'));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('写真を開けませんでした。別の写真でお試しください。')),
+      );
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
+    }
+  }
+
   Future<void> _editPhoto(XFile photo) => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
-      builder: (context) => PhotoAnalysisEntry(
-        loadImage: photo.readAsBytes,
-        child: CapturedPhotoScreen(photo: photo),
-      ),
+      builder: (context) => CapturedPhotoScreen(photo: photo),
     ),
   );
 
@@ -236,11 +250,22 @@ class _CameraScreenState extends State<CameraScreen>
               ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: TextButton.icon(
-                  key: const ValueKey('open-sample'),
-                  onPressed: _isCapturing ? null : _openSample,
-                  icon: const Icon(Icons.image_outlined),
-                  label: const Text('サンプルで試す'),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      key: const ValueKey('pick-photo'),
+                      onPressed: _isCapturing ? null : _openPhoto,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('写真を選ぶ'),
+                    ),
+                    TextButton.icon(
+                      key: const ValueKey('open-sample'),
+                      onPressed: _isCapturing ? null : _openSample,
+                      icon: const Icon(Icons.image_outlined),
+                      label: const Text('サンプルで試す'),
+                    ),
+                  ],
                 ),
               ),
             ],

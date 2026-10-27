@@ -90,11 +90,38 @@ class FakeCameraPlatform extends CameraPlatform {
 
 void main() {
   late FakeCameraPlatform camera;
+  const picker = MethodChannel('dev.camereon/photo_picker');
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(picker, null);
+  });
 
   void useCamera(FakeCameraPlatform fake) {
     camera = fake;
     CameraPlatform.instance = fake;
   }
+
+  testWidgets('写真の選択はカメラ権限なしでも開き、キャンセル後に再試行できる', (tester) async {
+    useCamera(
+      FakeCameraPlatform(
+        error: CameraException('CameraAccessDenied', 'denied'),
+      ),
+    );
+    var calls = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(picker, (call) async {
+          calls++;
+          return null;
+        });
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('写真を選ぶ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('写真を選ぶ'));
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.text('撮り直す'), findsNothing);
+  });
 
   testWidgets('起動するとすぐに背面カメラのプレビューを表示する', (tester) async {
     useCamera(FakeCameraPlatform());
