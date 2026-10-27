@@ -14,8 +14,12 @@ run = [
 
 [tasks.device-test]
 description = "接続中の Android 端末・エミュレーターで起動・編集・保存テスト"
-run = "flutter test integration_test/app_test.dart integration_test/gallery_save_test.dart integration_test/photo_edit_save_test.dart"
+run = "flutter test integration_test/app_test.dart integration_test/gallery_save_test.dart integration_test/photo_edit_save_test.dart --concurrency=1"
 
 [tasks.apk]
 description = "デモ APK を dist/ に作る"
 run = "bash scripts/build-android-demo.sh"
+
+[tasks.face-test]
+description = "同意済み顔画像を指定して同梱ML Kitを検証（docs/face-detection.md参照）"
+run = "flutter test integration_test/face_detection_test.dart"

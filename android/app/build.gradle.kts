@@ -93,3 +93,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Bundled model: first use never waits for a model download.
+dependencies {
+    implementation("com.google.mlkit:face-detection:16.1.7")
+}

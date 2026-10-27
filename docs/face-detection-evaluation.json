@@ -1,0 +1,160 @@
+{
+  "firstUiDetection": true,
+  "galleryReadback": {
+    "sha256": "641acf590915697ecb1507af6f776a992cfe64c9c36a4e34623b7479b94047c2",
+    "width": 820,
+    "height": 1024,
+    "region": [
+      284,
+      47,
+      524,
+      367
+    ],
+    "mediaStoreUri": "content://media/external/images/media/26",
+    "mediaStoreReadbackSha256": "641acf590915697ecb1507af6f776a992cfe64c9c36a4e34623b7479b94047c2"
+  },
+  "fixtures": {
+    "frontal": {
+      "width": 820,
+      "height": 1024,
+      "expectedVisibleFaces": 1,
+      "count": 1,
+      "regions": [
+        [
+          282,
+          49,
+          522,
+          366
+        ]
+      ]
+    },
+    "no_face": {
+      "width": 640,
+      "height": 480,
+      "expectedVisibleFaces": 0,
+      "count": 0,
+      "regions": []
+    },
+    "small_portrait_256": {
+      "width": 1600,
+      "height": 1200,
+      "expectedVisibleFaces": 1,
+      "count": 1,
+      "regions": [
+        [
+          671,
+          413,
+          730,
+          492
+        ]
+      ]
+    },
+    "small_portrait_128": {
+      "width": 1600,
+      "height": 1200,
+      "expectedVisibleFaces": 1,
+      "count": 1,
+      "regions": [
+        [
+          635,
+          405,
+          666,
+          446
+        ]
+      ]
+    },
+    "two_people": {
+      "width": 1280,
+      "height": 853,
+      "expectedVisibleFaces": 2,
+      "count": 3,
+      "regions": [
+        [
+          93,
+          0,
+          612,
+          626
+        ],
+        [
+          601,
+          60,
+          1063,
+          668
+        ],
+        [
+          205,
+          123,
+          633,
+          565
+        ]
+      ]
+    },
+    "two_people_resized": {
+      "width": 640,
+      "height": 427,
+      "expectedVisibleFaces": 2,
+      "count": 2,
+      "regions": [
+        [
+          299,
+          32,
+          535,
+          342
+        ],
+        [
+          45,
+          0,
+          309,
+          315
+        ]
+      ]
+    },
+    "oblique_not_full_profile": {
+      "width": 512,
+      "height": 512,
+      "expectedVisibleFaces": 1,
+      "count": 1,
+      "regions": [
+        [
+          180,
+          148,
+          375,
+          409
+        ]
+      ]
+    }
+  },
+  "normalizedExifRotation": true,
+  "environment": {
+    "avd": "Pixel_10a",
+    "androidRelease": "17",
+    "api": 37,
+    "abi": "arm64-v8a",
+    "systemImage": "android-37.2/google_apis_playstore_ps16k",
+    "emulatorVersion": "37.1.11",
+    "appId": "dev.camereon.camereon.demo.ai_preview",
+    "baseCommit": "ffd16c7",
+    "date": "2026-10-27",
+    "airplaneMode": 1,
+    "wifi": 0,
+    "mobileData": 0,
+    "defaultNetwork": "none",
+    "physicalDevice": false
+  },
+  "inputFiles": {
+    "frontal": {
+      "sha256": "a6f11efaa834706db23f275b6115058fa87fc7f14362681e6abe14e82749de3e"
+    },
+    "two_people": {
+      "sha256": "d584853ffb096fe584a099e6a0ea33150a37c96d812574c85c465512d9b0d2ac"
+    },
+    "oblique_not_full_profile": {
+      "sha256": "7de7ed51a1594fff247f4cae2301eceacf5313d6011e37b4a4c8733f7bb72c07"
+    }
+  },
+  "checks": {
+    "faceIntegration": "passed",
+    "formatAnalyzeAndUnitWidgetTests": "passed: 104 tests",
+    "existingDeviceIntegration": "passed: 6 tests; concurrency=1"
+  }
+}

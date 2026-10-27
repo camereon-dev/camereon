@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -5,6 +6,11 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/analysis/face_detection.dart';
+import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
+import '../analysis/face_detection_controller.dart';
+import '../analysis/photo_analysis_entry.dart';
+import 'photo_edit_state.dart';
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
 import '../../core/photo/flutter_photo_processor.dart';
@@ -20,23 +26,31 @@ class CapturedPhotoScreen extends StatefulWidget {
     required this.photo,
     this.processor,
     this.saver,
+    this.faceDetector,
   });
 
   final XFile photo;
   final PhotoProcessor? processor;
   final PhotoSaver? saver;
+  final PhotoFaceDetector? faceDetector;
 
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
 
-class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
+class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
+    with WidgetsBindingObserver {
   late final PhotoProcessor _processor =
       widget.processor ?? FlutterPhotoProcessor();
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
   SourcePhoto? _source;
   RedactedJpeg? _preview;
-  final List<HideRegion> _regions = [];
+  final _edits = PhotoEditState();
+  List<HideRegion> get _regions => _edits.regions;
+  late final _faces = FaceDetectionController(
+    widget.faceDetector ?? MlKitFaceDetector(),
+  );
+  bool _covered = false;
   Offset? _start;
   HideRegion? _drag;
   bool _busy = true;
@@ -51,11 +65,32 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _faces.addListener(_faceChanged);
     _load();
+  }
+
+  void _faceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _covered = AnalysisEntryVisibility.coveredOf(context);
+    if (_covered) _faces.cancel();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _faces.cancel();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _faces.removeListener(_faceChanged);
+    _faces.dispose();
     if (widget.photo.path.isNotEmpty) {
       File(widget.photo.path).delete().ignore();
     }
@@ -73,6 +108,14 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       );
       if (!mounted) return;
       setState(() => _source = source);
+      if (!_covered &&
+          (WidgetsBinding.instance.lifecycleState == null ||
+              WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.resumed)) {
+        unawaited(_faces.detect(source));
+      } else {
+        _faces.markDeferred();
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -110,6 +153,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       );
       if (discard != true || !mounted) return;
     }
+    _faces.cancel();
     setState(() => _allowPop = true);
     await Future<void>.delayed(Duration.zero);
     if (mounted) Navigator.of(context).pop();
@@ -118,6 +162,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   Future<void> _prepare() async {
     final source = _source;
     if (_busy || source == null) return;
+    _faces.cancel();
     setState(() {
       _busy = true;
       _processingFailed = false;
@@ -186,7 +231,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
                     : _editor(source),
               ),
               Flexible(
-                flex: 0,
+                flex: 1,
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -237,24 +282,26 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
                           '画像上をドラッグして黒塗り範囲を選択してください',
                           textAlign: TextAlign.center,
                         ),
+                        if (source != null) _faceControls(source),
                         Wrap(
                           alignment: WrapAlignment.center,
                           children: [
                             TextButton(
-                              onPressed: _busy || _regions.isEmpty
+                              onPressed: _busy || !_edits.canUndo
                                   ? null
                                   : () => setState(() {
-                                      _regions.removeLast();
+                                      _edits.undo();
                                       _drag = null;
                                       _start = null;
                                     }),
                               child: const Text('取り消す'),
                             ),
                             TextButton(
-                              onPressed: _busy || _regions.isEmpty
+                              onPressed:
+                                  _busy || (_regions.isEmpty && !_edits.canUndo)
                                   ? null
                                   : () => setState(() {
-                                      _regions.clear();
+                                      _edits.reset();
                                       _drag = null;
                                       _start = null;
                                     }),
@@ -286,6 +333,51 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       ),
     );
   }
+
+  Widget _faceControls(SourcePhoto source) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(switch (_faces.status) {
+        FaceDetectionStatus.idle => '顔検出を準備しています',
+        FaceDetectionStatus.detecting => '顔を検出中（手動編集・保存できます）',
+        FaceDetectionStatus.ready =>
+          _faces.candidates.isEmpty
+              ? '顔の候補は見つかりませんでした'
+              : '顔の候補 ${_faces.candidates.length}件',
+        FaceDetectionStatus.failed => '顔検出を利用できませんでした。手動編集できます。',
+        FaceDetectionStatus.cancelled => '顔検出を中止しました',
+      }),
+      const Text('検出で安全を完全に保証できません。隠し忘れを確認してください。'),
+      if (_faces.canRetry)
+        TextButton(
+          onPressed: _busy || _covered ? null : () => _faces.detect(source),
+          child: const Text('顔検出を再試行'),
+        ),
+      if (_faces.candidates.isNotEmpty)
+        SizedBox(
+          height: 96,
+          child: ListView.builder(
+            itemCount: _faces.candidates.length,
+            itemBuilder: (context, index) {
+              final candidate = _faces.candidates[index];
+              final applied = _edits.isApplied(candidate.id);
+              return TextButton(
+                key: ValueKey('face-${candidate.id}'),
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _pointer = null;
+                        _drag = null;
+                        _start = null;
+                        _edits.toggle(candidate);
+                      }),
+                child: Text('顔 ${index + 1}：${applied ? '解除' : '適用'}'),
+              );
+            },
+          ),
+        ),
+    ],
+  );
 
   Future<void> _openSettings() async {
     try {
@@ -337,7 +429,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
         onPointerUp: (event) {
           if (_pointer != event.pointer) return;
           setState(() {
-            if (_drag != null && !_busy) _regions.add(_drag!);
+            if (_drag != null && !_busy) _edits.addManual(_drag!);
             _pointer = null;
             _drag = null;
             _start = null;
@@ -368,6 +460,22 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
                 child: CustomPaint(
                   painter: SelectionPainter(
                     regions: List.unmodifiable([..._regions, ?_drag]),
+                    imageWidth: source.width,
+                    imageHeight: source.height,
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fromRect(
+              rect: rect,
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: FaceCandidatePainter(
+                    candidates: _faces.candidates,
+                    applied: {
+                      for (final c in _faces.candidates)
+                        if (_edits.isApplied(c.id)) c.id,
+                    },
                     imageWidth: source.width,
                     imageHeight: source.height,
                   ),
@@ -408,4 +516,61 @@ class SelectionPainter extends CustomPainter {
       oldDelegate.imageWidth != imageWidth ||
       oldDelegate.imageHeight != imageHeight ||
       oldDelegate.regions != regions;
+}
+
+class FaceCandidatePainter extends CustomPainter {
+  FaceCandidatePainter({
+    required this.candidates,
+    required this.applied,
+    required this.imageWidth,
+    required this.imageHeight,
+  });
+  final List<FaceCandidate> candidates;
+  final Set<String> applied;
+  final int imageWidth;
+  final int imageHeight;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final sx = size.width / imageWidth;
+    final sy = size.height / imageHeight;
+    for (var i = 0; i < candidates.length; i++) {
+      final candidate = candidates[i];
+      final r = candidate.region;
+      final rect = Rect.fromLTRB(
+        r.left * sx,
+        r.top * sy,
+        r.right * sx,
+        r.bottom * sy,
+      );
+      final color = applied.contains(candidate.id)
+          ? Colors.greenAccent
+          : Colors.amber;
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+      final label = TextPainter(
+        text: TextSpan(
+          text: '${i + 1}',
+          style: TextStyle(
+            color: color,
+            backgroundColor: Colors.black,
+            fontSize: 16,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      label.paint(canvas, rect.topLeft);
+      label.dispose();
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant FaceCandidatePainter oldDelegate) => true;
 }

@@ -214,7 +214,11 @@ void main() {
       await tester.tap(find.text('解析用データをダウンロード'));
       await tester.pump();
       expect(services.downloads.active, isTrue);
-      await tester.pageBack();
+      await tester.runAsync(() async {
+        await tester.pageBack();
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
       await tester.pumpAndSettle();
       expect(models.cancellations, 0);
       expect(services.downloads.active, isTrue);
