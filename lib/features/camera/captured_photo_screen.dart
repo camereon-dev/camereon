@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -5,6 +6,11 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/analysis/face_detection.dart';
+import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
+import '../analysis/face_detection_controller.dart';
+import '../analysis/photo_analysis_entry.dart';
+import 'photo_edit_state.dart';
 import '../../core/detection/android_text_region_detector.dart';
 import '../../core/detection/android_object_region_detector.dart';
 import '../../core/detection/region_detector.dart';
@@ -25,6 +31,7 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.onSourceLoaded,
     this.processor,
     this.saver,
+    this.faceDetector,
     this.detector,
     this.objectDetector,
   });
@@ -33,6 +40,7 @@ class CapturedPhotoScreen extends StatefulWidget {
   final ValueChanged<SourcePhoto>? onSourceLoaded;
   final PhotoProcessor? processor;
   final PhotoSaver? saver;
+  final PhotoFaceDetector? faceDetector;
   final RegionDetector? detector;
   final RegionDetector? objectDetector;
 
@@ -40,7 +48,8 @@ class CapturedPhotoScreen extends StatefulWidget {
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
 
-class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
+class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
+    with WidgetsBindingObserver {
   late final PhotoProcessor _processor =
       widget.processor ?? FlutterPhotoProcessor();
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
@@ -53,12 +62,22 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   bool _detecting = false;
   String? _detectionMessage;
   int _detectionEpoch = 0;
-  final Set<HideRegion> _selectedCandidateRegions = {};
+  // Selection belongs to a candidate, not its geometry. Person/text candidates
+  // can share a rectangle and must still toggle independently.
+  final Set<RegionCandidate> _selectedCandidates = {};
+  Set<HideRegion> get _selectedCandidateRegions => {
+    for (final candidate in _selectedCandidates) candidate.region,
+  };
   List<HideRegion> get _redactions =>
       <HideRegion>{..._regions, ..._selectedCandidateRegions}.toList();
   SourcePhoto? _source;
   RedactedJpeg? _preview;
-  final List<HideRegion> _regions = [];
+  final _edits = PhotoEditState();
+  List<HideRegion> get _regions => _edits.regions;
+  late final _faces = FaceDetectionController(
+    widget.faceDetector ?? MlKitFaceDetector(),
+  );
+  bool _covered = false;
   Offset? _start;
   HideRegion? _drag;
   bool _busy = true;
@@ -73,11 +92,32 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _faces.addListener(_faceChanged);
     _load();
+  }
+
+  void _faceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _covered = AnalysisEntryVisibility.coveredOf(context);
+    if (_covered) _faces.cancel();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _faces.cancel();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _faces.removeListener(_faceChanged);
+    _faces.dispose();
     _detectionEpoch++;
     if (widget.photo.path.isNotEmpty) {
       File(widget.photo.path).delete().ignore();
@@ -96,6 +136,14 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       );
       if (!mounted) return;
       setState(() => _source = source);
+      if (!_covered &&
+          (WidgetsBinding.instance.lifecycleState == null ||
+              WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.resumed)) {
+        unawaited(_faces.detect(source));
+      } else {
+        _faces.markDeferred();
+      }
       widget.onSourceLoaded?.call(source);
     } catch (error) {
       if (mounted) {
@@ -134,6 +182,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       );
       if (discard != true || !mounted) return;
     }
+    _faces.cancel();
     setState(() => _allowPop = true);
     await Future<void>.delayed(Duration.zero);
     if (mounted) Navigator.of(context).pop();
@@ -170,7 +219,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
         _candidates = [
           for (final candidate in previous)
             if (!scannedKinds.contains(candidate.kind) ||
-                _selectedCandidateRegions.contains(candidate.region) ||
+                _selectedCandidates.contains(candidate) ||
                 result.candidates.any((next) => same(candidate, next)))
               candidate,
           for (final candidate in result.candidates)
@@ -199,19 +248,15 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   void _toggleCandidate(RegionCandidate candidate) {
     if (_busy) return;
     setState(() {
-      if (!_selectedCandidateRegions.remove(candidate.region)) {
-        _selectedCandidateRegions.add(candidate.region);
+      if (!_selectedCandidates.remove(candidate)) {
+        _selectedCandidates.add(candidate);
       }
     });
   }
 
   void _applyAllCandidates() {
     if (_busy) return;
-    setState(
-      () => _selectedCandidateRegions.addAll(
-        _candidates.map((candidate) => candidate.region),
-      ),
-    );
+    setState(() => _selectedCandidates.addAll(_candidates));
   }
 
   Widget _candidateControls() => Column(
@@ -251,12 +296,10 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
                   FilterChip(
                     key: ValueKey('candidate-toggle-$i'),
                     label: Text('${_candidates[i].kind.label}候補 ${i + 1}'),
-                    selected: _selectedCandidateRegions.contains(
-                      _candidates[i].region,
-                    ),
+                    selected: _selectedCandidates.contains(_candidates[i]),
                     showCheckmark: false,
                     avatar: Icon(
-                      _selectedCandidateRegions.contains(_candidates[i].region)
+                      _selectedCandidates.contains(_candidates[i])
                           ? Icons.check_circle
                           : Icons.radio_button_unchecked,
                       size: 18,
@@ -271,10 +314,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
         ),
         TextButton(
           onPressed:
-              _busy ||
-                  _candidates.every(
-                    (c) => _selectedCandidateRegions.contains(c.region),
-                  )
+              _busy || _candidates.every((c) => _selectedCandidates.contains(c))
               ? null
               : _applyAllCandidates,
           child: const Text('候補をすべて適用'),
@@ -286,6 +326,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
   Future<void> _prepare() async {
     final source = _source;
     if (_busy || source == null) return;
+    _faces.cancel();
     setState(() {
       _detectionEpoch++;
       _detecting = false;
@@ -356,7 +397,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
                     : _editor(source),
               ),
               Flexible(
-                flex: 0,
+                flex: 1,
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -407,26 +448,29 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
                           '画像上をドラッグして黒塗り範囲を選択してください',
                           textAlign: TextAlign.center,
                         ),
+                        if (source != null) _faceControls(source),
                         _candidateControls(),
                         Wrap(
                           alignment: WrapAlignment.center,
                           children: [
                             TextButton(
-                              onPressed: _busy || _regions.isEmpty
+                              onPressed: _busy || !_edits.canUndo
                                   ? null
                                   : () => setState(() {
-                                      _regions.removeLast();
+                                      _edits.undo();
                                       _drag = null;
                                       _start = null;
                                     }),
                               child: const Text('取り消す'),
                             ),
                             TextButton(
-                              onPressed: _busy || _redactions.isEmpty
+                              onPressed:
+                                  _busy ||
+                                      (_redactions.isEmpty && !_edits.canUndo)
                                   ? null
                                   : () => setState(() {
-                                      _selectedCandidateRegions.clear();
-                                      _regions.clear();
+                                      _selectedCandidates.clear();
+                                      _edits.reset();
                                       _drag = null;
                                       _start = null;
                                     }),
@@ -458,6 +502,51 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
       ),
     );
   }
+
+  Widget _faceControls(SourcePhoto source) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(switch (_faces.status) {
+        FaceDetectionStatus.idle => '顔検出を準備しています',
+        FaceDetectionStatus.detecting => '顔を検出中（手動編集・保存できます）',
+        FaceDetectionStatus.ready =>
+          _faces.candidates.isEmpty
+              ? '顔の候補は見つかりませんでした'
+              : '顔の候補 ${_faces.candidates.length}件',
+        FaceDetectionStatus.failed => '顔検出を利用できませんでした。手動編集できます。',
+        FaceDetectionStatus.cancelled => '顔検出を中止しました',
+      }),
+      const Text('検出で安全を完全に保証できません。隠し忘れを確認してください。'),
+      if (_faces.canRetry)
+        TextButton(
+          onPressed: _busy || _covered ? null : () => _faces.detect(source),
+          child: const Text('顔検出を再試行'),
+        ),
+      if (_faces.candidates.isNotEmpty)
+        SizedBox(
+          height: 96,
+          child: ListView.builder(
+            itemCount: _faces.candidates.length,
+            itemBuilder: (context, index) {
+              final candidate = _faces.candidates[index];
+              final applied = _edits.isApplied(candidate.id);
+              return TextButton(
+                key: ValueKey('face-${candidate.id}'),
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _pointer = null;
+                        _drag = null;
+                        _start = null;
+                        _edits.toggle(candidate);
+                      }),
+                child: Text('顔 ${index + 1}：${applied ? '解除' : '適用'}'),
+              );
+            },
+          ),
+        ),
+    ],
+  );
 
   Future<void> _openSettings() async {
     try {
@@ -509,7 +598,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
         onPointerUp: (event) {
           if (_pointer != event.pointer) return;
           setState(() {
-            if (_drag != null && !_busy) _regions.add(_drag!);
+            if (_drag != null && !_busy) _edits.addManual(_drag!);
             _pointer = null;
             _drag = null;
             _start = null;
@@ -549,11 +638,29 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen> {
             Positioned.fromRect(
               rect: rect,
               child: IgnorePointer(
-                child: CandidateOverlay(
-                  candidates: _candidates,
-                  selectedRegions: Set.unmodifiable(_selectedCandidateRegions),
-                  imageWidth: source.width,
-                  imageHeight: source.height,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CustomPaint(
+                      painter: FaceCandidatePainter(
+                        candidates: _faces.candidates,
+                        applied: {
+                          for (final c in _faces.candidates)
+                            if (_edits.isApplied(c.id)) c.id,
+                        },
+                        imageWidth: source.width,
+                        imageHeight: source.height,
+                      ),
+                    ),
+                    CandidateOverlay(
+                      candidates: _candidates,
+                      selectedRegions: Set.unmodifiable(
+                        _selectedCandidateRegions,
+                      ),
+                      imageWidth: source.width,
+                      imageHeight: source.height,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -591,4 +698,27 @@ class SelectionPainter extends CustomPainter {
       oldDelegate.imageWidth != imageWidth ||
       oldDelegate.imageHeight != imageHeight ||
       oldDelegate.regions != regions;
+}
+
+/// Faces and other detector candidates share the same drawing/coordinate code.
+/// The prefix keeps face numbering distinct from text/person/screen numbering.
+class FaceCandidatePainter extends CandidatePainter {
+  FaceCandidatePainter({
+    required List<FaceCandidate> candidates,
+    required Set<String> applied,
+    required int imageWidth,
+    required int imageHeight,
+  }) : super(
+         [
+           for (final c in candidates)
+             RegionCandidate(kind: CandidateKind.face, region: c.region),
+         ],
+         imageWidth,
+         imageHeight,
+         {
+           for (final c in candidates)
+             if (applied.contains(c.id)) c.region,
+         },
+         labels: [for (var i = 0; i < candidates.length; i++) '顔${i + 1}'],
+       );
 }

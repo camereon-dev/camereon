@@ -123,6 +123,23 @@ class Processor implements PhotoProcessor {
       throw UnimplementedError();
 }
 
+/// Called inside runAsync: route transitions use pumped time, image decoding
+/// uses engine IO. Require a visible, prepared image before returning.
+Future<void> waitForPreparedAnalysis(WidgetTester tester) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (true) {
+    await tester.pump(const Duration(milliseconds: 16));
+    if (find.bySemanticsLabel('解析する写真').evaluate().isNotEmpty &&
+        find.text('写真と解析用データを確認しています…').evaluate().isEmpty) {
+      return;
+    }
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError('Image preparation did not finish');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 Future<void> open(WidgetTester tester, Models models, Analyzer analyzer) async {
   final bytes = img.encodePng(img.Image(width: 40, height: 30));
   await tester.runAsync(() async {
@@ -134,7 +151,7 @@ Future<void> open(WidgetTester tester, Models models, Analyzer analyzer) async {
         ),
       ),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 80));
+    await waitForPreparedAnalysis(tester);
   });
   await tester.pumpAndSettle();
 }
@@ -235,13 +252,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(PhotoAnalysisScreen), findsNothing);
       processor.failLoad = false;
+      await tester.ensureVisible(find.text('再試行'));
       await tester.tap(find.text('再試行'));
       await tester.pumpAndSettle();
       expect(find.bySemanticsLabel('撮影した写真'), findsOneWidget);
       await tester.runAsync(() async {
         await tester.tap(find.text('端末内で写真を解析'));
-        await tester.pump();
-        await Future<void>.delayed(const Duration(milliseconds: 80));
+        await waitForPreparedAnalysis(tester);
       });
       await tester.pumpAndSettle();
       expect(find.bySemanticsLabel('解析する写真'), findsOneWidget);
@@ -331,8 +348,7 @@ void main() {
       Future<void> enter() async {
         await tester.runAsync(() async {
           await tester.tap(find.text('端末内で写真を解析'));
-          await tester.pump();
-          await Future<void>.delayed(const Duration(milliseconds: 80));
+          await waitForPreparedAnalysis(tester);
         });
         await tester.pump(const Duration(seconds: 1));
       }
@@ -342,7 +358,11 @@ void main() {
       await tester.tap(find.text('解析用データをダウンロード'));
       await tester.pump();
       expect(services.downloads.active, isTrue);
-      await tester.pageBack();
+      await tester.runAsync(() async {
+        await tester.pageBack();
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
       await tester.pumpAndSettle();
       expect(models.cancellations, 0);
       expect(services.downloads.active, isTrue);

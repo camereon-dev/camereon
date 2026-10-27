@@ -108,9 +108,14 @@ void main() {
       final processor = existing.FakeProcessor(200, 100);
       await open(tester, detector, processor);
       await tap(tester, '文字の候補を探す');
+      // Compare positions within the row: scrolling the combined face/text
+      // controls may legitimately move the entire row on screen.
       List<Offset> positions() => [
         for (var i = 0; i < 4; i++)
-          tester.getCenter(find.byKey(ValueKey('candidate-toggle-$i'))),
+          tester.getCenter(find.byKey(ValueKey('candidate-toggle-$i'))) -
+              tester.getTopLeft(
+                find.byKey(const ValueKey('candidate-toggle-0')),
+              ),
       ];
       List<bool> selected() => tester
           .widgetList<FilterChip>(find.byType(FilterChip))

@@ -103,7 +103,9 @@ flutter {
     source = "../.."
 }
 
-// Detection model only: Apache-2.0 PP-OCRv5 + MIT ONNX Runtime.
+// Both detection engines bundle their models for offline use.
 dependencies {
+    implementation("com.google.mlkit:face-detection:16.1.7")
+    // Detection model only: Apache-2.0 PP-OCRv5 + MIT ONNX Runtime.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
 }

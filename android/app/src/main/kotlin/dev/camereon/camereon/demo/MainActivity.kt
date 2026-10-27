@@ -18,6 +18,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var faces: MlKitFaceDetectionHandler? = null
     private var textRegionChannel: TextRegionChannel? = null
     private var objectRegionChannel: ObjectRegionChannel? = null
     private val photoPickerRequestCode = 732
@@ -29,6 +30,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        faces = MlKitFaceDetectionHandler(flutterEngine.dartExecutor.binaryMessenger)
         textRegionChannel = TextRegionChannel(this, flutterEngine)
         objectRegionChannel = ObjectRegionChannel(this, flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/photo_picker")
@@ -183,6 +185,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        faces?.close()
+        faces = null
         textRegionChannel?.close()
         textRegionChannel = null
         objectRegionChannel?.close()
