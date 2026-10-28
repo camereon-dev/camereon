@@ -137,7 +137,6 @@ void main() {
           MaterialApp(home: CapturedPhotoScreen(photo: XFile(temp.path))),
         );
         await tester.pumpAndSettle();
-        await tap(tester, '人物・画面の候補を探す');
         await tap(tester, '候補をすべて適用');
         await tap(tester, '保存前に確認');
         await tap(tester, '写真に保存');

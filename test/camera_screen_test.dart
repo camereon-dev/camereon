@@ -220,7 +220,10 @@ void main() {
           () => Future<void>.delayed(const Duration(milliseconds: 50)),
         );
         await tester.pump(const Duration(milliseconds: 50));
-        if (find.bySemanticsLabel('撮影した写真').evaluate().isNotEmpty) break;
+        if (find.bySemanticsLabel('撮影した写真').evaluate().isNotEmpty &&
+            find.byType(LinearProgressIndicator).evaluate().isEmpty) {
+          break;
+        }
       }
       await tester.pumpAndSettle();
 
@@ -231,6 +234,7 @@ void main() {
       await tester.dragFrom(rect.center, const Offset(30, 30));
       await tester.pump();
       expect(find.text('1箇所の領域を選択中'), findsOneWidget);
+      await tester.ensureVisible(find.text('取り消す'));
       await tester.tap(find.text('取り消す'));
       await tester.pump();
       expect(find.text('0箇所の領域を選択中'), findsOneWidget);

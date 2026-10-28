@@ -30,6 +30,8 @@ void main() {
           processor: processor,
           saver: saver,
           faceDetector: detector,
+          detector: support.NoRegions(),
+          objectDetector: support.NoRegions(),
         ),
       ),
     );
@@ -92,6 +94,8 @@ void main() {
           processor: processor,
           saver: support.FakeSaver(),
           faceDetector: detector,
+          detector: support.NoRegions(),
+          objectDetector: support.NoRegions(),
         ),
       ),
     );

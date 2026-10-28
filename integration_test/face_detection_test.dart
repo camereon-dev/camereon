@@ -20,8 +20,10 @@ import 'package:path_provider/path_provider.dart';
 
 class ObservedDetector implements PhotoFaceDetector {
   final completed = Completer<List<FaceCandidate>>();
+  SourcePhoto? photo;
   @override
   Future<List<FaceCandidate>> detect(SourcePhoto source) async {
+    photo = source;
     try {
       final faces = await MlKitFaceDetector().detect(source);
       completed.complete(faces);
@@ -91,13 +93,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(faces.length, 1);
       expect(find.text('顔 1：適用'), findsOneWidget);
-      await tester.ensureVisible(find.text('顔 1：適用'));
-      await tester.tap(find.text('顔 1：適用'));
+      await tester.ensureVisible(find.text('顔だけ'));
+      await tester.tap(find.text('顔だけ'));
+      await tester.pumpAndSettle();
+      expect(find.byType(FilterChip), findsNothing);
+      final imageRect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      final center = faces.single.region.toRect().center;
+      final tap =
+          imageRect.topLeft +
+          Offset(
+            center.dx / observed.photo!.width * imageRect.width,
+            center.dy / observed.photo!.height * imageRect.height,
+          );
+      await tester.tapAt(tap);
       await tester.pumpAndSettle();
       expect(find.text('顔 1：解除'), findsOneWidget);
-      await tester.tap(find.text('顔 1：解除'));
+      await tester.tapAt(tap);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('顔 1：適用'));
+      expect(find.text('顔 1：適用'), findsOneWidget);
+      await tester.ensureVisible(find.text('顔をすべて適用'));
+      await tester.tap(find.text('顔をすべて適用'));
       await tester.pumpAndSettle();
       // This path is intentionally Android emulator-specific. Only the newly
       // created, app-owned MediaStore image is read; existing photos are untouched.
@@ -138,6 +153,7 @@ void main() {
       }
       expect(savedPixels.getPixel(0, 0).luminance, greaterThan(10));
       report['firstUiDetection'] = true;
+      report['faceOnlyImageTapAndBulkApply'] = true;
       report['galleryReadback'] = {
         'sha256': sha256.convert(persisted).toString(),
         'width': savedPixels.width,

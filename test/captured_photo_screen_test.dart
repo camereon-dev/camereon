@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:camereon/core/analysis/face_detection.dart';
+import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_processor.dart';
@@ -10,6 +12,17 @@ import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+
+class NoRegions implements RegionDetector {
+  @override
+  Future<RegionDetection> detect(SourcePhoto photo) async =>
+      RegionDetection(candidates: const []);
+}
+
+class NoFaces implements PhotoFaceDetector {
+  @override
+  Future<List<FaceCandidate>> detect(SourcePhoto photo) async => const [];
+}
 
 class FakeProcessor implements PhotoProcessor {
   FakeProcessor(int width, int height) {
@@ -86,10 +99,18 @@ Future<void> open(
         photo: XFile.fromData(processor.source.bytes),
         processor: processor,
         saver: saver,
+        detector: NoRegions(),
+        objectDetector: NoRegions(),
+        faceDetector: NoFaces(),
       ),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+Future<void> tapText(WidgetTester tester, String text) async {
+  await tester.ensureVisible(find.text(text));
+  await tester.tap(find.text(text));
 }
 
 Future<void> select(
@@ -127,16 +148,16 @@ void main() {
         end: const Offset(.4, .4),
       );
       expect(painter(tester).regions.length, 2);
-      await tester.tap(find.text('取り消す'));
+      await tapText(tester, '取り消す');
       await tester.pump();
       expect(painter(tester).regions, [first]);
-      await tester.tap(find.text('保存前に確認'));
+      await tapText(tester, '保存前に確認');
       await tester.pumpAndSettle();
       expect(processor.received, [first]);
-      await tester.tap(find.text('編集へ戻る'));
+      await tapText(tester, '編集へ戻る');
       await tester.pumpAndSettle();
       expect(painter(tester).regions, [first]);
-      await tester.tap(find.text('すべてリセット'));
+      await tapText(tester, 'すべてリセット');
       await tester.pump();
       expect(painter(tester).regions, isEmpty);
       expect(tester.takeException(), isNull);
@@ -179,25 +200,25 @@ void main() {
       await open(tester, processor, saver);
       await select(tester);
       final selected = painter(tester).regions.single;
-      await tester.tap(find.text('保存前に確認'));
+      await tapText(tester, '保存前に確認');
       await tester.pumpAndSettle();
       expect(painter(tester).regions, [selected]);
       processor.fail = false;
-      await tester.tap(find.text('保存前に確認'));
+      await tapText(tester, '保存前に確認');
       await tester.pumpAndSettle();
-      await tester.tap(find.text('写真に保存'));
+      await tapText(tester, '写真に保存');
       await tester.pumpAndSettle();
       expect(find.text('写真を保存しました'), findsNothing);
       expect(find.text('設定を開く'), findsOneWidget);
-      await tester.tap(find.text('編集へ戻る'));
+      await tapText(tester, '編集へ戻る');
       await tester.pumpAndSettle();
       expect(painter(tester).regions, [selected]);
-      await tester.tap(find.text('保存前に確認'));
+      await tapText(tester, '保存前に確認');
       await tester.pumpAndSettle();
       saver.pending = Completer<SaveResult>();
-      await tester.tap(find.text('写真に保存'));
+      await tapText(tester, '写真に保存');
       await tester.pump();
-      await tester.tap(find.text('写真に保存'));
+      await tapText(tester, '写真に保存');
       await tester.pump();
       expect(saver.calls, 2);
       expect(find.text('写真を保存しました'), findsNothing);
@@ -214,10 +235,10 @@ void main() {
     await open(tester, FakeProcessor(200, 100), FakeSaver());
     await select(tester);
     await tester.ensureVisible(find.text('撮り直す'));
-    await tester.tap(find.text('撮り直す'));
+    await tapText(tester, '撮り直す');
     await tester.pumpAndSettle();
     expect(find.text('編集を破棄しますか？'), findsOneWidget);
-    await tester.tap(find.text('編集を続ける'));
+    await tapText(tester, '編集を続ける');
     await tester.pumpAndSettle();
     expect(painter(tester).regions.length, 1);
     await tester.binding.handlePopRoute();
@@ -230,7 +251,7 @@ void main() {
     await open(tester, processor, FakeSaver());
     expect(find.text('再試行'), findsOneWidget);
     processor.failLoad = false;
-    await tester.tap(find.text('再試行'));
+    await tapText(tester, '再試行');
     await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('撮影した写真'), findsOneWidget);
   });
@@ -245,7 +266,7 @@ void main() {
     await open(tester, FakeProcessor(100, 200), FakeSaver());
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.text('保存前に確認'));
-    await tester.tap(find.text('保存前に確認'));
+    await tapText(tester, '保存前に確認');
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

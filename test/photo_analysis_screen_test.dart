@@ -15,6 +15,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
+import 'captured_photo_screen_test.dart' as editor;
+
 class Models implements AnalysisModelStore {
   @override
   int get downloadSize => 4;
@@ -234,6 +236,8 @@ void main() {
             editorBuilder: (onSourceLoaded) => CapturedPhotoScreen(
               photo: XFile.fromData(Uint8List.fromList([1, 2, 3])),
               processor: processor,
+              detector: editor.NoRegions(),
+              objectDetector: editor.NoRegions(),
               onSourceLoaded: onSourceLoaded,
             ),
           ),
@@ -413,6 +417,8 @@ void main() {
           services: AnalysisServices(models: Models(), analyzer: Analyzer()),
           child: CapturedPhotoScreen(
             photo: XFile.fromData(bytes),
+            detector: editor.NoRegions(),
+            objectDetector: editor.NoRegions(),
             processor: Processor(
               SourcePhoto(bytes: bytes, width: 200, height: 100),
             ),

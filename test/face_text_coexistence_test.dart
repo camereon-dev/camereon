@@ -42,38 +42,38 @@ void main() {
       );
       final manual = editor.painter(tester).regions.single;
       await text.tap(tester, '人物・画面の候補を探す');
-      await text.tap(tester, '人物候補 1');
+      await text.tap(tester, '人物候補 5');
       await text.tap(tester, '顔 1：適用');
       await text.tap(tester, '文字の候補を探す');
       expect(
         tester
-            .widget<FilterChip>(find.widgetWithText(FilterChip, '文字候補 2'))
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '文字候補 1'))
             .selected,
         isFalse,
         reason:
             'A selected person must not preselect text at the same coordinates',
       );
-      await text.tap(tester, '文字候補 2');
+      await text.tap(tester, '文字候補 1');
       expect(editor.painter(tester).regions, [manual, shared]);
       await text.tap(tester, '顔 1：解除');
-      await text.tap(tester, '人物候補 1');
+      await text.tap(tester, '人物候補 5');
       expect(
         tester
-            .widget<FilterChip>(find.widgetWithText(FilterChip, '人物候補 1'))
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '人物候補 5'))
             .selected,
         isFalse,
       );
       expect(
         tester
-            .widget<FilterChip>(find.widgetWithText(FilterChip, '文字候補 2'))
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '文字候補 1'))
             .selected,
         isTrue,
       );
       expect(editor.painter(tester).regions, [manual, shared]);
-      await text.tap(tester, '文字候補 2');
+      await text.tap(tester, '文字候補 1');
       expect(editor.painter(tester).regions, [manual]);
       await text.tap(tester, '人物・画面の候補を探す');
-      expect(find.text('文字候補 2'), findsOneWidget);
+      expect(find.text('文字候補 1'), findsOneWidget);
       expect(editor.painter(tester).regions, [manual]);
       final painter = tester
           .widgetList<CustomPaint>(find.byType(CustomPaint))
@@ -102,6 +102,7 @@ void main() {
             saver: saver,
             faceDetector: faces,
             detector: texts,
+            objectDetector: editor.NoRegions(),
           ),
         ),
       );
@@ -153,6 +154,7 @@ void main() {
           saver: editor.FakeSaver(),
           faceDetector: faces,
           detector: texts,
+          objectDetector: editor.NoRegions(),
         ),
       ),
     );

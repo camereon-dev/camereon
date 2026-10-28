@@ -50,11 +50,17 @@ Future<void> open(
         processor: processor,
         saver: existing.FakeSaver(),
         detector: detector,
-        objectDetector: objectDetector,
+        objectDetector: objectDetector ?? existing.NoRegions(),
+        faceDetector: existing.NoFaces(),
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (detector.pending == null) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+    await tester.pump();
+  }
 }
 
 Future<void> tap(WidgetTester tester, String text) async {
@@ -153,6 +159,14 @@ void main() {
     tester,
   ) async {
     final detector = FakeDetector();
+    detector.candidates[0] = RegionCandidate(
+      kind: CandidateKind.text,
+      region: HideRegion.fromRect(
+        const Rect.fromLTRB(20, 10, 120, 60),
+        imageWidth: 200,
+        imageHeight: 100,
+      )!,
+    );
     await open(tester, detector, existing.FakeProcessor(200, 100));
     await existing.select(tester);
     final manual = existing.painter(tester).regions.single;
@@ -236,7 +250,7 @@ void main() {
       );
       detector.fail = false;
       await tap(tester, '文字の候補を探す');
-      expect(detector.calls, 3);
+      expect(detector.calls, 4);
     },
   );
 
@@ -244,10 +258,14 @@ void main() {
     'late detection cannot overwrite confirmation; duplicate start is blocked',
     (tester) async {
       final detector = FakeDetector()..pending = Completer<RegionDetection>();
-      await open(tester, detector, existing.FakeProcessor(200, 100));
-      await tester.ensureVisible(find.text('文字の候補を探す'));
-      await tester.tap(find.text('文字の候補を探す'));
-      await tester.pump();
+      final objects = FakeDetector();
+      await open(
+        tester,
+        detector,
+        existing.FakeProcessor(200, 100),
+        objectDetector: objects,
+      );
+      await tester.ensureVisible(find.text('文字候補を探しています…'));
       await tester.tap(find.text('文字候補を探しています…'));
       expect(detector.calls, 1);
       await tap(tester, '保存前に確認');
@@ -255,6 +273,11 @@ void main() {
         RegionDetection(candidates: detector.candidates),
       );
       await tester.pumpAndSettle();
+      expect(
+        objects.calls,
+        0,
+        reason: 'Confirmation cancels the queued automatic scan',
+      );
       expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
       await tap(tester, '編集へ戻る');
       expect(
