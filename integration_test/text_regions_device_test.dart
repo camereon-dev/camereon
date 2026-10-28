@@ -10,6 +10,7 @@ import 'package:camereon/core/photo/android_photo_saver.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
+import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../tools/text-region-eval/edge_density_detector.dart';
+import 'editor_support.dart';
 
 typedef Fixture = ({String name, SourcePhoto photo, List<Rect> expected});
 
@@ -207,62 +209,58 @@ void main() {
     },
   );
 
-  testWidgets('native detection -> candidate UI -> apply -> JPEG gallery save', (
-    tester,
-  ) async {
-    final data = await rootBundle.load('tools/vlm-eval/fixtures/parcel_ja.png');
-    final directory = await getTemporaryDirectory();
-    final file = File('${directory.path}/CAP-text-regions.png');
-    await file.writeAsBytes(
-      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-    );
-    final saver = RecordingSaver();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CapturedPhotoScreen(photo: XFile(file.path), saver: saver),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('文字の候補を探す'));
-    await tester.tap(find.text('文字の候補を探す'));
-    // Native inference progresses on real time, outside the widget fake clock.
-    for (var i = 0; i < 300 && find.text('候補をすべて適用').evaluate().isEmpty; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-    expect(find.text('候補をすべて適用'), findsOneWidget);
-    await tester.ensureVisible(find.text('候補をすべて適用'));
-    await tester.tap(find.text('候補をすべて適用'));
-    await tester.pumpAndSettle();
-    // All four numbered buttons remain. Turn only the first line back on.
-    for (var i = 1; i <= 4; i++) {
-      expect(find.text('文字候補 $i'), findsOneWidget);
-    }
-    await tester.ensureVisible(find.text('文字候補 1'));
-    await tester.tap(find.text('文字候補 1'));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FilterChip>(find.byKey(const ValueKey('candidate-toggle-0')))
-          .selected,
-      isFalse,
-    );
-    for (final label in ['保存前に確認', '写真に保存']) {
-      await tester.ensureVisible(find.text(label));
-      await tester.tap(find.text(label));
+  testWidgets(
+    'automatic native detection -> tap image frame -> JPEG gallery save',
+    (tester) async {
+      final data = await rootBundle.load(
+        'tools/vlm-eval/fixtures/parcel_ja.png',
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/CAP-text-regions.png');
+      await file.writeAsBytes(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      );
+      final saver = RecordingSaver();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CapturedPhotoScreen(photo: XFile(file.path), saver: saver),
+        ),
+      );
       await tester.pumpAndSettle();
-    }
-    expect(find.text('写真を保存しました'), findsOneWidget);
-    final jpeg = saver.jpeg!;
-    expect((jpeg.width, jpeg.height), (640, 640));
-    final decoded = img.decodeJpg(jpeg.bytes)!;
-    expect(decoded.getPixel(78, 205).luminance, greaterThan(240));
-    for (final (x, y) in [(150, 282), (250, 343), (190, 403)]) {
-      expect(decoded.getPixel(x, y).luminance, lessThan(4));
-    }
-    expect(decoded.exif.isEmpty, isTrue);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pumpAndSettle();
-    expect(await file.exists(), isFalse);
-  });
+      final overlay = tester.widget<CandidateOverlay>(
+        find.byType(CandidateOverlay),
+      );
+      final texts = overlay.candidates
+          .where((c) => c.kind == CandidateKind.text)
+          .toList();
+      expect(texts.length, 4);
+      // Only the image frames are interactive; keep the first line visible.
+      for (final candidate in texts) {
+        await tapCandidate(tester, candidate);
+      }
+      await tapCandidate(tester, texts.first);
+      expect(
+        tester
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .selectedCandidates
+            .length,
+        3,
+      );
+      for (final label in ['保存前に確認', '写真に保存']) {
+        await editorAction(tester, label);
+      }
+      expect(find.text('写真を保存しました'), findsOneWidget);
+      final jpeg = saver.jpeg!;
+      expect((jpeg.width, jpeg.height), (640, 640));
+      final decoded = img.decodeJpg(jpeg.bytes)!;
+      expect(decoded.getPixel(78, 205).luminance, greaterThan(240));
+      for (final (x, y) in [(150, 282), (250, 343), (190, 403)]) {
+        expect(decoded.getPixel(x, y).luminance, lessThan(4));
+      }
+      expect(decoded.exif.isEmpty, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(await file.exists(), isFalse);
+    },
+  );
 }

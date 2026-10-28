@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:camereon/app.dart';
+import 'package:camereon/features/camera/glass_photo_chrome.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,7 @@ class FakeCameraPlatform extends CameraPlatform {
   final CameraException? error;
   final opened = <String>[];
   int pictures = 0;
+  final disposed = <int>[];
   int _nextId = 0;
 
   @override
@@ -85,7 +87,9 @@ class FakeCameraPlatform extends CameraPlatform {
   }
 
   @override
-  Future<void> dispose(int cameraId) async {}
+  Future<void> dispose(int cameraId) async {
+    disposed.add(cameraId);
+  }
 }
 
 void main() {
@@ -148,14 +152,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(camera.pictures, 1);
-    expect(find.text('撮り直す'), findsOneWidget);
+    expect(camera.disposed, contains(0));
+    expect(find.byTooltip('撮り直す'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('撮り直す'));
-    await tester.tap(find.text('撮り直す'));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(camera.opened, [
+      'back',
+    ], reason: 'Do not restart the hidden camera while editing');
+
+    await tester.tap(find.byTooltip('撮り直す'));
     await tester.pumpAndSettle();
 
     expect(find.text('撮り直す'), findsNothing);
     expect(find.bySemanticsLabel('撮影する'), findsOneWidget);
+    expect(camera.opened, ['back', 'back']);
   });
 
   testWidgets('前面と背面のカメラを切り替えられる', (tester) async {
@@ -220,22 +232,25 @@ void main() {
           () => Future<void>.delayed(const Duration(milliseconds: 50)),
         );
         await tester.pump(const Duration(milliseconds: 50));
-        if (find.bySemanticsLabel('撮影した写真').evaluate().isNotEmpty) break;
+        if (find.bySemanticsLabel('撮影した写真').evaluate().isNotEmpty &&
+            find.byType(PhotoScanEffect).evaluate().isNotEmpty &&
+            !tester
+                .widget<PhotoScanEffect>(find.byType(PhotoScanEffect))
+                .active) {
+          break;
+        }
       }
       await tester.pumpAndSettle();
 
       expect(camera.pictures, 0);
       expect(find.bySemanticsLabel('撮影した写真'), findsOneWidget);
-      expect(find.text('0箇所の領域を選択中'), findsOneWidget);
+      expect(find.byTooltip('保存前に確認'), findsOneWidget);
       final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
       await tester.dragFrom(rect.center, const Offset(30, 30));
       await tester.pump();
-      expect(find.text('1箇所の領域を選択中'), findsOneWidget);
-      await tester.tap(find.text('取り消す'));
-      await tester.pump();
-      expect(find.text('0箇所の領域を選択中'), findsOneWidget);
-      await tester.ensureVisible(find.text('撮り直す'));
-      await tester.tap(find.text('撮り直す'));
+      expect(find.byType(FilterChip), findsNothing);
+      expect(find.byTooltip('保存前に確認'), findsOneWidget);
+      await tester.tap(find.byTooltip('撮り直す'));
       await tester.pumpAndSettle();
       expect(find.text('サンプルで試す'), findsOneWidget);
       expect(

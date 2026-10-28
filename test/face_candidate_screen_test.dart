@@ -1,14 +1,11 @@
 import 'dart:async';
 
-import 'package:camera/camera.dart';
 import 'package:camereon/core/analysis/face_detection.dart';
-import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
-import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'captured_photo_screen_test.dart' as support;
+import 'support/photo_editor.dart' as editor;
 
 class ControlledFaces implements PhotoFaceDetector {
   final result = Completer<List<FaceCandidate>>();
@@ -17,98 +14,48 @@ class ControlledFaces implements PhotoFaceDetector {
 }
 
 void main() {
-  testWidgets('manual edits, face apply/remove, undo, reset and save coexist', (
+  testWidgets('late face frames appear and support tap, undo and save', (
     tester,
   ) async {
-    final processor = support.FakeProcessor(200, 100);
-    final saver = support.FakeSaver();
-    final detector = ControlledFaces();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CapturedPhotoScreen(
-          photo: XFile.fromData(processor.source.bytes),
-          processor: processor,
-          saver: saver,
-          faceDetector: detector,
-        ),
-      ),
-    );
+    final processor = editor.FakeProcessor(200, 100);
+    final saver = editor.FakeSaver();
+    final faces = ControlledFaces();
+    await editor.open(tester, processor, saver, faces: faces, settle: false);
+    final r = editor.region(const Rect.fromLTRB(20, 20, 60, 60));
+    faces.result.complete([FaceCandidate('one', r)]);
     await tester.pumpAndSettle();
-    await support.select(tester);
-    final manual = support.painter(tester).regions.single;
-    detector.result.complete([
-      FaceCandidate(
-        'one',
-        HideRegion.fromRect(
-          const Rect.fromLTRB(20, 20, 60, 60),
-          imageWidth: 200,
-          imageHeight: 100,
-        )!,
-      ),
-    ]);
-    await tester.pumpAndSettle();
-    expect(support.painter(tester).regions, [manual]);
-    await tester.ensureVisible(find.text('顔 1：適用'));
-    await tester.tap(find.text('顔 1：適用'));
-    await tester.pumpAndSettle();
-    expect(support.painter(tester).regions.length, 2);
-    await tester.ensureVisible(find.text('顔 1：解除'));
-    await tester.tap(find.text('顔 1：解除'));
-    await tester.pumpAndSettle();
-    expect(support.painter(tester).regions, [manual]);
-    await tester.ensureVisible(find.text('取り消す'));
-    await tester.tap(find.text('取り消す'));
-    await tester.pumpAndSettle();
-    expect(support.painter(tester).regions.length, 2);
-    await tester.ensureVisible(find.text('すべてリセット'));
-    await tester.tap(find.text('すべてリセット'));
-    await tester.pumpAndSettle();
-    expect(support.painter(tester).regions, isEmpty);
-    expect(find.text('顔 1：適用'), findsOneWidget);
-    await tester.ensureVisible(find.text('顔 1：適用'));
-    await tester.tap(find.text('顔 1：適用'));
-    await tester.pumpAndSettle();
-    final applied = support.painter(tester).regions.single;
-    await tester.ensureVisible(find.text('保存前に確認'));
-    await tester.tap(find.text('保存前に確認'));
-    await tester.pumpAndSettle();
-    expect(processor.received, [applied]);
-    await tester.ensureVisible(find.text('写真に保存'));
-    await tester.tap(find.text('写真に保存'));
-    await tester.pumpAndSettle();
+    await editor.tapPixel(tester, const Offset(40, 40));
+    expect(editor.painter(tester).regions, [r]);
+    await editor.tapPixel(tester, const Offset(40, 40));
+    expect(editor.painter(tester).regions, isEmpty);
+    await editor.tapText(tester, '取り消す');
+    expect(editor.painter(tester).regions, [r]);
+    await editor.tapText(tester, '保存前に確認');
+    expect(processor.received, [r]);
+    await editor.tapText(tester, '写真に保存');
     expect(saver.calls, 1);
-    expect(identical(saver.received, processor.jpeg), isTrue);
   });
 
-  testWidgets('saving during detection excludes late candidates', (
+  testWidgets('saving while face detection runs ignores late faces', (
     tester,
   ) async {
-    final processor = support.FakeProcessor(200, 100);
-    final detector = ControlledFaces();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CapturedPhotoScreen(
-          photo: XFile.fromData(processor.source.bytes),
-          processor: processor,
-          saver: support.FakeSaver(),
-          faceDetector: detector,
-        ),
-      ),
+    final processor = editor.FakeProcessor(200, 100);
+    final faces = ControlledFaces();
+    await editor.open(
+      tester,
+      processor,
+      editor.FakeSaver(),
+      faces: faces,
+      settle: false,
     );
+    await tester.tap(find.byTooltip('保存前に確認'));
     await tester.pumpAndSettle();
-    await support.select(tester);
-    final manual = support.painter(tester).regions.single;
-    await tester.ensureVisible(find.text('保存前に確認'));
-    await tester.tap(find.text('保存前に確認'));
+    faces.result.complete([
+      FaceCandidate('late', editor.region(const Rect.fromLTRB(20, 20, 60, 60))),
+    ]);
     await tester.pumpAndSettle();
-    detector.result.complete([FaceCandidate('late', manual)]);
-    await tester.pumpAndSettle();
-    expect(processor.received, [manual]);
-    await tester.ensureVisible(find.text('編集へ戻る'));
-    await tester.tap(find.text('編集へ戻る'));
-    await tester.pumpAndSettle();
-    expect(find.text('顔 1：適用'), findsNothing);
-    expect(support.painter(tester).regions, [manual]);
-    expect(find.text('顔検出を再試行'), findsOneWidget);
+    expect(processor.received, isEmpty);
+    await editor.tapText(tester, '編集へ戻る');
+    expect(editor.overlay(tester).candidates, isEmpty);
   });
 }

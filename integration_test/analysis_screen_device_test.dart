@@ -8,11 +8,14 @@ import 'package:camereon/core/analysis/infrastructure/gemma_scene_analyzer.dart'
 import 'package:camereon/core/analysis/scene_analysis.dart';
 import 'package:camereon/features/analysis/photo_analysis_entry.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
+import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'editor_support.dart';
 
 class RecordingAnalyzer implements SceneAnalyzer {
   RecordingAnalyzer(this.delegate);
@@ -100,15 +103,11 @@ void main() {
           );
           await tester.tap(find.text('検証用の写真を開く'));
           await tester.pumpAndSettle();
-          final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
-          final gesture = await tester.startGesture(
-            rect.topLeft + Offset(rect.width * .1, rect.height * .1),
-          );
-          await gesture.moveTo(
-            rect.topLeft + Offset(rect.width * .8, rect.height * .4),
-          );
-          await gesture.up();
-          await tester.pump();
+          final candidate = tester
+              .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+              .candidates
+              .first;
+          await tapCandidate(tester, candidate);
           SelectionPainter painter() =>
               tester
                       .widget<CustomPaint>(
@@ -140,8 +139,7 @@ void main() {
           await tester.pageBack();
           await tester.pumpAndSettle();
           expect(painter().regions, [selected]);
-          await tester.tap(find.text('保存前に確認'));
-          await tester.pumpAndSettle();
+          await editorAction(tester, '保存前に確認');
           await tester.tap(find.text('写真に保存'));
           await tester.pumpAndSettle();
           expect(find.text('写真を保存しました'), findsOneWidget);

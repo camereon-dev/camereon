@@ -8,11 +8,14 @@ import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/flutter_photo_processor.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
+import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'editor_support.dart';
 
 double iou(Rect a, Rect b) {
   final intersection = a.intersect(b);
@@ -137,9 +140,12 @@ void main() {
           MaterialApp(home: CapturedPhotoScreen(photo: XFile(temp.path))),
         );
         await tester.pumpAndSettle();
-        await tap(tester, '人物・画面の候補を探す');
-        await tap(tester, '候補をすべて適用');
-        await tap(tester, '保存前に確認');
+        final screen = tester
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .candidates
+            .firstWhere((c) => c.kind == CandidateKind.screen);
+        await tapCandidate(tester, screen);
+        await editorAction(tester, '保存前に確認');
         await tap(tester, '写真に保存');
         expect(find.text('写真を保存しました'), findsOneWidget);
         await tester.pumpWidget(const SizedBox());
