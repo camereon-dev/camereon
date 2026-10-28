@@ -1,17 +1,15 @@
 import 'dart:async';
 
-import 'package:camera/camera.dart';
 import 'package:camereon/core/analysis/face_detection.dart';
 import 'package:camereon/core/detection/region_detector.dart';
-import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
-import 'package:camereon/features/camera/captured_photo_screen.dart';
+import 'package:camereon/features/camera/glass_photo_chrome.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'captured_photo_screen_test.dart' as editor;
-import 'text_region_candidates_test.dart' as text;
+import 'support/photo_editor.dart' as editor;
 
 class CountingFaces implements PhotoFaceDetector {
   CountingFaces(this.candidates);
@@ -24,218 +22,232 @@ class CountingFaces implements PhotoFaceDetector {
   }
 }
 
-HideRegion region(Rect rect) =>
-    HideRegion.fromRect(rect, imageWidth: 200, imageHeight: 100)!;
-
-Future<void> tapPixel(
-  WidgetTester tester,
-  Offset pixel, {
-  Offset? jitter,
-}) async {
-  final image = tester.getRect(find.bySemanticsLabel('撮影した写真'));
-  final point =
-      image.topLeft +
-      Offset(pixel.dx / 200 * image.width, pixel.dy / 100 * image.height);
-  final gesture = await tester.startGesture(point);
-  if (jitter != null) await gesture.moveBy(jitter);
-  await gesture.up();
-  await tester.pump();
-}
-
 void main() {
-  testWidgets('deferred loading starts automatic detection when app resumes', (
+  testWidgets('candidate frames expose independent accessible tap actions', (
     tester,
   ) async {
+    final handle = tester.ensureSemantics();
+    try {
+      final texts = editor.FakeDetector()
+        ..candidates.add(
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(20, 20, 80, 60),
+          ),
+        );
+      await editor.open(
+        tester,
+        editor.FakeProcessor(200, 100),
+        editor.FakeSaver(),
+        texts: texts,
+      );
+      SemanticsNode? target;
+      void visit(SemanticsNode node) {
+        if (node.getSemanticsData().label == '文字の候補 1') target = node;
+        node.visitChildren((child) {
+          visit(child);
+          return true;
+        });
+      }
+
+      visit(tester.getSemantics(find.byType(CandidateOverlay)));
+      expect(target, isNotNull);
+      expect(target!.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      target!.owner!.performAction(target!.id, SemanticsAction.tap);
+      await tester.pumpAndSettle();
+      expect(editor.painter(tester).regions, [texts.candidates.single.region]);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets('reduced motion leaves detection active without a moving scan', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final texts = editor.FakeDetector()..pending = Completer<RegionDetection>();
+    await editor.open(
+      tester,
+      editor.FakeProcessor(200, 100),
+      editor.FakeSaver(),
+      texts: texts,
+      settle: false,
+    );
+    // Settling would time out if the scan ticker still repeated.
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PhotoScanEffect>(find.byType(PhotoScanEffect)).active,
+      isTrue,
+    );
+    texts.pending!.complete(RegionDetection(candidates: const []));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PhotoScanEffect>(find.byType(PhotoScanEffect)).active,
+      isFalse,
+    );
+  });
+
+  testWidgets(
+    'all detectors start automatically and ONNX scans stay sequential',
+    (tester) async {
+      final faces = CountingFaces([]);
+      final texts = editor.FakeDetector()
+        ..pending = Completer<RegionDetection>();
+      final objects = editor.FakeDetector();
+      await editor.open(
+        tester,
+        editor.FakeProcessor(200, 100),
+        editor.FakeSaver(),
+        faces: faces,
+        texts: texts,
+        objects: objects,
+        settle: false,
+      );
+      expect((faces.calls, texts.calls, objects.calls), (1, 1, 0));
+      expect(
+        tester.widget<PhotoScanEffect>(find.byType(PhotoScanEffect)).active,
+        isTrue,
+      );
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.text('検出中'), findsOneWidget);
+      texts.pending!.complete(RegionDetection(candidates: texts.candidates));
+      await tester.pumpAndSettle();
+      expect((faces.calls, texts.calls, objects.calls), (1, 1, 1));
+      expect(
+        tester.widget<PhotoScanEffect>(find.byType(PhotoScanEffect)).active,
+        isFalse,
+      );
+      expect(editor.painter(tester).regions, isEmpty);
+    },
+  );
+
+  testWidgets('deferred loading starts when the app resumes', (tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     addTearDown(
       () => tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.resumed,
       ),
     );
-    final processor = editor.FakeProcessor(200, 100);
     final faces = CountingFaces([]);
-    final texts = text.FakeDetector();
-    final objects = text.FakeDetector()..candidates.clear();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CapturedPhotoScreen(
-          photo: XFile.fromData(processor.source.bytes),
-          processor: processor,
-          saver: editor.FakeSaver(),
-          faceDetector: faces,
-          detector: texts,
-          objectDetector: objects,
-        ),
-      ),
+    final texts = editor.FakeDetector();
+    final objects = editor.FakeDetector();
+    await editor.open(
+      tester,
+      editor.FakeProcessor(200, 100),
+      editor.FakeSaver(),
+      faces: faces,
+      texts: texts,
+      objects: objects,
     );
-    await tester.pumpAndSettle();
     expect((faces.calls, texts.calls, objects.calls), (0, 0, 0));
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect((faces.calls, texts.calls, objects.calls), (1, 1, 1));
   });
 
-  testWidgets('all detectors start automatically, ONNX scans run in sequence', (
-    tester,
-  ) async {
-    final processor = editor.FakeProcessor(200, 100);
-    final faces = CountingFaces([]);
-    final texts = text.FakeDetector()..pending = Completer<RegionDetection>();
-    final objects = text.FakeDetector()..candidates.clear();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CapturedPhotoScreen(
-          photo: XFile.fromData(processor.source.bytes),
-          processor: processor,
-          saver: editor.FakeSaver(),
-          faceDetector: faces,
-          detector: texts,
-          objectDetector: objects,
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-    expect(faces.calls, 1);
-    expect(texts.calls, 1);
-    expect(objects.calls, 0);
-    texts.pending!.complete(RegionDetection(candidates: texts.candidates));
-    await tester.pumpAndSettle();
-    expect(objects.calls, 1);
-    expect(editor.painter(tester).regions, isEmpty);
-    await tester.pump();
-    expect(texts.calls, 1);
-    expect(faces.calls, 1);
-  });
-
-  testWidgets('one failed automatic detector does not skip the other', (
-    tester,
-  ) async {
-    final texts = text.FakeDetector()..fail = true;
-    final objects = text.FakeDetector();
-    objects.candidates
-      ..clear()
-      ..add(
-        RegionCandidate(
-          kind: CandidateKind.person,
-          region: region(const Rect.fromLTRB(10, 10, 190, 90)),
-        ),
-      );
-    await text.open(
-      tester,
-      texts,
-      editor.FakeProcessor(200, 100),
-      objectDetector: objects,
-    );
-    expect((texts.calls, objects.calls), (1, 1));
-    expect(find.textContaining('文字候補を検出できませんでした'), findsOneWidget);
-    expect(find.text('人物候補 1'), findsOneWidget);
-    await tapPixel(tester, const Offset(100, 50));
-    expect(editor.painter(tester).regions, [objects.candidates.single.region]);
-  });
-
   testWidgets(
-    'image taps choose nested face/screen and outer frame independently',
+    'nested face/screen and the outer person frame toggle independently',
     (tester) async {
-      final processor = editor.FakeProcessor(200, 100);
-      final faceRegion = region(const Rect.fromLTRB(40, 20, 80, 55));
-      final person = RegionCandidate(
-        kind: CandidateKind.person,
-        region: region(const Rect.fromLTRB(10, 5, 190, 95)),
+      final faceRegion = editor.region(const Rect.fromLTRB(40, 20, 80, 55));
+      final person = editor.candidate(
+        CandidateKind.person,
+        const Rect.fromLTRB(10, 5, 190, 95),
       );
-      final screen = RegionCandidate(
-        kind: CandidateKind.screen,
-        region: region(const Rect.fromLTRB(100, 45, 165, 80)),
+      final screen = editor.candidate(
+        CandidateKind.screen,
+        const Rect.fromLTRB(100, 45, 165, 80),
       );
-      final objects = text.FakeDetector()..candidates.clear();
-      objects.candidates.addAll([person, screen]);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CapturedPhotoScreen(
-            photo: XFile.fromData(processor.source.bytes),
-            processor: processor,
-            saver: editor.FakeSaver(),
-            faceDetector: CountingFaces([FaceCandidate('one', faceRegion)]),
-            detector: editor.NoRegions(),
-            objectDetector: objects,
-          ),
-        ),
+      final objects = editor.FakeDetector()
+        ..candidates.addAll([person, screen]);
+      await editor.open(
+        tester,
+        editor.FakeProcessor(200, 100),
+        editor.FakeSaver(),
+        faces: CountingFaces([FaceCandidate('one', faceRegion)]),
+        objects: objects,
       );
-      await tester.pumpAndSettle();
-      await tapPixel(tester, const Offset(60, 35), jitter: const Offset(2, 1));
+      await editor.tapPixel(tester, const Offset(60, 35));
       expect(editor.painter(tester).regions, [faceRegion]);
-      await tapPixel(tester, const Offset(60, 35));
-      expect(editor.painter(tester).regions, isEmpty);
-      await tapPixel(tester, const Offset(130, 60));
-      expect(editor.painter(tester).regions, [screen.region]);
-      await tapPixel(tester, const Offset(12, 50));
+      await editor.tapPixel(tester, const Offset(130, 60));
+      await editor.tapPixel(tester, const Offset(12, 50));
       expect(
         editor.painter(tester).regions,
-        containsAll([screen.region, person.region]),
+        containsAll([faceRegion, screen.region, person.region]),
       );
-      await tapPixel(tester, const Offset(130, 60));
-      expect(editor.painter(tester).regions, [person.region]);
-      await tapPixel(tester, const Offset(12, 50));
-      await tapPixel(tester, const Offset(195, 99));
-      expect(editor.painter(tester).regions, isEmpty);
-      // A real drag starting inside a candidate still creates a manual region.
-      await editor.select(
-        tester,
-        start: const Offset(.25, .25),
-        end: const Offset(.45, .65),
+      await editor.tapPixel(tester, const Offset(130, 60));
+      expect(
+        editor.painter(tester).regions,
+        containsAll([faceRegion, person.region]),
       );
-      expect(editor.painter(tester).regions.single, isNot(faceRegion));
+      await editor.tapText(tester, '取り消す');
+      expect(editor.painter(tester).regions, contains(screen.region));
     },
   );
 
   testWidgets(
-    'face-only view applies just faces and retains previous edits through save',
+    'face-only view hides other frames and preserves already selected masks',
     (tester) async {
-      final processor = editor.FakeProcessor(200, 100);
-      final saver = editor.FakeSaver();
-      final faceRegion = region(const Rect.fromLTRB(40, 20, 80, 55));
-      final texts = text.FakeDetector();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CapturedPhotoScreen(
-            photo: XFile.fromData(processor.source.bytes),
-            processor: processor,
-            saver: saver,
-            faceDetector: CountingFaces([FaceCandidate('one', faceRegion)]),
-            detector: texts,
-            objectDetector: editor.NoRegions(),
+      final faceRegion = editor.region(const Rect.fromLTRB(40, 20, 80, 55));
+      final texts = editor.FakeDetector()
+        ..candidates.add(
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(110, 10, 180, 30),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await text.tap(tester, '顔だけ');
-      expect(
-        tester
-            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
-            .candidates,
-        isEmpty,
-      );
-      await tapPixel(
+        );
+      final processor = editor.FakeProcessor(200, 100);
+      await editor.open(
         tester,
-        const Offset(140, 20),
-      ); // Hidden text cannot be tapped.
+        processor,
+        editor.FakeSaver(),
+        texts: texts,
+        faces: CountingFaces([FaceCandidate('one', faceRegion)]),
+      );
+      await editor.tapText(tester, '顔だけ');
+      expect(
+        editor
+            .overlay(tester)
+            .candidates
+            .every((c) => c.kind == CandidateKind.face),
+        isTrue,
+      );
+      await editor.tapPixel(tester, const Offset(140, 20));
       expect(editor.painter(tester).regions, isEmpty);
-      await text.tap(tester, '顔をすべて適用');
-      expect(editor.painter(tester).regions, [faceRegion]);
-      await text.tap(tester, 'すべての候補');
-      await text.tap(tester, '文字候補 2');
-      await text.tap(tester, '顔だけ');
+      await editor.tapPixel(tester, const Offset(60, 35));
+      await editor.tapText(tester, 'すべて');
+      await editor.tapPixel(tester, const Offset(140, 20));
+      await editor.tapText(tester, '顔だけ');
       expect(editor.painter(tester).regions, [
         faceRegion,
-        texts.candidates[1].region,
+        texts.candidates.single.region,
       ]);
-      await tapPixel(tester, const Offset(60, 35));
-      expect(editor.painter(tester).regions, [texts.candidates[1].region]);
-      await text.tap(tester, '顔をすべて適用');
-      await text.tap(tester, '保存前に確認');
-      expect(processor.received, [faceRegion, texts.candidates[1].region]);
-      await text.tap(tester, '写真に保存');
-      expect(saver.calls, 1);
+      await editor.tapText(tester, '保存前に確認');
+      expect(processor.received, [faceRegion, texts.candidates.single.region]);
     },
   );
+
+  testWidgets('glass controls fit a narrow display with enlarged text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await editor.open(
+      tester,
+      editor.FakeProcessor(100, 200),
+      editor.FakeSaver(),
+    );
+    expect(find.byType(PhotoGlass), findsNWidgets(3));
+    await editor.tapText(tester, '顔だけ');
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getRect(find.bySemanticsLabel('撮影した写真')).height,
+      greaterThan(300),
+    );
+  });
 }

@@ -27,6 +27,7 @@ class _CameraScreenState extends State<CameraScreen>
   CameraController? _controller;
   _CameraIssue? _issue;
   bool _isCapturing = false;
+  bool _editingPhoto = false;
 
   // カメラを開く・閉じるたびに進める。古い起動処理の結果を捨てるために使う。
   int _session = 0;
@@ -58,7 +59,7 @@ class _CameraScreenState extends State<CameraScreen>
       case AppLifecycleState.paused:
         if (!_closedInBackground) _closeCamera();
       case AppLifecycleState.resumed:
-        if (_closedInBackground) _openCamera();
+        if (_closedInBackground && !_editingPhoto) _openCamera();
       case AppLifecycleState.inactive:
       case AppLifecycleState.detached:
         break;
@@ -218,11 +219,33 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  Future<void> _editPhoto(XFile photo) => Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (context) => CapturedPhotoScreen(photo: photo),
-    ),
-  );
+  Future<void> _editPhoto(XFile photo) async {
+    var hadCamera = false;
+    _editingPhoto = true;
+    try {
+      await _cameraTask;
+      if (!mounted) return;
+      // Release the live stream, including a camera still opening at entry.
+      hadCamera = _controller != null;
+      if (hadCamera) {
+        _closeCamera();
+        await _cameraTask;
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => CapturedPhotoScreen(photo: photo)),
+      );
+    } finally {
+      _editingPhoto = false;
+      if (mounted &&
+          (hadCamera || _closedInBackground) &&
+          (WidgetsBinding.instance.lifecycleState == null ||
+              WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.resumed)) {
+        _openCamera();
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

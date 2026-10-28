@@ -19,6 +19,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../tools/text-region-eval/edge_density_detector.dart';
+import 'editor_support.dart';
 
 typedef Fixture = ({String name, SourcePhoto photo, List<Rect> expected});
 
@@ -226,51 +227,27 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      // Native inference progresses on real time, outside the widget fake clock.
-      for (
-        var i = 0;
-        i < 300 && find.text('候補をすべて適用').evaluate().isEmpty;
-        i++
-      ) {
-        await tester.pump(const Duration(milliseconds: 100));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
-      expect(find.text('候補をすべて適用'), findsOneWidget);
-      await tester.ensureVisible(find.text('候補をすべて適用'));
-      await tester.tap(find.text('候補をすべて適用'));
-      await tester.pumpAndSettle();
-      // All four numbered buttons remain. Turn only the first line back on.
-      for (var i = 1; i <= 4; i++) {
-        expect(find.text('文字候補 $i'), findsOneWidget);
-      }
-      final first = tester
-          .widget<CandidateOverlay>(find.byType(CandidateOverlay))
-          .candidates
-          .first
-          .region
-          .toRect()
-          .center;
-      final imageRect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
-      await tester.tapAt(
-        imageRect.topLeft +
-            Offset(
-              first.dx / 640 * imageRect.width,
-              first.dy / 640 * imageRect.height,
-            ),
+      final overlay = tester.widget<CandidateOverlay>(
+        find.byType(CandidateOverlay),
       );
-      await tester.pumpAndSettle();
+      final texts = overlay.candidates
+          .where((c) => c.kind == CandidateKind.text)
+          .toList();
+      expect(texts.length, 4);
+      // Only the image frames are interactive; keep the first line visible.
+      for (final candidate in texts) {
+        await tapCandidate(tester, candidate);
+      }
+      await tapCandidate(tester, texts.first);
       expect(
         tester
-            .widget<FilterChip>(
-              find.byKey(const ValueKey('candidate-toggle-0')),
-            )
-            .selected,
-        isFalse,
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .selectedCandidates
+            .length,
+        3,
       );
       for (final label in ['保存前に確認', '写真に保存']) {
-        await tester.ensureVisible(find.text(label));
-        await tester.tap(find.text(label));
-        await tester.pumpAndSettle();
+        await editorAction(tester, label);
       }
       expect(find.text('写真を保存しました'), findsOneWidget);
       final jpeg = saver.jpeg!;

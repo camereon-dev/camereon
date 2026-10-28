@@ -9,6 +9,7 @@ import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
+import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -16,6 +17,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../test/support/photo_fixtures.dart';
+import 'editor_support.dart';
 
 class RecordingSaver implements PhotoSaver {
   final delegate = AndroidPhotoSaver();
@@ -47,27 +49,21 @@ void main() {
       expect(find.text('カメラが見つかりません'), findsOneWidget);
       await tester.tap(find.text('サンプルで試す'));
       await tester.pumpAndSettle();
-      final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
-      final gesture = await tester.startGesture(
-        rect.topLeft + Offset(rect.width * .1, rect.height * .1),
+      final candidates = tester
+          .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+          .candidates;
+      expect(candidates.length, greaterThanOrEqualTo(2));
+      await tapCandidate(tester, candidates[0]);
+      await tapCandidate(tester, candidates[1]);
+      await editorAction(tester, '取り消す');
+      expect(
+        tester
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .selectedCandidates
+            .length,
+        1,
       );
-      await gesture.moveTo(
-        rect.topLeft + Offset(rect.width * .6, rect.height * .6),
-      );
-      await gesture.up();
-      await tester.pump();
-      expect(find.text('1箇所の領域を選択中'), findsOneWidget);
-      await tester.dragFrom(
-        rect.center,
-        Offset(rect.width * .2, rect.height * .2),
-      );
-      await tester.pump();
-      expect(find.text('2箇所の領域を選択中'), findsOneWidget);
-      await tester.tap(find.text('取り消す'));
-      await tester.pump();
-      expect(find.text('1箇所の領域を選択中'), findsOneWidget);
-      await tester.tap(find.text('保存前に確認'));
-      await tester.pumpAndSettle();
+      await editorAction(tester, '保存前に確認');
       expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
       await tester.tap(find.text('写真に保存'));
       await tester.pumpAndSettle();
@@ -111,6 +107,7 @@ void main() {
                       builder: (_) => CapturedPhotoScreen(
                         photo: XFile(file.path),
                         saver: saver,
+                        detector: CoordinateFixtureDetector(),
                       ),
                     ),
                   ),
@@ -123,15 +120,11 @@ void main() {
         await tester.tap(find.text('テスト写真を開く'));
         await tester.pumpAndSettle();
         expect(find.bySemanticsLabel('撮影した写真'), findsOneWidget);
-        final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
-        final gesture = await tester.startGesture(
-          rect.topLeft + Offset(rect.width * .1, rect.height * .1),
-        );
-        await gesture.moveTo(
-          rect.topLeft + Offset(rect.width * .6, rect.height * .6),
-        );
-        await gesture.up();
-        await tester.pump();
+        final candidate = tester
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .candidates
+            .first;
+        await tapCandidate(tester, candidate);
         final painter =
             tester
                     .widget<CustomPaint>(
@@ -145,8 +138,7 @@ void main() {
                 as SelectionPainter;
         final HideRegion region = painter.regions.single;
         expect((painter.imageWidth, painter.imageHeight), (32, 48));
-        await tester.tap(find.text('保存前に確認'));
-        await tester.pumpAndSettle();
+        await editorAction(tester, '保存前に確認');
         expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
         await tester.tap(find.text('写真に保存'));
         await tester.pumpAndSettle();

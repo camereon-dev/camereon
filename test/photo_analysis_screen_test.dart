@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 
 import 'package:camereon/core/analysis/analysis_services.dart';
+import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/analysis/scene_analysis.dart';
 import 'package:camereon/features/analysis/photo_analysis_screen.dart';
 import 'package:camereon/features/analysis/photo_analysis_entry.dart';
@@ -238,6 +239,7 @@ void main() {
               processor: processor,
               detector: editor.NoRegions(),
               objectDetector: editor.NoRegions(),
+              faceDetector: editor.NoFaces(),
               onSourceLoaded: onSourceLoaded,
             ),
           ),
@@ -417,8 +419,15 @@ void main() {
           services: AnalysisServices(models: Models(), analyzer: Analyzer()),
           child: CapturedPhotoScreen(
             photo: XFile.fromData(bytes),
-            detector: editor.NoRegions(),
+            detector: editor.FakeDetector()
+              ..candidates.add(
+                editor.candidate(
+                  CandidateKind.text,
+                  const Rect.fromLTRB(40, 20, 160, 80),
+                ),
+              ),
             objectDetector: editor.NoRegions(),
+            faceDetector: editor.NoFaces(),
             processor: Processor(
               SourcePhoto(bytes: bytes, width: 200, height: 100),
             ),
@@ -428,12 +437,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     final imageRect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
-    final gesture = await tester.startGesture(
-      imageRect.center - const Offset(50, 30),
-    );
-    await gesture.moveTo(imageRect.center + const Offset(50, 30));
-    await gesture.up();
-    await tester.pump();
+    await tester.tapAt(imageRect.center);
+    await tester.pumpAndSettle();
     SelectionPainter selection() =>
         tester
                 .widget<CustomPaint>(

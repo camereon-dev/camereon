@@ -11,12 +11,15 @@ import 'package:camereon/core/photo/image_photo_processor.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
+import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'editor_support.dart';
 
 class ObservedDetector implements PhotoFaceDetector {
   final completed = Completer<List<FaceCandidate>>();
@@ -92,7 +95,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(faces.length, 1);
-      expect(find.text('顔 1：適用'), findsOneWidget);
       await tester.ensureVisible(find.text('顔だけ'));
       await tester.tap(find.text('顔だけ'));
       await tester.pumpAndSettle();
@@ -107,13 +109,22 @@ void main() {
           );
       await tester.tapAt(tap);
       await tester.pumpAndSettle();
-      expect(find.text('顔 1：解除'), findsOneWidget);
+      expect(
+        tester
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .selectedCandidates
+            .length,
+        1,
+      );
       await tester.tapAt(tap);
       await tester.pumpAndSettle();
-      expect(find.text('顔 1：適用'), findsOneWidget);
-      await tester.ensureVisible(find.text('顔をすべて適用'));
-      await tester.tap(find.text('顔をすべて適用'));
-      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .selectedCandidates,
+        isEmpty,
+      );
+      await editorAction(tester, '取り消す');
       // This path is intentionally Android emulator-specific. Only the newly
       // created, app-owned MediaStore image is read; existing photos are untouched.
       final gallery = Directory(
@@ -123,9 +134,7 @@ void main() {
         ),
       );
       final before = await galleryFiles(gallery);
-      await tester.ensureVisible(find.text('保存前に確認'));
-      await tester.tap(find.text('保存前に確認'));
-      await tester.pumpAndSettle();
+      await editorAction(tester, '保存前に確認');
       await tester.ensureVisible(find.text('写真に保存'));
       await tester.tap(find.text('写真に保存'));
       await tester.pumpAndSettle();
@@ -153,7 +162,7 @@ void main() {
       }
       expect(savedPixels.getPixel(0, 0).luminance, greaterThan(10));
       report['firstUiDetection'] = true;
-      report['faceOnlyImageTapAndBulkApply'] = true;
+      report['faceOnlyFrameTapAndUndo'] = true;
       report['galleryReadback'] = {
         'sha256': sha256.convert(persisted).toString(),
         'width': savedPixels.width,
