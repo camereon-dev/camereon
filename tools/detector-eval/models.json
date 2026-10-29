@@ -1,0 +1,20 @@
+[
+  {
+    "name": "yolo26n.pt",
+    "url": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.pt",
+    "bytes": 5544453,
+    "sha256": "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef"
+  },
+  {
+    "name": "yolo26s.pt",
+    "url": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s.pt",
+    "bytes": 20422725,
+    "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b"
+  },
+  {
+    "name": "face_detection_yunet_2023mar.onnx",
+    "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+    "bytes": 232589,
+    "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+  }
+]

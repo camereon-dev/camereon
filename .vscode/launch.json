@@ -6,6 +6,22 @@
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart"
+    },
+    {
+      "name": "camereon detector (debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "env": {
+        "CAMEREON_DETECTOR_PREVIEW": "1"
+      }
+    },
+    {
+      "name": "Attach to camereon detector",
+      "request": "attach",
+      "type": "dart",
+      "toolArgs": ["--app-id", "dev.camereon.camereon.demo.detector_preview"]
     }
   ]
 }

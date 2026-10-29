@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 
 import 'package:camereon/core/analysis/analysis_services.dart';
+import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/analysis/scene_analysis.dart';
 import 'package:camereon/features/analysis/photo_analysis_screen.dart';
 import 'package:camereon/features/analysis/photo_analysis_entry.dart';
@@ -14,6 +15,8 @@ import 'package:camereon/core/photo/hide_region.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+
+import 'captured_photo_screen_test.dart' as editor;
 
 class Models implements AnalysisModelStore {
   @override
@@ -71,6 +74,9 @@ class Analyzer implements SceneAnalyzer {
   int calls = 0;
   Completer<SceneDescription>? pending;
   AnalysisFailure? failure;
+  bool failAutomatic = false;
+  final backends = <AnalysisBackend>[];
+  AnalysisImage? lastImage;
   @override
   Future<SceneDescription> describe(
     AnalysisImage image, {
@@ -80,9 +86,14 @@ class Analyzer implements SceneAnalyzer {
     required void Function(String) onText,
   }) async {
     calls++;
+    backends.add(backend);
+    lastImage = image;
     isBusy = true;
     try {
       if (failure != null) throw failure!;
+      if (failAutomatic && backend == AnalysisBackend.automatic) {
+        throw const AnalysisFailure(AnalysisFailureKind.inference);
+      }
       onPhase(AnalysisPhase.describing);
       onText('解析中の説明');
       return pending == null ? description : await pending!.future;
@@ -103,11 +114,33 @@ class Analyzer implements SceneAnalyzer {
 class Processor implements PhotoProcessor {
   Processor(this.source);
   final SourcePhoto source;
+  bool failLoad = false;
   @override
-  Future<SourcePhoto> normalize(Uint8List bytes) async => source;
+  Future<SourcePhoto> normalize(Uint8List bytes) async {
+    if (failLoad) throw StateError('decode failed');
+    return source;
+  }
+
   @override
   Future<RedactedJpeg> redact(SourcePhoto photo, List<HideRegion> regions) =>
       throw UnimplementedError();
+}
+
+/// Called inside runAsync: route transitions use pumped time, image decoding
+/// uses engine IO. Require a visible, prepared image before returning.
+Future<void> waitForPreparedAnalysis(WidgetTester tester) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (true) {
+    await tester.pump(const Duration(milliseconds: 16));
+    if (find.bySemanticsLabel('解析する写真').evaluate().isNotEmpty &&
+        find.text('写真と解析用データを確認しています…').evaluate().isEmpty) {
+      return;
+    }
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError('Image preparation did not finish');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 Future<void> open(WidgetTester tester, Models models, Analyzer analyzer) async {
@@ -121,12 +154,130 @@ Future<void> open(WidgetTester tester, Models models, Analyzer analyzer) async {
         ),
       ),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 80));
+    await waitForPreparedAnalysis(tester);
   });
   await tester.pumpAndSettle();
 }
 
 void main() {
+  testWidgets('automatic inference failure retries once on CPU', (
+    tester,
+  ) async {
+    final analyzer = Analyzer()..failAutomatic = true;
+    await open(tester, Models(), analyzer);
+    await tester.tap(find.text('写真を解析する'));
+    await tester.pumpAndSettle();
+    expect(analyzer.backends, [
+      AnalysisBackend.automatic,
+      AnalysisBackend.compatible,
+    ]);
+    expect(find.text(description.text), findsOneWidget);
+    expect(find.text('互換モードで解析しました。'), findsOneWidget);
+  });
+
+  testWidgets('failure reports a fixed stage and backend without SDK details', (
+    tester,
+  ) async {
+    final analyzer = Analyzer()
+      ..failure = const AnalysisFailure(
+        AnalysisFailureKind.inference,
+        stage: AnalysisFailureStage.loadingModel,
+      );
+    await open(tester, Models(), analyzer);
+    await tester.tap(find.text('写真を解析する'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('確認コード: loadingModel/compatible'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('missing model failure does not retry inference', (tester) async {
+    final analyzer = Analyzer()
+      ..failure = const AnalysisFailure(AnalysisFailureKind.missingModel);
+    await open(tester, Models(), analyzer);
+    await tester.tap(find.text('写真を解析する'));
+    await tester.pumpAndSettle();
+    expect(analyzer.backends, [AnalysisBackend.automatic]);
+  });
+
+  testWidgets('failed CPU retry stops and a later attempt stays on CPU', (
+    tester,
+  ) async {
+    final analyzer = Analyzer()
+      ..failure = const AnalysisFailure(AnalysisFailureKind.inference);
+    await open(tester, Models(), analyzer);
+    await tester.tap(find.text('写真を解析する'));
+    await tester.pumpAndSettle();
+    expect(analyzer.backends, [
+      AnalysisBackend.automatic,
+      AnalysisBackend.compatible,
+    ]);
+    analyzer.failure = null;
+    await tester.tap(find.text('写真を解析する'));
+    await tester.pumpAndSettle();
+    expect(analyzer.backends.last, AnalysisBackend.compatible);
+    expect(analyzer.calls, 3);
+  });
+
+  testWidgets(
+    'failed editor load blocks analysis; retry shares normalized pixels',
+    (tester) async {
+      final bytes = img.encodePng(img.Image(width: 200, height: 100));
+      final processor = Processor(
+        SourcePhoto(bytes: bytes, width: 200, height: 100),
+      )..failLoad = true;
+      final analyzer = Analyzer();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PhotoAnalysisEntry(
+            loadImage: () async =>
+                throw StateError('must not read original again'),
+            services: AnalysisServices(models: Models(), analyzer: analyzer),
+            editorBuilder: (onSourceLoaded) => CapturedPhotoScreen(
+              photo: XFile.fromData(Uint8List.fromList([1, 2, 3])),
+              processor: processor,
+              detector: editor.NoRegions(),
+              objectDetector: editor.NoRegions(),
+              faceDetector: editor.NoFaces(),
+              onSourceLoaded: onSourceLoaded,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, '端末内で写真を解析'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.text('端末内で写真を解析'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PhotoAnalysisScreen), findsNothing);
+      processor.failLoad = false;
+      await tester.ensureVisible(find.text('再試行'));
+      await tester.tap(find.text('再試行'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('撮影した写真'), findsOneWidget);
+      await tester.runAsync(() async {
+        await tester.tap(find.text('端末内で写真を解析'));
+        await waitForPreparedAnalysis(tester);
+      });
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('解析する写真'), findsOneWidget);
+      await tester.tap(find.text('写真を解析する'));
+      await tester.pumpAndSettle();
+      expect(
+        (analyzer.lastImage!.width, analyzer.lastImage!.height),
+        (200, 100),
+      );
+      expect(find.text(description.text), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'shows streamed results, prevents duplicates and recovers from failure',
     (tester) async {
@@ -203,8 +354,7 @@ void main() {
       Future<void> enter() async {
         await tester.runAsync(() async {
           await tester.tap(find.text('端末内で写真を解析'));
-          await tester.pump();
-          await Future<void>.delayed(const Duration(milliseconds: 80));
+          await waitForPreparedAnalysis(tester);
         });
         await tester.pump(const Duration(seconds: 1));
       }
@@ -214,7 +364,11 @@ void main() {
       await tester.tap(find.text('解析用データをダウンロード'));
       await tester.pump();
       expect(services.downloads.active, isTrue);
-      await tester.pageBack();
+      await tester.runAsync(() async {
+        await tester.pageBack();
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
       await tester.pumpAndSettle();
       expect(models.cancellations, 0);
       expect(services.downloads.active, isTrue);
@@ -265,6 +419,15 @@ void main() {
           services: AnalysisServices(models: Models(), analyzer: Analyzer()),
           child: CapturedPhotoScreen(
             photo: XFile.fromData(bytes),
+            detector: editor.FakeDetector()
+              ..candidates.add(
+                editor.candidate(
+                  CandidateKind.text,
+                  const Rect.fromLTRB(40, 20, 160, 80),
+                ),
+              ),
+            objectDetector: editor.NoRegions(),
+            faceDetector: editor.NoFaces(),
             processor: Processor(
               SourcePhoto(bytes: bytes, width: 200, height: 100),
             ),
@@ -274,12 +437,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     final imageRect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
-    final gesture = await tester.startGesture(
-      imageRect.center - const Offset(50, 30),
-    );
-    await gesture.moveTo(imageRect.center + const Offset(50, 30));
-    await gesture.up();
-    await tester.pump();
+    await tester.tapAt(imageRect.center);
+    await tester.pumpAndSettle();
     SelectionPainter selection() =>
         tester
                 .widget<CustomPaint>(

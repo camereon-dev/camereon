@@ -50,9 +50,21 @@ enum AnalysisFailureKind {
   inference,
 }
 
+enum AnalysisFailureStage {
+  initializing,
+  registeringModel,
+  loadingModel,
+  creatingSession,
+  preparingInput,
+  generating,
+  releasing,
+}
+
 class AnalysisFailure implements Exception {
-  const AnalysisFailure(this.kind);
+  const AnalysisFailure(this.kind, {this.stage});
   final AnalysisFailureKind kind;
+  // Only a fixed stage is exposed; SDK messages can contain paths or inputs.
+  final AnalysisFailureStage? stage;
 }
 
 class AnalysisCancelled implements Exception {

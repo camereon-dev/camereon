@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-27",
+  "applicationId": "dev.camereon.camereon.demo.detector_preview",
+  "device": "emulator-5554 / Android 12 / ARM64",
+  "build_mode": "debug",
+  "apk": {
+    "bytes": 213053148,
+    "sha256": "eed5dac51479df2921180f329e2491de8467336be14af9e3344cb0317b809b83"
+  },
+  "checks": {
+    "build": true,
+    "install_replace": true,
+    "launch": true,
+    "apk_application_debuggable": true,
+    "installed_debuggable_flag": true,
+    "run_as": true,
+    "jdwp_process_present": true,
+    "flutter_attach": true,
+    "flutter_hot_reload": true,
+    "cli_detached_app_kept_running": true,
+    "release_apk_preserved": true,
+    "system_bash_install_script_compatibility": true
+  },
+  "physical_device_connected": false
+}

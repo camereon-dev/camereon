@@ -15,7 +15,7 @@ SOURCE = ROOT / "site"
 DESTINATION = ROOT / "dist" / "site"
 REPOSITORY = "camereon-dev/camereon"
 RELEASES_URL = f"https://github.com/{REPOSITORY}/releases"
-APK_NAME = "camereon-beta-arm64.apk"
+LEGACY_APK_NAME = "camereon-beta-arm64.apk"
 
 
 def release_metadata(offline):
@@ -52,17 +52,22 @@ def release_metadata(offline):
             for asset in release["assets"]
             if asset["state"] == "uploaded"
         }
-        if {APK_NAME, APK_NAME + ".sha256"}.issubset(assets):
-            candidates.append((release, assets))
+        version = release['tag_name'].removeprefix('v')
+        name = f"camereon-beta-{version}-arm64.apk"
+        # Keep the existing releases downloadable before the next beta is built.
+        for candidate in (name, LEGACY_APK_NAME):
+            if {candidate, candidate + ".sha256"}.issubset(assets):
+                candidates.append((release, assets, candidate))
+                break
     if not candidates:
         raise RuntimeError("No published beta with an APK and checksum is available")
-    release, assets = max(candidates, key=lambda item: item[0]["published_at"])
-    apk = assets[APK_NAME]
-    checksum = assets[APK_NAME + ".sha256"]
+    release, assets, name = max(candidates, key=lambda item: item[0]["published_at"])
+    apk = assets[name]
+    checksum = assets[name + ".sha256"]
     prefix = f"https://github.com/{REPOSITORY}/releases/download/{release['tag_name']}/"
-    if apk["browser_download_url"] != prefix + APK_NAME:
+    if apk["browser_download_url"] != prefix + name:
         raise ValueError("Unexpected beta APK download URL")
-    if checksum["browser_download_url"] != prefix + APK_NAME + ".sha256":
+    if checksum["browser_download_url"] != prefix + name + ".sha256":
         raise ValueError("Unexpected beta checksum URL")
     return {
         "version": release["tag_name"].removeprefix("v"),

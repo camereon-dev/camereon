@@ -18,6 +18,11 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var faces: MlKitFaceDetectionHandler? = null
+    private var textRegionChannel: TextRegionChannel? = null
+    private var objectRegionChannel: ObjectRegionChannel? = null
+    private val photoPickerRequestCode = 732
+    private var pendingPhotoPick: MethodChannel.Result? = null
     private val savePermissionRequestCode = 731
     private var saveInProgress = false
     private var pendingSaveBytes: ByteArray? = null
@@ -25,10 +30,45 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        faces = MlKitFaceDetectionHandler(flutterEngine.dartExecutor.binaryMessenger)
+        textRegionChannel = TextRegionChannel(this, flutterEngine)
+        objectRegionChannel = ObjectRegionChannel(this, flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/photo_picker")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "pick") result.notImplemented()
+                else if (pendingPhotoPick != null) result.error("busy", "写真を選択中です", null)
+                else {
+                    pendingPhotoPick = result
+                    try {
+                        // System picker grants access to one explicitly chosen
+                        // image. No library-wide storage permission is requested.
+                        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "image/*"
+                        }, photoPickerRequestCode)
+                    } catch (_: Exception) {
+                        pendingPhotoPick = null
+                        result.error("unavailable", "写真を開けませんでした", null)
+                    }
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/analysis_device")
             .setMethodCallHandler { call, result ->
                 if (call.method == "availableStorageBytes") {
                     result.success(StatFs(filesDir.absolutePath).availableBytes)
+                } else {
+                    result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/app_info")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "version") {
+                    @Suppress("DEPRECATION")
+                    val info = packageManager.getPackageInfo(packageName, 0)
+                    result.success(mapOf(
+                        "versionName" to (info.versionName ?: ""),
+                        "versionCode" to info.longVersionCode.toString(),
+                    ))
                 } else {
                     result.notImplemented()
                 }
@@ -103,7 +143,56 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != photoPickerRequestCode) return
+        val result = pendingPhotoPick ?: return
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) {
+            pendingPhotoPick = null
+            result.success(null)
+            return
+        }
+        Thread {
+            try {
+                val bytes = requireNotNull(contentResolver.openInputStream(uri)).use { stream ->
+                    // Bound transfer/memory use even for a provider with no size metadata.
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = stream.read(buffer)
+                        if (count < 0) break
+                        check(output.size() + count <= 32 * 1024 * 1024)
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                }
+                runOnUiThread {
+                    if (pendingPhotoPick === result) {
+                        pendingPhotoPick = null
+                        result.success(bytes)
+                    }
+                }
+            } catch (_: Exception) {
+                runOnUiThread {
+                    if (pendingPhotoPick === result) {
+                        pendingPhotoPick = null
+                        result.error("failed", "写真を開けませんでした", null)
+                    }
+                }
+            }
+        }.start()
+    }
+
     override fun onDestroy() {
+        faces?.close()
+        faces = null
+        textRegionChannel?.close()
+        textRegionChannel = null
+        objectRegionChannel?.close()
+        objectRegionChannel = null
+        pendingPhotoPick?.success(null)
+        pendingPhotoPick = null
         pendingSaveResult?.let { finishSave(it, "failed") }
         pendingSaveResult = null
         pendingSaveBytes = null

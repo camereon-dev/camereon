@@ -1,0 +1,29 @@
+{
+  "model": "YOLO26s",
+  "source": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s.pt",
+  "source_sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+  "file": "yolo26s.onnx",
+  "bytes": 38106089,
+  "sha256": "37d160a608d6220748a8cf17312c9d96090e037e3e4bffc0f36a7bfa89d15a98",
+  "export": {
+    "ultralytics": "8.4.89",
+    "onnx": "1.23.2",
+    "opset": 17,
+    "dynamic": true,
+    "simplify": false,
+    "nms": false,
+    "quantize": null
+  },
+  "input": "RGB float32 / 255; letterbox 114, stride32; long sides 640 and 1280",
+  "output": "[1,300,6] xyxy, confidence, COCO class id",
+  "classes": {
+    "0": "person",
+    "62": "screen",
+    "63": "screen",
+    "67": "screen"
+  },
+  "confidence": 0.25,
+  "merge_iou": 0.7,
+  "license": "AGPL-3.0",
+  "runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.24.3"
+}

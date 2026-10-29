@@ -1,5 +1,7 @@
 # 撮影後のオンデバイス解析の設計案
 
+2026-10-27の更新: [実写3枚での検出評価](detector-evaluation.md)、[Android組み込み](android-detectors.md)、[#13の顔検出](face-detection.md)を統合する。通常フローはML Kitの顔、YOLOの人物・画面、PP-OCRv5の文字を候補として使い、VLMを必須にしない。Gemma検証コードは保持する。小さな写真・書類の見落としがあり、リスク判定や投稿可否まで実装したものではない。[共通点と統合方針](detection-integration.md)を参照。以下は2026-10-20時点の設計案として残す。
+
 作成日: 2026-10-20。状態: 設計案と単独検証。本体組み込みは #28 で進める。
 
 進め方の更新: Gemma の画像入力検証を [#23](https://github.com/camereon-dev/camereon/issues/23) で先行する。

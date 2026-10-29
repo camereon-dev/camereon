@@ -24,3 +24,10 @@ plugins {
 }
 
 include(":app")
+
+// Keep task outputs separate from setup-gradle's immutable dependency cache.
+buildCache {
+    local {
+        directory = File(gradle.gradleUserHomeDir, "camereon-build-cache")
+    }
+}
