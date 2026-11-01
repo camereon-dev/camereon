@@ -1,0 +1,183 @@
+{
+  "date": "2026-11-01",
+  "environment": "Android 12 API 31 ARM64 emulator, Debug, CPU / ONNX Runtime 1.24.3, two intra-op threads",
+  "model_sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+  "method": {
+    "source_max_side": 2560,
+    "overview_side": 960,
+    "crop_side": "max(384, ceil(long_side / 128) * 32)",
+    "crop_overlap_min": 0.25,
+    "crop_model_side": 960,
+    "max_passes": 26,
+    "max_candidates": 500
+  },
+  "metrics": {
+    "matching_iou": 0.3,
+    "timing": "One wall-clock sample per image/method, including transfer/session creation; source normalization excluded. Not a physical-device benchmark."
+  },
+  "synthetic": [
+    {
+      "fixture": "font6_2560",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 20,
+          "predicted": 0,
+          "wall_ms": 529,
+          "truncated": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 2786,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "fixture": "font6_3840",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 20,
+          "predicted": 0,
+          "wall_ms": 174,
+          "truncated": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 2579,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "fixture": "font8_2560",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 14,
+          "fp": 6,
+          "fn": 6,
+          "predicted": 20,
+          "wall_ms": 164,
+          "truncated": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 2548,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "fixture": "font14_2560",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 164,
+          "truncated": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 2532,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "fixture": "blank_2560",
+      "expected": 0,
+      "runs": {
+        "baseline": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 0,
+          "wall_ms": 157,
+          "truncated": false
+        },
+        "detail": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 0,
+          "wall_ms": 4100,
+          "truncated": false
+        }
+      }
+    }
+  ],
+  "parcel_1280_candidates_after_deduplication": 4,
+  "private_candidate_counts_only": [
+    {
+      "photo": 1,
+      "runs": {
+        "baseline": {
+          "wall_ms": 255,
+          "count": 2,
+          "truncated": false
+        },
+        "detail": {
+          "wall_ms": 3249,
+          "count": 7,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "photo": 2,
+      "runs": {
+        "baseline": {
+          "wall_ms": 554,
+          "count": 9,
+          "truncated": false
+        },
+        "detail": {
+          "wall_ms": 2973,
+          "count": 100,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "photo": 3,
+      "runs": {
+        "baseline": {
+          "wall_ms": 373,
+          "count": 0,
+          "truncated": false
+        },
+        "detail": {
+          "wall_ms": 3980,
+          "count": 18,
+          "truncated": false
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic precision/recall does not generalize to arbitrary photographs.",
+    "Private-photo counts are not an accuracy rate; fabric motifs and other false candidates remain.",
+    "Physical-device speed/heat is not measured."
+  ]
+}

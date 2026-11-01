@@ -18,12 +18,13 @@ internal class TextRegionChannel(private val activity: Activity, engine: Flutter
                 result.notImplemented()
             } else {
                 val bytes = call.argument<ByteArray>("bytes")
+                val detailed = call.argument<Boolean>("detailed") ?: true
                 if (bytes == null || closed.get() || !busy.compareAndSet(false, true)) {
                     result.error("unavailable", "文字候補を検出できませんでした", null)
                 } else {
                     executor.execute {
                         try {
-                            val detection = TextRegionDetector(activity.assets).detect(bytes)
+                            val detection = TextRegionDetector(activity.assets).detect(bytes, detailed)
                             activity.runOnUiThread { if (!closed.get()) result.success(detection) }
                         } catch (_: Exception) {
                             // Never log image contents, OCR strings or native exception payloads.

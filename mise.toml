@@ -46,3 +46,7 @@ run = "bash scripts/build-android-detectors.sh --debug"
 [tasks.detector-debug-install]
 description = "検出器Debug APKをビルドして接続端末へインストールする"
 run = "bash scripts/install-android-detectors.sh --debug"
+
+[tasks.small-text-test]
+description = "Androidで小さい文字の検出・従来比較・元画像座標を検証する"
+run = "flutter test integration_test/small_text_device_test.dart"

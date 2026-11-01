@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageOps
 from rapidocr_onnxruntime.ch_ppocr_det.utils import DBPostProcess
 
 
-def detect(image, session, long_side, contour=False):
+def detect(image, session, long_side, contour=False, line_filter=False):
     h, w = image.shape[:2]
     scale = min(1.0, long_side / max(h, w))
     # Dart rounds positive ties upwards, as does Kotlin roundToInt.
@@ -47,10 +47,23 @@ def detect(image, session, long_side, contour=False):
         left, top, width, height, _ = stats[component]
         if min(width, height) < 3:
             continue
+        if line_filter and max(width, height) / min(width, height) < 1.5:
+            continue
         score = float(probability[top:top + height, left:left + width].mean())
         if score < .6:
             continue
         margin = float(width) * height * 1.5 / (2 * (width + height))
+        if line_filter:
+            x1,y1 = max(0,int(left-margin)), max(0,int(top-margin))
+            x2,y2 = min(mw,int(np.ceil(left+width+margin))), min(mh,int(np.ceil(top+height+margin)))
+            sample = resized[y1:y2:max(1,(y2-y1)//32),x1:x2:max(1,(x2-x1)//32)]
+            if sample.size == 0:
+                continue
+            projection = sample.mean(axis=1 if sample.shape[0] > sample.shape[1] else 0)
+            ranges = np.ptp(sample, axis=(0,1))
+            projected_ranges = np.ptp(projection, axis=0)
+            if not np.any((ranges >= 12) & (projected_ranges >= 4)):
+                continue
         found.append({"label": "text", "score": round(score, 4), "box": [
             max(0, left - margin) * w / mw, max(0, top - margin) * h / mh,
             min(mw, left + width + margin) * w / mw,

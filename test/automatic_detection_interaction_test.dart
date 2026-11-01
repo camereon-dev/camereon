@@ -23,6 +23,67 @@ class CountingFaces implements PhotoFaceDetector {
 }
 
 void main() {
+  testWidgets(
+    'pinch zoom preserves original candidate coordinates through save',
+    (tester) async {
+      final processor = editor.FakeProcessor(200, 100);
+      final texts = editor.FakeDetector()
+        ..candidates.add(
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(90, 45, 110, 55),
+          ),
+        );
+      await editor.open(tester, processor, editor.FakeSaver(), texts: texts);
+      final before = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      final first = await tester.startGesture(
+        before.center - const Offset(30, 0),
+        pointer: 1,
+      );
+      final second = await tester.startGesture(
+        before.center + const Offset(30, 0),
+        pointer: 2,
+      );
+      await first.moveTo(before.center - const Offset(90, 0));
+      await second.moveTo(before.center + const Offset(90, 0));
+      await tester.pump();
+      await first.up();
+      await second.up();
+      await tester.pumpAndSettle();
+      final after = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      expect(after.width, greaterThan(before.width * 1.4));
+      await editor.tapPixel(tester, const Offset(100, 50));
+      expect(editor.painter(tester).regions, [texts.candidates.single.region]);
+      await editor.tapText(tester, '保存前に確認');
+      expect(processor.received, [texts.candidates.single.region]);
+    },
+  );
+
+  testWidgets(
+    'dense text taps prefer the touched frame over a smaller nearby frame',
+    (tester) async {
+      final a = editor.candidate(
+        CandidateKind.text,
+        const Rect.fromLTRB(40, 40, 100, 50),
+      );
+      final b = editor.candidate(
+        CandidateKind.text,
+        const Rect.fromLTRB(50, 51, 60, 54),
+      );
+      final texts = editor.FakeDetector()..candidates.addAll([a, b]);
+      await editor.open(
+        tester,
+        editor.FakeProcessor(200, 100),
+        editor.FakeSaver(),
+        texts: texts,
+      );
+      await editor.tapPixel(tester, const Offset(55, 49));
+      expect(editor.overlay(tester).selectedCandidates, {a});
+      await editor.tapPixel(tester, const Offset(55, 52));
+      expect(editor.overlay(tester).selectedCandidates, {a, b});
+    },
+  );
+
   testWidgets('candidate frames expose independent accessible tap actions', (
     tester,
   ) async {

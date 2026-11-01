@@ -63,6 +63,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   List<RegionCandidate> _candidates = [];
   Set<RegionCandidate> _selected = {};
   final List<Set<RegionCandidate>> _history = [];
+  final _photoTransform = TransformationController();
   final Set<bool> _failedScans = {};
   bool _truncated = false;
   bool _detecting = false;
@@ -130,6 +131,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     WidgetsBinding.instance.removeObserver(this);
     _faces.removeListener(_faceChanged);
     _faces.dispose();
+    _photoTransform.dispose();
     _detectionEpoch++;
     _autoDetectionEpoch++;
     if (widget.photo.path.isNotEmpty) File(widget.photo.path).delete().ignore();
@@ -396,7 +398,12 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                       ),
                     )
                   else
-                    _editor(source),
+                    InteractiveViewer(
+                      transformationController: _photoTransform,
+                      minScale: 1,
+                      maxScale: 8,
+                      child: _editor(source),
+                    ),
                   Positioned(
                     top: 16,
                     left: 16,
@@ -547,7 +554,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         : _visibleCandidates.isEmpty
         ? '別の写真で試してください'
         : _selected.isEmpty
-        ? '枠をタップして隠す'
+        ? '枠をタップ · ピンチで拡大'
         : 'もう一度タップで解除';
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
@@ -689,6 +696,26 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     }
 
     hits.sort((a, b) {
+      final aContains = a.region.toRect().contains(point);
+      final bContains = b.region.toRect().contains(point);
+      if (aContains != bContains) return aContains ? -1 : 1;
+      if (!aContains) {
+        double distance(RegionCandidate c) {
+          final r = c.region.toRect();
+          final dx = math.max(
+            0.0,
+            math.max(r.left - point.dx, point.dx - r.right),
+          );
+          final dy = math.max(
+            0.0,
+            math.max(r.top - point.dy, point.dy - r.bottom),
+          );
+          return dx * dx + dy * dy;
+        }
+
+        final order = distance(a).compareTo(distance(b));
+        if (order != 0) return order;
+      }
       final aEdge = edgeDistance(a) <= tolerance;
       final bEdge = edgeDistance(b) <= tolerance;
       if (aEdge != bEdge) return aEdge ? -1 : 1;
@@ -764,7 +791,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                 if (rect.contains(event.localPosition)) {
                   _tapCandidate(
                     (event.localPosition - rect.topLeft) / scale,
-                    scale,
+                    scale * _photoTransform.value.getMaxScaleOnAxis(),
                   );
                 }
               },
