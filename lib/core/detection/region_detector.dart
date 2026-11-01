@@ -22,9 +22,13 @@ class RegionDetection {
   RegionDetection({
     required List<RegionCandidate> candidates,
     this.truncated = false,
+    this.partial = false,
   }) : candidates = List.unmodifiable(candidates);
   final List<RegionCandidate> candidates;
   final bool truncated;
+
+  /// Some stages failed, but successful candidates remain available for editing.
+  final bool partial;
 }
 
 abstract interface class RegionDetector {

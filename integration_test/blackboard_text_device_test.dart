@@ -41,19 +41,27 @@ void main() {
         expect(sha256.convert(input).toString(), item['sha256']);
         final source = await processor.normalize(input);
         final runs = <String, Object>{};
-        for (final detailed in [false, true]) {
+        for (final mode in [
+          (name: 'baseline', detailed: false, ocr: false),
+          (name: 'geometry', detailed: true, ocr: false),
+          (name: 'detail', detailed: true, ocr: true),
+        ]) {
           final timer = Stopwatch()..start();
-          final result = await AndroidTextRegionDetector(detailed: detailed)
-              .detect(source);
-          runs[detailed ? 'detail' : 'baseline'] = {
+          final result = await AndroidTextRegionDetector(
+            detailed: mode.detailed,
+            supplementalOcr: mode.ocr,
+          ).detect(source);
+          expect(result.partial, isFalse, reason: '${mode.name}: $id');
+          runs[mode.name] = {
             'wall_ms': timer.elapsedMilliseconds,
             'truncated': result.truncated,
+            'partial': result.partial,
             'boxes': [
               for (final c in result.candidates)
                 [c.region.left, c.region.top, c.region.right, c.region.bottom],
             ],
           };
-          if (detailed) {
+          if (mode.name == 'detail') {
             final jpeg = await processor.redact(source, [
               for (final c in result.candidates) c.region,
             ]);

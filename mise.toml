@@ -50,3 +50,8 @@ run = "bash scripts/install-android-detectors.sh --debug"
 [tasks.small-text-test]
 description = "Androidで小さい文字の検出・従来比較・元画像座標を検証する"
 run = "flutter test integration_test/small_text_device_test.dart"
+
+[tasks.text-geometry-test]
+description = "文字の傾き・背景スコア・一文字の幾何をJVM上で検証する"
+dir = "android"
+run = "./gradlew :app:testDebugUnitTest"

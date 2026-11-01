@@ -135,6 +135,7 @@ void main() {
           final watch = Stopwatch()..start();
           final result = await AndroidTextRegionDetector(detailed: detailed)
               .detect(fixture.photo);
+          expect(result.partial, isFalse, reason: fixture.name);
           final metrics = match(result, fixture.expected);
           counts[detailed] = metrics;
           for (final candidate in result.candidates) {
@@ -154,6 +155,7 @@ void main() {
             'predicted': result.candidates.length,
             'wall_ms': watch.elapsedMilliseconds,
             'truncated': result.truncated,
+            'partial': result.partial,
           };
           // ignore: avoid_print
           print(
@@ -255,6 +257,7 @@ void main() {
             final watch = Stopwatch()..start();
             final result = await AndroidTextRegionDetector(detailed: detailed)
                 .detect(source);
+            expect(result.partial, isFalse, reason: 'Private photo ${i + 1}');
             runs[detailed ? 'detail' : 'baseline'] = {
               'wall_ms': watch.elapsedMilliseconds,
               'count': result.candidates.length,

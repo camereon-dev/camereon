@@ -13,9 +13,9 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Detection only. Reuse one bounded session for the overview and detail crops. */
+/** Only regions leave native code. Reuse one bounded session for detector crops. */
 internal class TextRegionDetector(private val assets: AssetManager) {
-    fun detect(bytes: ByteArray, detailed: Boolean = true): Map<String, Any> {
+    fun detect(bytes: ByteArray, detailed: Boolean = true, supplementalOcr: Boolean = true): Map<String, Any> {
         val limit = if (detailed) 2560 else 960
         val cap = if (detailed) 500 else 200
         require(bytes.isNotEmpty() && bytes.size <= 32 * 1024 * 1024)
@@ -32,6 +32,7 @@ internal class TextRegionDetector(private val assets: AssetManager) {
             val environment = OrtEnvironment.getEnvironment()
             val merged = mutableListOf<List<Double>>()
             var truncated = false
+            var partial = false
             var passes = 0
             fun include(box: List<Double>) {
                 var combined = box
@@ -51,9 +52,12 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                 options.setIntraOpNumThreads(2)
                 options.setInterOpNumThreads(1)
                 environment.createSession(model, options).use { session ->
-                    val overview = infer(bitmap, 960, false, session, environment)
+                    // Keep whole-line context at a higher resolution. Tiny
+                    // detail crops alone can split dates and curved words.
+                    val overview = infer(bitmap, if (detailed) 1536 else 960, false,
+                        session, environment, oriented = detailed)
                     passes++
-                    // Preserve the small-image path and legacy comparison exactly.
+                    // The controlled legacy comparison retains its old scoring.
                     if (!detailed || max(bitmap.width, bitmap.height) <= 960) {
                         truncated = overview.size > cap
                         merged.addAll(overview.take(cap))
@@ -92,9 +96,25 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                     }
                 }
             }
+            // OCR is additive. An unreadable string must never remove a region
+            // found by PP-OCR; an OCR failure keeps those regions and enables retry.
+            if (detailed && supplementalOcr) {
+                try {
+                    val supplements = SupplementalTextRecognizer().regions(bitmap)
+                    if (supplements.size > 500) truncated = true
+                    for (box in supplements.take(500)) {
+                        val covered = merged.any { old ->
+                            val intersection = max(0.0, min(box[2], old[2]) - max(box[0], old[0])) *
+                                max(0.0, min(box[3], old[3]) - max(box[1], old[1]))
+                            intersection / ((box[2] - box[0]) * (box[3] - box[1])) >= .9
+                        }
+                        if (!covered) include(box)
+                    }
+                } catch (_: Exception) { partial = true }
+            }
             val rectangles = merged.sortedWith(compareBy({ it[1] }, { it[0] }))
             return mapOf("width" to bitmap.width, "height" to bitmap.height,
-                "boxes" to rectangles, "truncated" to truncated, "passes" to passes,
+                "boxes" to rectangles, "truncated" to truncated, "partial" to partial, "passes" to passes,
                 "elapsedMs" to ((System.nanoTime() - watch) / 1_000_000.0))
         } finally { bitmap.recycle() }
     }
@@ -126,7 +146,7 @@ internal class TextRegionDetector(private val assets: AssetManager) {
     }
 
     private fun infer(bitmap: Bitmap, side: Int, upscale: Boolean, session: OrtSession,
-                      environment: OrtEnvironment): List<List<Double>> {
+                      environment: OrtEnvironment, oriented: Boolean = true): List<List<Double>> {
         val scale = if (upscale) side.toDouble() / max(bitmap.width, bitmap.height)
             else min(1.0, side.toDouble() / max(bitmap.width, bitmap.height))
         val firstWidth = max(1, (bitmap.width * scale).roundToInt())
@@ -158,7 +178,7 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                 val mapHeight = shape[2].toInt(); val mapWidth = shape[3].toInt()
                 val p = FloatArray(mapWidth * mapHeight)
                 result.floatBuffer.get(p)
-                boxes(p, mapWidth, mapHeight, bitmap.width, bitmap.height, upscale, pixels, width, height)
+                boxes(p, mapWidth, mapHeight, bitmap.width, bitmap.height, upscale, pixels, width, height, oriented)
             }
         }
     }
@@ -203,10 +223,11 @@ internal class TextRegionDetector(private val assets: AssetManager) {
         return false
     }
 
-    // DB probability-map components. Axis-aligned bounds deliberately cover rotated
-    // text too; rectangular expansion approximates DB unclip without OpenCV.
+    // DB probability-map components. Score along the text's own orientation;
+    // the editor still receives conservative axis-aligned redaction bounds.
     private fun boxes(p: FloatArray, width: Int, height: Int, imageWidth: Int,
-                      imageHeight: Int, lineFilter: Boolean = false, pixels: IntArray, pixelWidth: Int, pixelHeight: Int): List<List<Double>> {
+                      imageHeight: Int, lineFilter: Boolean = false, pixels: IntArray, pixelWidth: Int, pixelHeight: Int,
+                      oriented: Boolean = true): List<List<Double>> {
         val visited = BooleanArray(p.size)
         val queue = IntArray(p.size)
         val found = mutableListOf<List<Double>>()
@@ -237,14 +258,21 @@ internal class TextRegionDetector(private val assets: AssetManager) {
             }
             val w = right - left + 1; val h = bottom - top + 1
             if (min(w, h) < 3) continue
-            // Detail enlargement can turn circular fabric motifs into isolated
-            // glyph-like squares. Extra crops must support a text-line shape;
-            // the unchanged overview still keeps short/single-character text.
-            if (lineFilter && max(w, h).toDouble() / min(w, h) < 1.5) continue
-            var score = 0.0
-            for (y in top..bottom) for (x in left..right) score += p[y * width + x]
-            if (score / (w * h) < .6) continue
-            val margin = w.toDouble() * h * 1.5 / (2 * (w + h))
+            val geometry = if (oriented) TextBoxGeometry.component(queue, tail, width, top, bottom) else null
+            val textWidth = geometry?.width ?: w.toDouble()
+            val textHeight = geometry?.height ?: h.toDouble()
+            if (min(textWidth, textHeight) < 3) continue
+            val score = if (geometry != null) geometry.score(p, width, left, top, right, bottom) else {
+                var sum = 0.0
+                for (y in top..bottom) for (x in left..right) sum += p[y * width + x]
+                sum / (w * h)
+            }
+            if (score < .6) continue
+            // Retain confident single characters/digits instead of rejecting
+            // every near-square shape. Require stronger evidence for these
+            // crop-only additions to limit repeated fabric-pattern candidates.
+            if (lineFilter && max(textWidth, textHeight) / min(textWidth, textHeight) < 1.5 && score < .75) continue
+            val margin = textWidth * textHeight * 1.5 / (2 * (textWidth + textHeight))
             if (lineFilter && !hasContrast(pixels, pixelWidth, pixelHeight,
                 ((left - margin) * pixelWidth / width).toInt(),
                 ((top - margin) * pixelHeight / height).toInt(),

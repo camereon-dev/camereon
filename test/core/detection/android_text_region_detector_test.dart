@@ -23,8 +23,13 @@ void main() {
     () async {
       messenger.setMockMethodCallHandler(channel, (call) async {
         expect(call.method, 'detect');
-        expect((call.arguments as Map).keys, ['bytes', 'detailed']);
+        expect((call.arguments as Map).keys, [
+          'bytes',
+          'detailed',
+          'supplementalOcr',
+        ]);
         expect((call.arguments as Map)['detailed'], isTrue);
+        expect((call.arguments as Map)['supplementalOcr'], isTrue);
         return {
           'width': 200,
           'height': 100,
@@ -49,6 +54,40 @@ void main() {
       expect(result.truncated, isTrue);
     },
   );
+
+  test(
+    'OCR failure retains primary regions and reports partial detection',
+    () async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          'width': 400,
+          'height': 200,
+          'boxes': [
+            [10, 20, 80, 50],
+          ],
+          'partial': true,
+        },
+      );
+      final result = await AndroidTextRegionDetector(channel: channel)
+          .detect(photo);
+      expect(result.candidates, hasLength(1));
+      expect(result.partial, isTrue);
+      expect(result.truncated, isFalse);
+    },
+  );
+
+  test('can compare the detector without the OCR supplement', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect((call.arguments as Map)['detailed'], isTrue);
+      expect((call.arguments as Map)['supplementalOcr'], isFalse);
+      return {'width': 400, 'height': 200, 'boxes': []};
+    });
+    await AndroidTextRegionDetector(
+      channel: channel,
+      supplementalOcr: false,
+    ).detect(photo);
+  });
 
   test('invalid responses fail, then retry succeeds; empty means a successful scan', () async {
     final detector = AndroidTextRegionDetector(channel: channel);
@@ -102,6 +141,7 @@ void main() {
         messenger.setMockMethodCallHandler(channel, (call) async {
           final args = call.arguments as Map;
           expect(args['detailed'], detailed);
+          expect(args['supplementalOcr'], detailed);
           final input = img.decodePng(args['bytes'])!;
           expect((input.width, input.height), (maxSide, maxSide ~/ 4));
           return {

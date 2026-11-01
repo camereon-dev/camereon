@@ -232,6 +232,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             if (!previous.any((old) => same(c, old))) c,
         ];
         _truncated = _truncated || result.truncated;
+        if (result.partial) _failedScans.add(objects);
       });
     } catch (_) {
       if (mounted && epoch == _detectionEpoch) {

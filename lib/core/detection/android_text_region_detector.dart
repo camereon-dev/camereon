@@ -8,12 +8,19 @@ import 'region_detector.dart';
 
 /// Bundled PP-OCRv5 mobile detector. Only bounding boxes cross the native bridge.
 class AndroidTextRegionDetector implements RegionDetector {
-  AndroidTextRegionDetector({MethodChannel? channel, this.detailed = true})
-    : _channel = channel ?? const MethodChannel('dev.camereon/text_regions');
+  AndroidTextRegionDetector({
+    MethodChannel? channel,
+    this.detailed = true,
+    this.supplementalOcr = true,
+  }) : _channel = channel ?? const MethodChannel('dev.camereon/text_regions');
   final MethodChannel _channel;
 
   /// The legacy whole-image pass remains available for controlled comparisons.
   final bool detailed;
+
+  /// Disable the independent OCR supplement for controlled detector comparisons.
+  /// Recognized strings remain inside native code; only regions are returned.
+  final bool supplementalOcr;
   int get _maxSide => detailed ? 2560 : 960;
   int get _maxCandidates => detailed ? 500 : 200;
   bool _working = false;
@@ -34,6 +41,7 @@ class AndroidTextRegionDetector implements RegionDetector {
       final result = await _channel.invokeMapMethod<String, dynamic>('detect', {
         'bytes': png,
         'detailed': detailed,
+        'supplementalOcr': detailed && supplementalOcr,
       });
       if (result == null ||
           result['width'] is! num ||
@@ -86,6 +94,7 @@ class AndroidTextRegionDetector implements RegionDetector {
             RegionCandidate(kind: CandidateKind.text, region: region),
         ],
         truncated: result['truncated'] == true,
+        partial: result['partial'] == true,
       );
     } catch (_) {
       throw const RegionDetectionException();

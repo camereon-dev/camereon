@@ -62,10 +62,10 @@ def merge(found):
     return sorted(merged, key=lambda d: (d['box'][1], d['box'][0]))
 
 
-def tiled(image, session):
+def tiled(image, session, oriented=False):
     h, w = image.shape[:2]
     edge = max(384, math.ceil(max(h, w) / 128) * 32)
-    output = detect(image, session, 960)
+    output = detect(image, session, 1536 if oriented else 960, oriented=oriented)
     found = []
     tiles = []
     if max(h, w) > 960:
@@ -75,7 +75,7 @@ def tiled(image, session):
                 ch, cw = crop.shape[:2]
                 scale = 960 / max(ch, cw)
                 enlarged = cv2.resize(crop, (int(cw*scale+.5), int(ch*scale+.5)))
-                result = detect(enlarged, session, 960, line_filter=True)
+                result = detect(enlarged, session, 960, line_filter=True, oriented=oriented)
                 tiles.append([x, y, cw, ch])
                 for d in result['detections']:
                     a,b,c,e = d['box']
@@ -98,6 +98,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('images', nargs='+', type=Path)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--oriented', action='store_true', help='Also evaluate orientation-aware scoring and 1536px overview')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     model = Path('android/app/src/main/assets/text_detection/inference.onnx')
@@ -119,9 +120,12 @@ def main():
         original.thumbnail((2560,2560))
         bgr = cv2.cvtColor(np.asarray(original), cv2.COLOR_RGB2BGR)
         runs = {}
-        for name, fn in [('global960',lambda:detect(bgr,session,960)),
+        modes = [('global960',lambda:detect(bgr,session,960)),
                          ('global1536',lambda:detect(bgr,session,1536)),
-                         ('detailed',lambda:tiled(bgr,session))]:
+                         ('detailed',lambda:tiled(bgr,session))]
+        if args.oriented:
+            modes.append(('oriented',lambda:tiled(bgr,session,oriented=True)))
+        for name, fn in modes:
             start = time.perf_counter()
             result = fn()
             result['wall_ms'] = round((time.perf_counter()-start)*1000,1)

@@ -6,8 +6,8 @@
 
 | 項目 | 顔 | 人物・画面 | 文字 |
 | --- | --- | --- | --- |
-| 推論 | 同梱ML Kit、ACCURATE | 同梱YOLO26s、ONNX Runtime | 同梱PP-OCRv5、ONNX Runtime |
-| 範囲 | 顔の周囲に各辺10%の余白 | 人物全体、モニター・PC・スマホ全体 | 文字の位置。内容認識は行わない |
+| 推論 | 同梱ML Kit、ACCURATE | 同梱YOLO26s、ONNX Runtime | 同梱PP-OCRv5、ONNX Runtime + 同梱日本語ML Kit OCR |
+| 範囲 | 顔の周囲に各辺10%の余白 | 人物全体、モニター・PC・スマホ全体 | 文字の位置。OCR結果は追加位置だけに使い、文字列はネイティブ内から返さない |
 | 入力 | 向きを正規化した同じSourcePhoto | 同左 | 同左 |
 | 座標 | 最大長辺1600pxから元画像へ復元 | 最大長辺1600pxから640/1280pxの2解像度、元画像へ復元 | 最大長辺2560px、全体と拡大分割の結果を元画像へ復元 |
 | 編集への受渡し | 顔IDに対応するRegionCandidateへ変換 | RegionCandidateのHideRegion | 同左 |
