@@ -42,6 +42,8 @@ fontSize 8の従来方式では、位置は近いが枠が大きすぎて照合�
 
 ## 再現
 
+追加の[公開黒板4枚による確認](evaluation-evidence/2026-11-01-blackboards/README.md)では、読める日付や手書きの行に明確な検出漏れが残り、マージ条件を満たさなかった。合成画像の改善を黒板全般へ一般化しない。
+
 ```sh
 mise run check
 CAMEREON_DETECTOR_PREVIEW=1 mise run small-text-test -- -d emulator-5554
