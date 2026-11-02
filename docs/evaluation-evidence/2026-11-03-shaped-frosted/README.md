@@ -36,6 +36,8 @@
 
 テストプロセスの `dumpsys meminfo` TOTAL PSS 最大値: 1045 MB（2秒間隔。Debug のテストプロセスで、Release 単体や実機の値ではない）。
 
+通常Debug ARM64 APK（`mise run detector-debug-install`）は 230,926,220 bytes。同梱は `yolo26s-seg.onnx`（41,726,473 bytes）と `inference.onnx`（4,826,518 bytes）で、検出専用の `yolo26s.onnx` は含まない。エミュレーターには通常のデバッグアプリを再導入した。
+
 ## 回帰
 
 - `mise run check`: 整形・解析・unit/widget（形の判定・多角形化・すりガラスの塗り・表示用パッチ・種類ボタン・長押しなぞりを含む）。
