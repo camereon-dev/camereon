@@ -1,0 +1,384 @@
+{
+ "date": "2026-11-02",
+ "environment": "Android 12 API 31 ARM64 emulator (4 vCPU, 4 GB), Debug test APK, CPU, ONNX Runtime 1.24.3",
+ "note": "detector_probe_device_test.dart. Variants: ONNX intra-op threads (cpu2/cpu4) and XNNPACK EP (xnn4); face minFaceSize 0.05 vs 0.02; object detector thread variants. Probe run used the pre-retiling PNG transfer for encode timing; text passes are the new tiling.",
+ "peak_test_process_pss_kb": 948696,
+ "images": [
+  {
+   "id": "museum-labels",
+   "width": 1024,
+   "height": 681,
+   "encode": {
+    "png_ms": 218,
+    "png_bytes": 1032443,
+    "raw_ms": 19,
+    "raw_bytes": 2789376
+   },
+   "transfer": [
+    1024,
+    681
+   ],
+   "text": {
+    "cpu2": {
+     "wall_ms": 1385,
+     "native_ms": 1347.216293,
+     "passes": 3,
+     "count": 4
+    },
+    "cpu4": {
+     "wall_ms": 596,
+     "native_ms": 563.906625,
+     "passes": 3,
+     "count": 4
+    },
+    "xnn4": {
+     "wall_ms": 819,
+     "native_ms": 801.523167,
+     "passes": 3,
+     "count": 4
+    }
+   }
+  },
+  {
+   "id": "library-iida",
+   "width": 5467,
+   "height": 3634,
+   "encode": {
+    "png_ms": 860,
+    "png_bytes": 6703087,
+    "raw_ms": 62,
+    "raw_bytes": 17428480
+   },
+   "transfer": [
+    2560,
+    1702
+   ],
+   "text": {
+    "cpu2": {
+     "wall_ms": 3069,
+     "native_ms": 2992.697002,
+     "passes": 13,
+     "count": 45
+    },
+    "cpu4": {
+     "wall_ms": 2023,
+     "native_ms": 1946.426417,
+     "passes": 13,
+     "count": 45
+    },
+    "xnn4": {
+     "wall_ms": 3881,
+     "native_ms": 3804.737794,
+     "passes": 13,
+     "count": 45
+    }
+   }
+  },
+  {
+   "id": "library-digital-signage",
+   "width": 3024,
+   "height": 4032,
+   "objects": {
+    "cpu2": {
+     "wall_ms": 905,
+     "kinds": {
+      "screen": 1,
+      "person": 4
+     }
+    },
+    "xnn4": {
+     "wall_ms": 1268,
+     "kinds": {
+      "screen": 1,
+      "person": 4
+     }
+    }
+   }
+  },
+  {
+   "id": "restaurant-chiyoda",
+   "width": 3762,
+   "height": 4559,
+   "encode": {
+    "png_ms": 892,
+    "png_bytes": 9982130,
+    "raw_ms": 66,
+    "raw_bytes": 21626880
+   },
+   "transfer": [
+    2112,
+    2560
+   ],
+   "text": {
+    "cpu2": {
+     "wall_ms": 3689,
+     "native_ms": 3584.893002,
+     "passes": 17,
+     "count": 109
+    },
+    "cpu4": {
+     "wall_ms": 2861,
+     "native_ms": 2743.904209,
+     "passes": 17,
+     "count": 109
+    },
+    "xnn4": {
+     "wall_ms": 5142,
+     "native_ms": 5036.167252,
+     "passes": 17,
+     "count": 109
+    }
+   },
+   "faces": {
+    "0.05": {
+     "count": 2,
+     "wall_ms": 491,
+     "input": [
+      1321,
+      1600
+     ]
+    },
+    "0.02": {
+     "count": 2,
+     "wall_ms": 507,
+     "input": [
+      1321,
+      1600
+     ]
+    }
+   }
+  },
+  {
+   "id": "menu-today",
+   "width": 4576,
+   "height": 3432,
+   "encode": {
+    "png_ms": 779,
+    "png_bytes": 5328344,
+    "raw_ms": 62,
+    "raw_bytes": 19660800
+   },
+   "transfer": [
+    2560,
+    1920
+   ],
+   "text": {
+    "cpu2": {
+     "wall_ms": 3008,
+     "native_ms": 2935.010002,
+     "passes": 13,
+     "count": 108
+    },
+    "cpu4": {
+     "wall_ms": 2511,
+     "native_ms": 2438.535793,
+     "passes": 13,
+     "count": 108
+    },
+    "xnn4": {
+     "wall_ms": 4542,
+     "native_ms": 4456.577252,
+     "passes": 13,
+     "count": 108
+    }
+   }
+  },
+  {
+   "id": "badge-wikicamp",
+   "width": 5568,
+   "height": 3712,
+   "encode": {
+    "png_ms": 951,
+    "png_bytes": 6699324,
+    "raw_ms": 60,
+    "raw_bytes": 17479680
+   },
+   "transfer": [
+    2560,
+    1707
+   ],
+   "text": {
+    "cpu2": {
+     "wall_ms": 2703,
+     "native_ms": 2620.738793,
+     "passes": 13,
+     "count": 34
+    },
+    "cpu4": {
+     "wall_ms": 1982,
+     "native_ms": 1900.233751,
+     "passes": 13,
+     "count": 34
+    },
+    "xnn4": {
+     "wall_ms": 3853,
+     "native_ms": 3780.896877,
+     "passes": 13,
+     "count": 34
+    }
+   },
+   "faces": {
+    "0.05": {
+     "count": 5,
+     "wall_ms": 385,
+     "input": [
+      1600,
+      1067
+     ]
+    },
+    "0.02": {
+     "count": 5,
+     "wall_ms": 483,
+     "input": [
+      1600,
+      1067
+     ]
+    }
+   },
+   "objects": {
+    "cpu2": {
+     "wall_ms": 823,
+     "kinds": {
+      "person": 6,
+      "screen": 7
+     }
+    },
+    "xnn4": {
+     "wall_ms": 1751,
+     "kinds": {
+      "person": 6,
+      "screen": 7
+     }
+    }
+   }
+  },
+  {
+   "id": "parking-lpr",
+   "width": 3489,
+   "height": 2004,
+   "objects": {
+    "cpu2": {
+     "wall_ms": 706,
+     "kinds": {
+      "vehicle": 9,
+      "person": 1
+     }
+    },
+    "xnn4": {
+     "wall_ms": 1084,
+     "kinds": {
+      "vehicle": 9,
+      "person": 1
+     }
+    }
+   }
+  },
+  {
+   "id": "parking-shizuoka",
+   "width": 4288,
+   "height": 3216,
+   "objects": {
+    "cpu2": {
+     "wall_ms": 838,
+     "kinds": {
+      "vehicle": 3
+     }
+    },
+    "xnn4": {
+     "wall_ms": 1279,
+     "kinds": {
+      "vehicle": 3
+     }
+    }
+   }
+  },
+  {
+   "id": "car-civic",
+   "width": 698,
+   "height": 491,
+   "objects": {
+    "cpu2": {
+     "wall_ms": 775,
+     "kinds": {
+      "vehicle": 4
+     }
+    },
+    "xnn4": {
+     "wall_ms": 1207,
+     "kinds": {
+      "vehicle": 4
+     }
+    }
+   }
+  },
+  {
+   "id": "louvre-crowd",
+   "width": 3766,
+   "height": 2596,
+   "encode": {
+    "png_ms": 612,
+    "png_bytes": 8509692,
+    "raw_ms": 41,
+    "raw_bytes": 18073600
+   },
+   "transfer": [
+    2560,
+    1765
+   ],
+   "text": {
+    "cpu2": {
+     "wall_ms": 2884,
+     "native_ms": 2797.614126,
+     "passes": 13,
+     "count": 11
+    },
+    "cpu4": {
+     "wall_ms": 2082,
+     "native_ms": 2000.955251,
+     "passes": 13,
+     "count": 11
+    },
+    "xnn4": {
+     "wall_ms": 4024,
+     "native_ms": 3943.848586,
+     "passes": 13,
+     "count": 11
+    }
+   },
+   "faces": {
+    "0.05": {
+     "count": 5,
+     "wall_ms": 267,
+     "input": [
+      1600,
+      1103
+     ]
+    },
+    "0.02": {
+     "count": 9,
+     "wall_ms": 325,
+     "input": [
+      1600,
+      1103
+     ]
+    }
+   },
+   "objects": {
+    "cpu2": {
+     "wall_ms": 809,
+     "kinds": {
+      "person": 20,
+      "screen": 2
+     }
+    },
+    "xnn4": {
+     "wall_ms": 1192,
+     "kinds": {
+      "person": 20,
+      "screen": 2
+     }
+    }
+   }
+  }
+ ]
+}

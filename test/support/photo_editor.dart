@@ -93,6 +93,7 @@ class FakeDetector implements RegionDetector {
   int calls = 0;
   bool fail = false;
   bool truncated = false;
+  bool partial = false;
   Completer<RegionDetection>? pending;
   final List<RegionCandidate> candidates = [];
   @override
@@ -100,7 +101,11 @@ class FakeDetector implements RegionDetector {
     calls++;
     if (fail) throw const RegionDetectionException();
     return pending == null
-        ? RegionDetection(candidates: candidates, truncated: truncated)
+        ? RegionDetection(
+            candidates: candidates,
+            truncated: truncated,
+            partial: partial,
+          )
         : pending!.future;
   }
 }

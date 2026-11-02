@@ -6,7 +6,7 @@ import '../photo/hide_region.dart';
 import '../photo/photo_images.dart';
 import 'region_detector.dart';
 
-/// Bundled YOLO26s. Person, display, laptop and phone regions only.
+/// Bundled YOLO26s. Person, display/laptop/phone and vehicle regions only.
 class AndroidObjectRegionDetector implements RegionDetector {
   AndroidObjectRegionDetector({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel('dev.camereon/object_regions');
@@ -24,9 +24,11 @@ class AndroidObjectRegionDetector implements RegionDetector {
     }
     _working = true;
     try {
-      final png = await _thumbnail(photo);
+      final pixels = await rawThumbnail(photo, 1600);
       final result = await _channel.invokeMapMethod<String, dynamic>('detect', {
-        'bytes': png,
+        'bytes': pixels.bytes,
+        'width': pixels.width,
+        'height': pixels.height,
       });
       if (result == null ||
           result['width'] is! num ||
@@ -54,6 +56,7 @@ class AndroidObjectRegionDetector implements RegionDetector {
         final kind = switch (value['kind']) {
           'person' => CandidateKind.person,
           'screen' => CandidateKind.screen,
+          'vehicle' => CandidateKind.vehicle,
           _ => throw const RegionDetectionException(),
         };
         final box = value['box'] as List;
@@ -93,30 +96,6 @@ class AndroidObjectRegionDetector implements RegionDetector {
       throw const RegionDetectionException();
     } finally {
       _working = false;
-    }
-  }
-
-  Future<Uint8List> _thumbnail(SourcePhoto photo) async {
-    final longest = photo.width > photo.height ? photo.width : photo.height;
-    final scale = longest > 1600 ? 1600 / longest : 1.0;
-    final codec = await ui.instantiateImageCodec(
-      photo.bytes,
-      targetWidth: (photo.width * scale).round().clamp(1, 1600),
-      targetHeight: (photo.height * scale).round().clamp(1, 1600),
-    );
-    try {
-      final frame = await codec.getNextFrame();
-      try {
-        final data = await frame.image.toByteData(
-          format: ui.ImageByteFormat.png,
-        );
-        if (data == null) throw const RegionDetectionException();
-        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      } finally {
-        frame.image.dispose();
-      }
-    } finally {
-      codec.dispose();
     }
   }
 }

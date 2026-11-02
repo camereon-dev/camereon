@@ -14,19 +14,29 @@ internal class TextRegionChannel(private val activity: Activity, engine: Flutter
 
     init {
         channel.setMethodCallHandler { call, result ->
-            if (call.method != "detect") {
+            if (call.method == "release") {
+                // Housekeeping: drop cached detector sessions (both models) now.
+                OnnxSessions.release()
+                result.success(null)
+            } else if (call.method != "detect") {
                 result.notImplemented()
             } else {
                 val bytes = call.argument<ByteArray>("bytes")
+                val width = call.argument<Int>("width") ?: 0
+                val height = call.argument<Int>("height") ?: 0
+                val detailed = call.argument<Boolean>("detailed") ?: true
+                val tuning = tuning(call.argument<Map<String, Any>>("tuning"))
                 if (bytes == null || closed.get() || !busy.compareAndSet(false, true)) {
                     result.error("unavailable", "文字候補を検出できませんでした", null)
                 } else {
                     executor.execute {
                         try {
-                            val detection = TextRegionDetector(activity.assets).detect(bytes)
+                            val detection = TextRegionDetector(activity.assets)
+                                .detect(bytes, width, height, detailed, tuning)
                             activity.runOnUiThread { if (!closed.get()) result.success(detection) }
-                        } catch (_: Exception) {
-                            // Never log image contents, OCR strings or native exception payloads.
+                        } catch (_: Throwable) {
+                            // Includes OutOfMemoryError on large photos: report, never crash.
+                            // Never log image contents or native exception payloads.
                             activity.runOnUiThread {
                                 if (!closed.get()) result.error("failed", "文字候補を検出できませんでした", null)
                             }
@@ -41,5 +51,13 @@ internal class TextRegionChannel(private val activity: Activity, engine: Flutter
         closed.set(true)
         channel.setMethodCallHandler(null)
         executor.shutdown()
+    }
+
+    companion object {
+        /** Measurement-only override; production calls omit the map. */
+        fun tuning(map: Map<String, Any>?): OnnxSessions.Tuning {
+            val threads = (map?.get("threads") as? Number)?.toInt() ?: return OnnxSessions.Tuning()
+            return OnnxSessions.Tuning(threads = threads.coerceIn(1, 8))
+        }
     }
 }

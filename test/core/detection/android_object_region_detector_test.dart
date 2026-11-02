@@ -35,6 +35,10 @@ void main() {
               'kind': 'screen',
               'box': [60, 10, 90, 40],
             },
+            {
+              'kind': 'vehicle',
+              'box': [0, 40, 50, 50],
+            },
           ],
         },
       );
@@ -43,6 +47,7 @@ void main() {
       expect(result.candidates.map((c) => c.kind), [
         CandidateKind.person,
         CandidateKind.screen,
+        CandidateKind.vehicle,
       ]);
       final region = result.candidates.first.region;
       expect(

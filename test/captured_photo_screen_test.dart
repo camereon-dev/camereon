@@ -9,6 +9,26 @@ import 'support/photo_editor.dart';
 export 'support/photo_editor.dart';
 
 void main() {
+  testWidgets(
+    'partial detection remains editable and retries without losing selection',
+    (tester) async {
+      final texts = FakeDetector()
+        ..partial = true
+        ..candidates.add(
+          candidate(CandidateKind.text, const Rect.fromLTRB(20, 20, 80, 60)),
+        );
+      await open(tester, FakeProcessor(200, 100), FakeSaver(), texts: texts);
+      expect(find.text('一部を検出できませんでした'), findsOneWidget);
+      await tapPixel(tester, const Offset(50, 40));
+      final selected = painter(tester).regions.single;
+      texts.partial = false;
+      await tapText(tester, '一部を検出できませんでした');
+      expect(texts.calls, 2);
+      expect(find.text('一部を検出できませんでした'), findsNothing);
+      expect(painter(tester).regions, [selected]);
+    },
+  );
+
   for (final dimensions in [(200, 100), (100, 200)]) {
     testWidgets('$dimensions: drag and letterbox taps never add manual masks', (
       tester,

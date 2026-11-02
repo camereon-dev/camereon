@@ -1,0 +1,53 @@
+[
+  {
+    "id": "cryptography",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/fc/Mathematics_%28cryptography%29_on_a_blackboard.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Mathematics_(cryptography)_on_a_blackboard.jpg",
+    "author": "David Malone",
+    "license": "CC BY 4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "sha256": "28827280c1db167ac48136a8bf106554e7ed27297f4019175c578b02c2de4584",
+    "bytes": 1273894
+  },
+  {
+    "id": "japanese-menu",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d5/School_lunch_menu_board_%28939283104%29.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:School_lunch_menu_board_(939283104).jpg",
+    "author": "Toshiyuki IMAI",
+    "license": "CC BY-SA 2.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+    "sha256": "ebd49031009fd9a09f408b97329eaea6e0a1d03a1e1201d52f10130ea57f5fed",
+    "bytes": 2829077
+  },
+  {
+    "id": "japanese-classroom",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/77/JapaneseClassroom.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:JapaneseClassroom.jpg",
+    "author": "tony cassidy",
+    "license": "CC BY-SA 2.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+    "sha256": "55145f1ede3061cbe89cdfee4fe40123af0edf85108f46968f0ce94664100842",
+    "bytes": 600864
+  },
+  {
+    "id": "thermodynamics",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/84/Two-blackboards1783.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Two-blackboards1783.jpg",
+    "author": "alegri / 4freephotos.com",
+    "license": "CC BY 3.0",
+    "license_url": "https://creativecommons.org/licenses/by/3.0/",
+    "sha256": "8ff2e9b5531fa2a1f8a88aa53466281d15b0424352b29626e1e91527f97ef489",
+    "bytes": 298769
+  },
+  {
+    "id": "blackboard-bold",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Blackboard_bold_on_a_blackboard.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Blackboard_bold_on_a_blackboard.jpg",
+    "author": "Jacob Rus",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "sha256": "50774ebb3c72c9f531d121154c546814a65dee4e8c2c97617388f3b506dd810d",
+    "bytes": 971147,
+    "selection": "Additional image selected after initial geometry change, before testing that change on this image; no tuning on its result."
+  }
+]

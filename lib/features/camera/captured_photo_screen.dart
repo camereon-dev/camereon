@@ -63,6 +63,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   List<RegionCandidate> _candidates = [];
   Set<RegionCandidate> _selected = {};
   final List<Set<RegionCandidate>> _history = [];
+  final _photoTransform = TransformationController();
   final Set<bool> _failedScans = {};
   bool _truncated = false;
   bool _detecting = false;
@@ -72,8 +73,33 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   bool _facesOnly = false;
   List<RegionCandidate> get _visibleCandidates => [
     ..._faceCandidates.values,
-    if (!_facesOnly) ..._candidates,
+    if (!_facesOnly)
+      for (final c in _candidates)
+        if (_selected.contains(c) || !_coveredByFace(c)) c,
   ];
+
+  /// The text detector fires on eyes, glasses and scarf edges. A text frame
+  /// well inside a face, or a frame enclosing most of a face it does not
+  /// otherwise need, is hidden; a coincident frame stays selectable by kind.
+  bool _coveredByFace(RegionCandidate c) {
+    if (c.kind != CandidateKind.text) return false;
+    final r = c.region.toRect();
+    final textArea = r.width * r.height;
+    return _faceCandidates.values.any((face) {
+      final f = face.region.toRect();
+      final i = r.intersect(f);
+      if (i.width <= 0 || i.height <= 0) return false;
+      final shared = i.width * i.height;
+      final faceArea = f.width * f.height;
+      final inside = shared >= textArea * .7 && textArea < faceArea * .9;
+      final enclosing =
+          shared >= faceArea * .7 &&
+          textArea > faceArea * 1.1 &&
+          faceArea >= textArea * .25;
+      return inside || enclosing;
+    });
+  }
+
   List<HideRegion> get _redactions =>
       {for (final c in _selected) c.region}.toList();
   bool get _scanning =>
@@ -130,6 +156,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     WidgetsBinding.instance.removeObserver(this);
     _faces.removeListener(_faceChanged);
     _faces.dispose();
+    _photoTransform.dispose();
     _detectionEpoch++;
     _autoDetectionEpoch++;
     if (widget.photo.path.isNotEmpty) File(widget.photo.path).delete().ignore();
@@ -183,15 +210,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   Future<void> _detectAll(SourcePhoto source) async {
     final epoch = ++_autoDetectionEpoch;
-    // Keep the two ONNX models' peak allocations separate.
-    await _detect();
+    // Keep the two ONNX models' peak allocations separate. The quick object
+    // pass shows people, screens and vehicles before the longer text tiles.
+    await _detect(objects: true);
     if (!mounted ||
         epoch != _autoDetectionEpoch ||
         !identical(source, _source) ||
         _preview != null) {
       return;
     }
-    await _detect(objects: true);
+    await _detect();
   }
 
   Future<void> _detect({bool objects = false}) async {
@@ -217,7 +245,11 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             a.kind == b.kind && a.region == b.region;
         final previous = _candidates;
         final kinds = objects
-            ? {CandidateKind.person, CandidateKind.screen}
+            ? {
+                CandidateKind.person,
+                CandidateKind.screen,
+                CandidateKind.vehicle,
+              }
             : {CandidateKind.text};
         _candidates = [
           for (final c in previous)
@@ -230,6 +262,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             if (!previous.any((old) => same(c, old))) c,
         ];
         _truncated = _truncated || result.truncated;
+        if (result.partial) _failedScans.add(objects);
       });
     } catch (_) {
       if (mounted && epoch == _detectionEpoch) {
@@ -396,7 +429,12 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                       ),
                     )
                   else
-                    _editor(source),
+                    InteractiveViewer(
+                      transformationController: _photoTransform,
+                      minScale: 1,
+                      maxScale: 8,
+                      child: _editor(source),
+                    ),
                   Positioned(
                     top: 16,
                     left: 16,
@@ -547,7 +585,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         : _visibleCandidates.isEmpty
         ? '別の写真で試してください'
         : _selected.isEmpty
-        ? '枠をタップして隠す'
+        ? '枠をタップ · ピンチで拡大'
         : 'もう一度タップで解除';
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
@@ -689,6 +727,26 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     }
 
     hits.sort((a, b) {
+      final aContains = a.region.toRect().contains(point);
+      final bContains = b.region.toRect().contains(point);
+      if (aContains != bContains) return aContains ? -1 : 1;
+      if (!aContains) {
+        double distance(RegionCandidate c) {
+          final r = c.region.toRect();
+          final dx = math.max(
+            0.0,
+            math.max(r.left - point.dx, point.dx - r.right),
+          );
+          final dy = math.max(
+            0.0,
+            math.max(r.top - point.dy, point.dy - r.bottom),
+          );
+          return dx * dx + dy * dy;
+        }
+
+        final order = distance(a).compareTo(distance(b));
+        if (order != 0) return order;
+      }
       final aEdge = edgeDistance(a) <= tolerance;
       final bEdge = edgeDistance(b) <= tolerance;
       if (aEdge != bEdge) return aEdge ? -1 : 1;
@@ -764,7 +822,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                 if (rect.contains(event.localPosition)) {
                   _tapCandidate(
                     (event.localPosition - rect.topLeft) / scale,
-                    scale,
+                    scale * _photoTransform.value.getMaxScaleOnAxis(),
                   );
                 }
               },

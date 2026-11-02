@@ -50,4 +50,65 @@ void main() {
       expect(processor.received, [shared]);
     },
   );
+
+  testWidgets(
+    'text frames that mostly share a face are hidden once the face arrives',
+    (tester) async {
+      final faces = ControlledFaces();
+      final texts = editor.FakeDetector()
+        ..candidates.addAll([
+          // Eyes/glasses inside the face, and a scarf edge enclosing the face.
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(30, 30, 60, 45),
+          ),
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(10, 10, 120, 90),
+          ),
+          // A name tag beside the face stays available.
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(130, 20, 190, 40),
+          ),
+        ]);
+      final processor = editor.FakeProcessor(200, 100);
+      await editor.open(
+        tester,
+        processor,
+        editor.FakeSaver(),
+        texts: texts,
+        faces: faces,
+        settle: false,
+      );
+      await tester.pump();
+      expect(editor.overlay(tester).candidates.length, 3);
+      // Selecting before the face arrives keeps that frame visible afterwards.
+      // The scan animation is still running, so pump once instead of settling.
+      final image = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      await tester.tapAt(
+        image.topLeft + Offset(45 / 200 * image.width, 38 / 100 * image.height),
+      );
+      await tester.pump();
+      expect(editor.overlay(tester).selectedCandidates, {texts.candidates[0]});
+      faces.result.complete([
+        FaceCandidate(
+          'face',
+          editor.region(const Rect.fromLTRB(20, 20, 100, 70)),
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      final visible = editor.overlay(tester).candidates;
+      expect(visible.map((c) => c.kind), [
+        CandidateKind.face,
+        CandidateKind.text,
+        CandidateKind.text,
+      ]);
+      expect(visible, isNot(contains(texts.candidates[1])));
+      expect(visible, contains(texts.candidates[0]));
+      expect(visible, contains(texts.candidates[2]));
+      await editor.tapText(tester, '保存前に確認');
+      expect(processor.received, [texts.candidates[0].region]);
+    },
+  );
 }

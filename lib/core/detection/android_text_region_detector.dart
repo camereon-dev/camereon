@@ -6,11 +6,17 @@ import '../photo/hide_region.dart';
 import '../photo/photo_images.dart';
 import 'region_detector.dart';
 
-/// Bundled PP-OCRv5 mobile detector. Only bounding boxes cross the native bridge.
+/// Bundled PP-OCRv5 mobile detector. Only bounding boxes come back over the
+/// bridge; the photo crosses it as raw RGBA pixels (no PNG round trip).
 class AndroidTextRegionDetector implements RegionDetector {
-  AndroidTextRegionDetector({MethodChannel? channel})
+  AndroidTextRegionDetector({MethodChannel? channel, this.detailed = true})
     : _channel = channel ?? const MethodChannel('dev.camereon/text_regions');
   final MethodChannel _channel;
+
+  /// The legacy whole-image pass remains available for controlled comparisons.
+  final bool detailed;
+  int get _maxSide => detailed ? 2560 : 960;
+  int get _maxCandidates => detailed ? 500 : 200;
   bool _working = false;
 
   @override
@@ -23,11 +29,14 @@ class AndroidTextRegionDetector implements RegionDetector {
     }
     _working = true;
     try {
-      // Bound the native decode/transfer size; work from the exact same oriented
-      // pixels as the editor, not the camera JPEG's metadata.
-      final png = await _thumbnail(photo);
+      // Bound the transfer size; work from the exact same oriented pixels as
+      // the editor, not the camera JPEG's metadata.
+      final pixels = await rawThumbnail(photo, _maxSide);
       final result = await _channel.invokeMapMethod<String, dynamic>('detect', {
-        'bytes': png,
+        'bytes': pixels.bytes,
+        'width': pixels.width,
+        'height': pixels.height,
+        'detailed': detailed,
       });
       if (result == null ||
           result['width'] is! num ||
@@ -41,9 +50,9 @@ class AndroidTextRegionDetector implements RegionDetector {
           !height.isFinite ||
           width <= 0 ||
           height <= 0 ||
-          width > 960 ||
-          height > 960 ||
-          (result['boxes'] as List).length > 200) {
+          width > _maxSide ||
+          height > _maxSide ||
+          (result['boxes'] as List).length > _maxCandidates) {
         throw const RegionDetectionException();
       }
       final regions = <HideRegion>{};
@@ -53,6 +62,10 @@ class AndroidTextRegionDetector implements RegionDetector {
         }
         final coordinates = box.cast<num>().map((v) => v.toDouble()).toList();
         if (coordinates.any((v) => !v.isFinite) ||
+            coordinates[0] < 0 ||
+            coordinates[1] < 0 ||
+            coordinates[2] > width ||
+            coordinates[3] > height ||
             coordinates[0] >= coordinates[2] ||
             coordinates[1] >= coordinates[3]) {
           throw const RegionDetectionException();
@@ -76,36 +89,12 @@ class AndroidTextRegionDetector implements RegionDetector {
             RegionCandidate(kind: CandidateKind.text, region: region),
         ],
         truncated: result['truncated'] == true,
+        partial: result['partial'] == true,
       );
     } catch (_) {
       throw const RegionDetectionException();
     } finally {
       _working = false;
-    }
-  }
-
-  Future<Uint8List> _thumbnail(SourcePhoto photo) async {
-    final factor =
-        960 / (photo.width > photo.height ? photo.width : photo.height);
-    final scale = factor < 1 ? factor : 1.0;
-    final codec = await ui.instantiateImageCodec(
-      photo.bytes,
-      targetWidth: (photo.width * scale).round().clamp(1, 960),
-      targetHeight: (photo.height * scale).round().clamp(1, 960),
-    );
-    try {
-      final frame = await codec.getNextFrame();
-      try {
-        final data = await frame.image.toByteData(
-          format: ui.ImageByteFormat.png,
-        );
-        if (data == null) throw const RegionDetectionException();
-        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      } finally {
-        frame.image.dispose();
-      }
-    } finally {
-      codec.dispose();
     }
   }
 }

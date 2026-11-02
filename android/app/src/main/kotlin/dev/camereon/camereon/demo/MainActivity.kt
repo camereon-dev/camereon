@@ -184,7 +184,14 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Cached detector sessions are rebuilt on the next photo.
+        if (level >= TRIM_MEMORY_RUNNING_LOW) OnnxSessions.release()
+    }
+
     override fun onDestroy() {
+        OnnxSessions.release()
         faces?.close()
         faces = null
         textRegionChannel?.close()

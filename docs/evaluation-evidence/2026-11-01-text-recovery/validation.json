@@ -1,0 +1,196 @@
+{
+  "evaluated_commit": "b15aeb2997ac1402f10fefad6bb5fa26da1f17cf",
+  "format_analyze_widget_tests": {
+    "passed": 134,
+    "command": "mise run check"
+  },
+  "geometry_jvm_tests": {
+    "passed": 3,
+    "command": "mise run text-geometry-test"
+  },
+  "native_tests": {
+    "blackboard_text_device_test": "1 passed; all five inputs, three modes, partial=false",
+    "small_text_device_test": "2 passed; small synthetic and private photos",
+    "text_regions_device_test": "2 passed; offline baseline comparison and automatic native detection/tap/zoom/JPEG gallery save"
+  },
+  "synthetic": [
+    {
+      "fixture": "font6_2560",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 20,
+          "predicted": 0,
+          "wall_ms": 440,
+          "truncated": false,
+          "partial": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 3622,
+          "truncated": false,
+          "partial": false
+        }
+      }
+    },
+    {
+      "fixture": "font6_3840",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 20,
+          "predicted": 0,
+          "wall_ms": 228,
+          "truncated": false,
+          "partial": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 3676,
+          "truncated": false,
+          "partial": false
+        }
+      }
+    },
+    {
+      "fixture": "font8_2560",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 14,
+          "fp": 6,
+          "fn": 6,
+          "predicted": 20,
+          "wall_ms": 219,
+          "truncated": false,
+          "partial": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 3673,
+          "truncated": false,
+          "partial": false
+        }
+      }
+    },
+    {
+      "fixture": "font14_2560",
+      "expected": 20,
+      "runs": {
+        "baseline": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 233,
+          "truncated": false,
+          "partial": false
+        },
+        "detail": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 20,
+          "wall_ms": 3459,
+          "truncated": false,
+          "partial": false
+        }
+      }
+    },
+    {
+      "fixture": "blank_2560",
+      "expected": 0,
+      "runs": {
+        "baseline": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 0,
+          "wall_ms": 201,
+          "truncated": false,
+          "partial": false
+        },
+        "detail": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "predicted": 0,
+          "wall_ms": 3419,
+          "truncated": false,
+          "partial": false
+        }
+      }
+    }
+  ],
+  "private_photos": [
+    {
+      "photo": 1,
+      "runs": {
+        "baseline": {
+          "wall_ms": 376,
+          "count": 2,
+          "truncated": false
+        },
+        "detail": {
+          "wall_ms": 3715,
+          "count": 24,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "photo": 2,
+      "runs": {
+        "baseline": {
+          "wall_ms": 282,
+          "count": 9,
+          "truncated": false
+        },
+        "detail": {
+          "wall_ms": 3748,
+          "count": 125,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "photo": 3,
+      "runs": {
+        "baseline": {
+          "wall_ms": 502,
+          "count": 0,
+          "truncated": false
+        },
+        "detail": {
+          "wall_ms": 5407,
+          "count": 25,
+          "truncated": false
+        }
+      }
+    }
+  ],
+  "normal_debug_deployment": {
+    "package": "dev.camereon.camereon.demo.detector_preview",
+    "serial": "emulator-5554",
+    "build": "normal lib/main.dart, detector preview, arm64 debug",
+    "apk": "dist/camereon-detector-debug-arm64.apk",
+    "bytes": 273953013,
+    "sha256": "bb3532727b191a6b15a3e7d0a2b2cee83e75907b35fb0130dccaea6a1adc33e9",
+    "previous_debug_bytes": 238886327,
+    "delta_bytes": 35066686,
+    "physical_device_tested": false
+  }
+}

@@ -18,10 +18,15 @@
   "output": "[1,300,6] xyxy, confidence, COCO class id",
   "classes": {
     "0": "person",
+    "2": "vehicle",
+    "3": "vehicle",
+    "5": "vehicle",
+    "7": "vehicle",
     "62": "screen",
     "63": "screen",
     "67": "screen"
   },
+  "vehicle_minimum_side": "6% of the transferred image's longest side",
   "confidence": 0.25,
   "merge_iou": 0.7,
   "license": "AGPL-3.0",

@@ -23,7 +23,13 @@ void main() {
     () async {
       messenger.setMockMethodCallHandler(channel, (call) async {
         expect(call.method, 'detect');
-        expect((call.arguments as Map).keys, ['bytes']);
+        expect((call.arguments as Map).keys, [
+          'bytes',
+          'width',
+          'height',
+          'detailed',
+        ]);
+        expect((call.arguments as Map)['detailed'], isTrue);
         return {
           'width': 200,
           'height': 100,
@@ -46,6 +52,28 @@ void main() {
         ),
       );
       expect(result.truncated, isTrue);
+    },
+  );
+
+  test(
+    'a partially failed native scan keeps its regions and reports partial',
+    () async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          'width': 400,
+          'height': 200,
+          'boxes': [
+            [10, 20, 80, 50],
+          ],
+          'partial': true,
+        },
+      );
+      final result = await AndroidTextRegionDetector(channel: channel)
+          .detect(photo);
+      expect(result.candidates, hasLength(1));
+      expect(result.partial, isTrue);
+      expect(result.truncated, isFalse);
     },
   );
 
@@ -87,5 +115,103 @@ void main() {
       (_) async => {'width': 400, 'height': 200, 'boxes': []},
     );
     expect((await detector.detect(photo)).candidates, isEmpty);
+  });
+  for (final detailed in [false, true]) {
+    test(
+      'bounds transfer and restores high-resolution coordinates: detailed=$detailed',
+      () async {
+        final source = SourcePhoto(
+          bytes: img.encodePng(img.Image(width: 4000, height: 1000)),
+          width: 4000,
+          height: 1000,
+        );
+        final maxSide = detailed ? 2560 : 960;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          final args = call.arguments as Map;
+          expect(args['detailed'], detailed);
+          // Raw RGBA pixels of the bounded thumbnail, not an encoded image.
+          expect((args['width'], args['height']), (maxSide, maxSide ~/ 4));
+          expect(
+            (args['bytes'] as Uint8List).length,
+            maxSide * (maxSide ~/ 4) * 4,
+          );
+          return {
+            'width': args['width'],
+            'height': args['height'],
+            'boxes': [
+              [10.1, 10.1, 30.1, 30.1],
+            ],
+            'truncated': false,
+          };
+        });
+        final result = await AndroidTextRegionDetector(
+          channel: channel,
+          detailed: detailed,
+        ).detect(source);
+        final factor = 4000 / maxSide;
+        expect(
+          result.candidates.single.region,
+          HideRegion.fromRect(
+            Rect.fromLTRB(
+              10.1 * factor,
+              10.1 * factor,
+              30.1 * factor,
+              30.1 * factor,
+            ),
+            imageWidth: 4000,
+            imageHeight: 1000,
+          ),
+        );
+      },
+    );
+  }
+
+  test('accepts 500 detail candidates and rejects oversized/malformed native replies', () async {
+    final detector = AndroidTextRegionDetector(channel: channel);
+    final boxes = [
+      for (var i = 0; i < 500; i++)
+        [i % 100, i ~/ 100, i % 100 + 1, i ~/ 100 + 1],
+    ];
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => {
+        'width': 400,
+        'height': 200,
+        'boxes': boxes,
+        'truncated': true,
+      },
+    );
+    expect((await detector.detect(photo)).candidates.length, 500);
+    for (final response in [
+      {'width': 2561, 'height': 200, 'boxes': []},
+      {
+        'width': 400,
+        'height': 200,
+        'boxes': [
+          ...boxes,
+          [300, 10, 301, 11],
+        ],
+      },
+      {
+        'width': 400,
+        'height': 200,
+        'boxes': [
+          [-1, 0, 10, 10],
+        ],
+      },
+      {
+        'width': 400,
+        'height': 200,
+        'boxes': [
+          [0, 0, 401, 10],
+        ],
+      },
+    ]) {
+      messenger.setMockMethodCallHandler(channel, (_) async => response);
+      await expectLater(
+        detector.detect(photo),
+        throwsA(isA<RegionDetectionException>()),
+      );
+    }
   });
 }

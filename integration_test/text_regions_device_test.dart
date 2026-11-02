@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -25,10 +26,12 @@ typedef Fixture = ({String name, SourcePhoto photo, List<Rect> expected});
 
 class RecordingSaver implements PhotoSaver {
   RedactedJpeg? jpeg;
+  final completed = Completer<SaveResult>();
   @override
   Future<SaveResult> save(RedactedJpeg photo) async {
     final result = await AndroidPhotoSaver().save(photo);
     if (result is SaveSucceeded) jpeg = photo;
+    completed.complete(result);
     return result;
   }
 }
@@ -144,7 +147,7 @@ void main() {
     (tester) async {
       final corpus = await fixtures();
       for (final (name, detector) in <(String, RegionDetector)>[
-        ('paddle_detector', AndroidTextRegionDetector()),
+        ('paddle_detector', AndroidTextRegionDetector(detailed: false)),
         ('edge_density', EdgeDensityDetector()),
       ]) {
         final cases = <Map<String, Object>>[];
@@ -238,6 +241,29 @@ void main() {
       for (final candidate in texts) {
         await tapCandidate(tester, candidate);
       }
+      final image = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      final center = texts.first.region.toRect().center;
+      final focal =
+          image.topLeft +
+          Offset(center.dx / 640 * image.width, center.dy / 640 * image.height);
+      final first = await tester.startGesture(
+        focal - const Offset(20, 0),
+        pointer: 1,
+      );
+      final second = await tester.startGesture(
+        focal + const Offset(20, 0),
+        pointer: 2,
+      );
+      await first.moveTo(focal - const Offset(60, 0));
+      await second.moveTo(focal + const Offset(60, 0));
+      await tester.pump();
+      await first.up();
+      await second.up();
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.bySemanticsLabel('撮影した写真')).width,
+        greaterThan(image.width),
+      );
       await tapCandidate(tester, texts.first);
       expect(
         tester
@@ -249,6 +275,11 @@ void main() {
       for (final label in ['保存前に確認', '写真に保存']) {
         await editorAction(tester, label);
       }
+      expect(
+        await saver.completed.future.timeout(const Duration(seconds: 15)),
+        isA<SaveSucceeded>(),
+      );
+      await tester.pumpAndSettle();
       expect(find.text('写真を保存しました'), findsOneWidget);
       final jpeg = saver.jpeg!;
       expect((jpeg.width, jpeg.height), (640, 640));
