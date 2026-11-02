@@ -42,14 +42,12 @@ void main() {
         final source = await processor.normalize(input);
         final runs = <String, Object>{};
         for (final mode in [
-          (name: 'baseline', detailed: false, ocr: false),
-          (name: 'geometry', detailed: true, ocr: false),
-          (name: 'detail', detailed: true, ocr: true),
+          (name: 'baseline', detailed: false),
+          (name: 'detail', detailed: true),
         ]) {
           final timer = Stopwatch()..start();
           final result = await AndroidTextRegionDetector(
             detailed: mode.detailed,
-            supplementalOcr: mode.ocr,
           ).detect(source);
           expect(result.partial, isFalse, reason: '${mode.name}: $id');
           runs[mode.name] = {

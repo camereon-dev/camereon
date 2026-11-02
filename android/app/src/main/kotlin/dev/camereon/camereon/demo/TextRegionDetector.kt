@@ -2,39 +2,37 @@ package dev.camereon.camereon.demo
 
 import android.content.res.AssetManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.nio.ByteBuffer
 import java.nio.FloatBuffer
-import java.security.MessageDigest
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Only regions leave native code. Reuse one bounded session for detector crops. */
+/** Only regions leave native code. One shared, verified session serves every pass.
+ * Input is the editor's oriented RGBA pixels: no PNG encode/decode on either side.
+ */
 internal class TextRegionDetector(private val assets: AssetManager) {
-    fun detect(bytes: ByteArray, detailed: Boolean = true, supplementalOcr: Boolean = true): Map<String, Any> {
+    fun detect(pixels: ByteArray, width: Int, height: Int, detailed: Boolean = true,
+               tuning: OnnxSessions.Tuning = OnnxSessions.Tuning()): Map<String, Any> {
         val limit = if (detailed) 2560 else 960
         val cap = if (detailed) 500 else 200
-        require(bytes.isNotEmpty() && bytes.size <= 32 * 1024 * 1024)
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        require(bounds.outWidth in 1..limit && bounds.outHeight in 1..limit)
-        val bitmap = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+        require(width in 1..limit && height in 1..limit && pixels.size == width * height * 4)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
         val watch = System.nanoTime()
         try {
-            val model = assets.open("text_detection/inference.onnx").use { it.readBytes() }
-            val hash = MessageDigest.getInstance("SHA-256").digest(model)
-                .joinToString("") { "%02x".format(it.toInt() and 255) }
-            check(hash == "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d")
-            val environment = OrtEnvironment.getEnvironment()
+            val environment = OnnxSessions.environment
             val merged = mutableListOf<List<Double>>()
             var truncated = false
-            var partial = false
             var passes = 0
             fun include(box: List<Double>) {
+                // A speck of a few pixels is never text the editor could show or tap.
+                if (box[2] - box[0] < 8 && box[3] - box[1] < 8) return
                 var combined = box
                 var index = 0
                 while (index < merged.size) {
@@ -48,81 +46,55 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                 }
                 if (merged.size < cap) merged.add(combined) else truncated = true
             }
-            OrtSession.SessionOptions().use { options ->
-                options.setIntraOpNumThreads(2)
-                options.setInterOpNumThreads(1)
-                environment.createSession(model, options).use { session ->
-                    // Keep whole-line context at a higher resolution. Tiny
-                    // detail crops alone can split dates and curved words.
-                    val overview = infer(bitmap, if (detailed) 1536 else 960, false,
-                        session, environment, oriented = detailed)
-                    passes++
-                    // The controlled legacy comparison retains its old scoring.
-                    if (!detailed || max(bitmap.width, bitmap.height) <= 960) {
-                        truncated = overview.size > cap
-                        merged.addAll(overview.take(cap))
-                    } else {
-                        // >=25% overlap, at most five crops along each axis.
-                        // Small crops are enlarged to 960px instead of shrinking
-                        // the complete photo until its small characters disappear.
-                        val edge = max(384, ceil(max(bitmap.width, bitmap.height) / 128.0).toInt() * 32)
-                        val xs = starts(bitmap.width, edge)
-                        val ys = starts(bitmap.height, edge)
-                        check(xs.size <= 5 && ys.size <= 5)
-                        for (y in ys) for (x in xs) {
-                            val crop = Bitmap.createBitmap(bitmap, x, y,
-                                min(edge, bitmap.width - x), min(edge, bitmap.height - y))
-                            try {
-                                for (box in infer(crop, 960, true, session, environment)) {
-                                    val mapped = listOf(box[0] + x, box[1] + y, box[2] + x, box[3] + y)
-                                    // Enlarged strokes within an already detected
-                                    // large text line must not become extra words.
-                                    if (overview.none { isLargeLineFragment(mapped, it) }) include(mapped)
-                                }
-                                passes++
-                            } finally { if (crop !== bitmap) crop.recycle() }
-                        }
-                        // Prefer a complete finer text line over a blurry,
-                        // over-expanded overview box. Partial cropped words do
-                        // not replace the complete line from the overview.
-                        for (box in overview) {
-                            val fineLine = merged.any { fine ->
-                                duplicate(fine, box) &&
-                                    min(fine[2] - fine[0], box[2] - box[0]) /
-                                    max(fine[2] - fine[0], box[2] - box[0]) >= .8
+            OnnxSessions.use(assets, MODEL, MODEL_SHA256, tuning) { session ->
+                // Keep whole-line context at a higher resolution. Tiny
+                // detail crops alone can split dates and curved words.
+                val overview = infer(bitmap, if (detailed) 1536 else 960, false,
+                    session, environment, oriented = detailed)
+                passes++
+                // The controlled legacy comparison retains its old scoring.
+                if (!detailed || max(bitmap.width, bitmap.height) <= 960) {
+                    truncated = overview.size > cap
+                    merged.addAll(overview.take(cap))
+                } else {
+                    // Tiles overlap by 64px, enough for the small text they exist
+                    // for; longer lines come from the overview. Each tile is
+                    // enlarged about 1.5x to 1024px instead of shrinking the
+                    // photo until its small characters disappear. At most 4x4.
+                    val (tileWidth, xs) = plan(bitmap.width)
+                    val (tileHeight, ys) = plan(bitmap.height)
+                    check(xs.size <= 4 && ys.size <= 4)
+                    for (y in ys) for (x in xs) {
+                        val crop = Bitmap.createBitmap(bitmap, x, y,
+                            min(tileWidth, bitmap.width - x), min(tileHeight, bitmap.height - y))
+                        try {
+                            for (box in infer(crop, 1024, true, session, environment)) {
+                                val mapped = listOf(box[0] + x, box[1] + y, box[2] + x, box[3] + y)
+                                // Enlarged strokes within an already detected
+                                // large text line must not become extra words.
+                                if (overview.none { isLargeLineFragment(mapped, it) }) include(mapped)
                             }
-                            if (!fineLine) include(box)
+                            passes++
+                        } finally { if (crop !== bitmap) crop.recycle() }
+                    }
+                    // Prefer a complete finer text line over a blurry,
+                    // over-expanded overview box. Partial cropped words do
+                    // not replace the complete line from the overview.
+                    for (box in overview) {
+                        val fineLine = merged.any { fine ->
+                            duplicate(fine, box) &&
+                                min(fine[2] - fine[0], box[2] - box[0]) /
+                                max(fine[2] - fine[0], box[2] - box[0]) >= .8
                         }
+                        if (!fineLine) include(box)
                     }
                 }
             }
-            // OCR is additive. An unreadable string must never remove a region
-            // found by PP-OCR; an OCR failure keeps those regions and enables retry.
-            if (detailed && supplementalOcr) {
-                try {
-                    val supplements = SupplementalTextRecognizer().regions(bitmap)
-                    if (supplements.size > 500) truncated = true
-                    for (box in supplements.take(500)) {
-                        val covered = merged.any { old ->
-                            val intersection = max(0.0, min(box[2], old[2]) - max(box[0], old[0])) *
-                                max(0.0, min(box[3], old[3]) - max(box[1], old[1]))
-                            intersection / ((box[2] - box[0]) * (box[3] - box[1])) >= .9
-                        }
-                        if (!covered) include(box)
-                    }
-                } catch (_: Exception) { partial = true }
-            }
             val rectangles = merged.sortedWith(compareBy({ it[1] }, { it[0] }))
             return mapOf("width" to bitmap.width, "height" to bitmap.height,
-                "boxes" to rectangles, "truncated" to truncated, "partial" to partial, "passes" to passes,
+                "boxes" to rectangles, "truncated" to truncated, "passes" to passes,
                 "elapsedMs" to ((System.nanoTime() - watch) / 1_000_000.0))
         } finally { bitmap.recycle() }
-    }
-
-    private fun starts(length: Int, edge: Int): List<Int> {
-        if (length <= edge) return listOf(0)
-        val count = ceil((length - edge) / (edge * .75)).toInt() + 1
-        return (0 until count).map { (it * (length - edge).toDouble() / (count - 1)).roundToInt() }
     }
 
     private fun isLargeLineFragment(a: List<Double>, b: List<Double>): Boolean {
@@ -142,7 +114,7 @@ internal class TextRegionDetector(private val assets: AssetManager) {
             max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
         return intersection / (aw * ah + bw * bh - intersection) >= .45 ||
             (intersection / min(aw * ah, bw * bh) >= .8 && min(ah, bh) / max(ah, bh) >= .35 &&
-                kotlin.math.abs((a[1] + a[3] - b[1] - b[3]) / 2) <= min(ah, bh) * .5)
+                abs((a[1] + a[3] - b[1] - b[3]) / 2) <= min(ah, bh) * .5)
     }
 
     private fun infer(bitmap: Bitmap, side: Int, upscale: Boolean, session: OrtSession,
@@ -171,7 +143,7 @@ internal class TextRegionDetector(private val assets: AssetManager) {
         }
         return OnnxTensor.createTensor(environment, FloatBuffer.wrap(input),
             longArrayOf(1, 3, height.toLong(), width.toLong())).use { tensor ->
-            session.run(mapOf(session.inputNames.first() to tensor)).use { output ->
+            OnnxSessions.run(session, mapOf(session.inputNames.first() to tensor)) { output ->
                 val result = output[0] as OnnxTensor
                 val shape = result.info.shape
                 require(shape.size == 4 && shape[0] == 1L && shape[1] == 1L)
@@ -182,8 +154,9 @@ internal class TextRegionDetector(private val assets: AssetManager) {
             }
         }
     }
-    // Reject flat-color border hallucinations. Sampling is bounded to about
-    // a bounded grid; variation along the line rejects solid straight borders.
+
+    // Reject flat-color border hallucinations on a grid of at most 32x32
+    // samples; variation along the line rejects solid straight borders.
     private fun hasContrast(p: IntArray, width: Int, height: Int,
                             l: Int, t: Int, r: Int, b: Int): Boolean {
         val left = l.coerceIn(0, width - 1); val top = t.coerceIn(0, height - 1)
@@ -286,5 +259,20 @@ internal class TextRegionDetector(private val assets: AssetManager) {
             ))
         }
         return found.sortedWith(compareBy({ it[1] }, { it[0] }))
+    }
+
+    companion object {
+        const val MODEL = "text_detection/inference.onnx"
+        const val MODEL_SHA256 = "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d"
+
+        /** Tile edge and offsets along one axis: the fewest tiles of at most
+         * 704px (about 1.5x enlargement to 1024px) that overlap by 64px or more. */
+        fun plan(length: Int): Pair<Int, List<Int>> {
+            val overlap = 64
+            val count = max(1, ceil((length - overlap) / 640.0).toInt())
+            if (count == 1) return length to listOf(0)
+            val edge = ceil((length - overlap).toDouble() / count).toInt() + overlap
+            return edge to (0 until count).map { (it * (length - edge).toDouble() / (count - 1)).roundToInt() }
+        }
     }
 }

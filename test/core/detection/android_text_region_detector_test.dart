@@ -25,11 +25,11 @@ void main() {
         expect(call.method, 'detect');
         expect((call.arguments as Map).keys, [
           'bytes',
+          'width',
+          'height',
           'detailed',
-          'supplementalOcr',
         ]);
         expect((call.arguments as Map)['detailed'], isTrue);
-        expect((call.arguments as Map)['supplementalOcr'], isTrue);
         return {
           'width': 200,
           'height': 100,
@@ -56,7 +56,7 @@ void main() {
   );
 
   test(
-    'OCR failure retains primary regions and reports partial detection',
+    'a partially failed native scan keeps its regions and reports partial',
     () async {
       messenger.setMockMethodCallHandler(
         channel,
@@ -76,18 +76,6 @@ void main() {
       expect(result.truncated, isFalse);
     },
   );
-
-  test('can compare the detector without the OCR supplement', () async {
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      expect((call.arguments as Map)['detailed'], isTrue);
-      expect((call.arguments as Map)['supplementalOcr'], isFalse);
-      return {'width': 400, 'height': 200, 'boxes': []};
-    });
-    await AndroidTextRegionDetector(
-      channel: channel,
-      supplementalOcr: false,
-    ).detect(photo);
-  });
 
   test('invalid responses fail, then retry succeeds; empty means a successful scan', () async {
     final detector = AndroidTextRegionDetector(channel: channel);
@@ -141,12 +129,15 @@ void main() {
         messenger.setMockMethodCallHandler(channel, (call) async {
           final args = call.arguments as Map;
           expect(args['detailed'], detailed);
-          expect(args['supplementalOcr'], detailed);
-          final input = img.decodePng(args['bytes'])!;
-          expect((input.width, input.height), (maxSide, maxSide ~/ 4));
+          // Raw RGBA pixels of the bounded thumbnail, not an encoded image.
+          expect((args['width'], args['height']), (maxSide, maxSide ~/ 4));
+          expect(
+            (args['bytes'] as Uint8List).length,
+            maxSide * (maxSide ~/ 4) * 4,
+          );
           return {
-            'width': input.width,
-            'height': input.height,
+            'width': args['width'],
+            'height': args['height'],
             'boxes': [
               [10.1, 10.1, 30.1, 30.1],
             ],

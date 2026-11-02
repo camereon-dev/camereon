@@ -31,24 +31,28 @@ class MlKitFaceDetectionHandler(messenger: BinaryMessenger) {
                 val bytes = call.argument<ByteArray>("bytes")
                 val width = call.argument<Int>("width") ?: 0
                 val height = call.argument<Int>("height") ?: 0
+                // Smallest head width as a fraction of the image width. 0.02 found
+                // four more faces than 0.05 in a crowded gallery photo (1600px input).
+                val minFaceSize = (call.argument<Double>("minFaceSize") ?: 0.02).toFloat()
                 if (bytes == null || bytes.size > 128 * 1024 * 1024 ||
-                    width <= 0 || height <= 0 || width.toLong() * height > 24000000) {
+                    width <= 0 || height <= 0 || width.toLong() * height > 24000000 ||
+                    !minFaceSize.isFinite() || minFaceSize <= 0f || minFaceSize > 1f) {
                     result.error("invalidImage", "Invalid source image", null)
                 } else {
                     busy = true
-                    worker.execute { detect(bytes, width, height, result) }
+                    worker.execute { detect(bytes, width, height, minFaceSize, result) }
                 }
             }
         }
     }
 
-    private fun detect(bytes: ByteArray, width: Int, height: Int, result: MethodChannel.Result) {
+    private fun detect(bytes: ByteArray, width: Int, height: Int, minFaceSize: Float, result: MethodChannel.Result) {
         var bitmap: Bitmap? = null
         var detector: com.google.mlkit.vision.face.FaceDetector? = null
         try {
             detector = FaceDetection.getClient(FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-            .setMinFaceSize(0.05f)
+            .setMinFaceSize(minFaceSize)
             .build())
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -75,7 +79,7 @@ class MlKitFaceDetectionHandler(messenger: BinaryMessenger) {
                     listOf(r.left, r.top, r.right, r.bottom)
                 })
             main.post { busy = false; if (!closed) result.success(response) }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             main.post { busy = false; if (!closed) result.error("detectionFailed", "Face detection failed", null) }
         } finally {
             bitmap?.recycle()

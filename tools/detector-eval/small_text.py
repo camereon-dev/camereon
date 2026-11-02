@@ -20,11 +20,13 @@ from PIL import Image, ImageDraw, ImageOps
 from text_v5 import detect
 
 
-def tile_starts(length, edge):
-    if length <= edge:
-        return [0]
-    count = math.ceil((length - edge) / (edge * .75)) + 1
-    return [int(i * (length - edge) / (count - 1) + .5) for i in range(count)]
+def tile_plan(length, overlap=64, max_step=640):
+    """Fewest tiles of at most 704px with >= 64px overlap: (edge, starts)."""
+    count = max(1, math.ceil((length - overlap) / max_step))
+    if count == 1:
+        return length, [0]
+    edge = math.ceil((length - overlap) / count) + overlap
+    return edge, [int(i * (length - edge) / (count - 1) + .5) for i in range(count)]
 
 
 def duplicate(a, b):
@@ -62,26 +64,29 @@ def merge(found):
     return sorted(merged, key=lambda d: (d['box'][1], d['box'][0]))
 
 
-def tiled(image, session, oriented=False):
+def tiled(image, session, oriented=True):
     h, w = image.shape[:2]
-    edge = max(384, math.ceil(max(h, w) / 128) * 32)
     output = detect(image, session, 1536 if oriented else 960, oriented=oriented)
     found = []
     tiles = []
     if max(h, w) > 960:
-        for y in tile_starts(h, edge):
-            for x in tile_starts(w, edge):
-                crop = image[y:min(y+edge, h), x:min(x+edge, w)]
+        tile_h, ys = tile_plan(h)
+        tile_w, xs = tile_plan(w)
+        for y in ys:
+            for x in xs:
+                crop = image[y:min(y+tile_h, h), x:min(x+tile_w, w)]
                 ch, cw = crop.shape[:2]
-                scale = 960 / max(ch, cw)
+                scale = 1024 / max(ch, cw)
                 enlarged = cv2.resize(crop, (int(cw*scale+.5), int(ch*scale+.5)))
-                result = detect(enlarged, session, 960, line_filter=True, oriented=oriented)
+                result = detect(enlarged, session, 1024, line_filter=True, oriented=oriented)
                 tiles.append([x, y, cw, ch])
                 for d in result['detections']:
                     a,b,c,e = d['box']
                     a,c = a * cw / enlarged.shape[1], c * cw / enlarged.shape[1]
                     b,e = b * ch / enlarged.shape[0], e * ch / enlarged.shape[0]
                     mapped=[a+x,b+y,c+x,e+y]
+                    if c - a < 8 and e - b < 8:
+                        continue
                     if not any(large_line_fragment(mapped,d['box']) for d in output['detections']):
                         found.append({'label':'text','box':mapped})
     merged = merge(found)
@@ -98,7 +103,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('images', nargs='+', type=Path)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--oriented', action='store_true', help='Also evaluate orientation-aware scoring and 1536px overview')
+    parser.add_argument('--axis-aligned', action='store_true', help='Also evaluate the former axis-aligned scoring with a 960px overview')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     model = Path('android/app/src/main/assets/text_detection/inference.onnx')
@@ -123,8 +128,8 @@ def main():
         modes = [('global960',lambda:detect(bgr,session,960)),
                          ('global1536',lambda:detect(bgr,session,1536)),
                          ('detailed',lambda:tiled(bgr,session))]
-        if args.oriented:
-            modes.append(('oriented',lambda:tiled(bgr,session,oriented=True)))
+        if args.axis_aligned:
+            modes.append(('axis_aligned',lambda:tiled(bgr,session,oriented=False)))
         for name, fn in modes:
             start = time.perf_counter()
             result = fn()

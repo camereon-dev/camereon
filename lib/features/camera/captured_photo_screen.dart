@@ -73,8 +73,33 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   bool _facesOnly = false;
   List<RegionCandidate> get _visibleCandidates => [
     ..._faceCandidates.values,
-    if (!_facesOnly) ..._candidates,
+    if (!_facesOnly)
+      for (final c in _candidates)
+        if (_selected.contains(c) || !_coveredByFace(c)) c,
   ];
+
+  /// The text detector fires on eyes, glasses and scarf edges. A text frame
+  /// well inside a face, or a frame enclosing most of a face it does not
+  /// otherwise need, is hidden; a coincident frame stays selectable by kind.
+  bool _coveredByFace(RegionCandidate c) {
+    if (c.kind != CandidateKind.text) return false;
+    final r = c.region.toRect();
+    final textArea = r.width * r.height;
+    return _faceCandidates.values.any((face) {
+      final f = face.region.toRect();
+      final i = r.intersect(f);
+      if (i.width <= 0 || i.height <= 0) return false;
+      final shared = i.width * i.height;
+      final faceArea = f.width * f.height;
+      final inside = shared >= textArea * .7 && textArea < faceArea * .9;
+      final enclosing =
+          shared >= faceArea * .7 &&
+          textArea > faceArea * 1.1 &&
+          faceArea >= textArea * .25;
+      return inside || enclosing;
+    });
+  }
+
   List<HideRegion> get _redactions =>
       {for (final c in _selected) c.region}.toList();
   bool get _scanning =>
@@ -185,15 +210,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   Future<void> _detectAll(SourcePhoto source) async {
     final epoch = ++_autoDetectionEpoch;
-    // Keep the two ONNX models' peak allocations separate.
-    await _detect();
+    // Keep the two ONNX models' peak allocations separate. The quick object
+    // pass shows people, screens and vehicles before the longer text tiles.
+    await _detect(objects: true);
     if (!mounted ||
         epoch != _autoDetectionEpoch ||
         !identical(source, _source) ||
         _preview != null) {
       return;
     }
-    await _detect(objects: true);
+    await _detect();
   }
 
   Future<void> _detect({bool objects = false}) async {
@@ -219,7 +245,11 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             a.kind == b.kind && a.region == b.region;
         final previous = _candidates;
         final kinds = objects
-            ? {CandidateKind.person, CandidateKind.screen}
+            ? {
+                CandidateKind.person,
+                CandidateKind.screen,
+                CandidateKind.vehicle,
+              }
             : {CandidateKind.text};
         _candidates = [
           for (final c in previous)

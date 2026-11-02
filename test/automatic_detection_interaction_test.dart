@@ -154,9 +154,9 @@ void main() {
     'all detectors start automatically and ONNX scans stay sequential',
     (tester) async {
       final faces = CountingFaces([]);
-      final texts = editor.FakeDetector()
+      final texts = editor.FakeDetector();
+      final objects = editor.FakeDetector()
         ..pending = Completer<RegionDetection>();
-      final objects = editor.FakeDetector();
       await editor.open(
         tester,
         editor.FakeProcessor(200, 100),
@@ -166,14 +166,16 @@ void main() {
         objects: objects,
         settle: false,
       );
-      expect((faces.calls, texts.calls, objects.calls), (1, 1, 0));
+      expect((faces.calls, texts.calls, objects.calls), (1, 0, 1));
       expect(
         tester.widget<PhotoScanEffect>(find.byType(PhotoScanEffect)).active,
         isTrue,
       );
       await tester.pump(const Duration(seconds: 3));
       expect(find.text('検出中'), findsOneWidget);
-      texts.pending!.complete(RegionDetection(candidates: texts.candidates));
+      objects.pending!.complete(
+        RegionDetection(candidates: objects.candidates),
+      );
       await tester.pumpAndSettle();
       expect((faces.calls, texts.calls, objects.calls), (1, 1, 1));
       expect(

@@ -22,6 +22,10 @@ def main():
     parser.add_argument('--test-log', required=True, type=Path)
     parser.add_argument('--serial', required=True)
     parser.add_argument('--package', default='dev.camereon.camereon.demo.detector_preview')
+    parser.add_argument('--marker', default='public blackboards: native detection',
+                        help='Test-name fragment in the log that signals the fixture directory may be filled')
+    parser.add_argument('--ready', default='BLACKBOARD_READY')
+    parser.add_argument('--collect', nargs='*', help='Result files to copy back (default: results.json and masked JPEGs)')
     args = parser.parse_args()
     sources = json.loads(args.sources.read_text())
     for source in sources:
@@ -41,7 +45,7 @@ def main():
                 raise RuntimeError('Device test failed; inspect its log')
             time.sleep(.5)
         raise TimeoutError('Waiting for device test marker: ' + marker)
-    wait_for('public blackboards: native detection', 240)
+    wait_for(args.marker, 240)
     subprocess.run(shell + ['run-as', args.package, 'mkdir', '-p', 'files/blackboard-eval'], check=True)
     # A new manifest starts the test. Never expose half-written fixture files.
     def stage(name, data):
@@ -54,9 +58,9 @@ def main():
         stage(name, (args.input / name).read_bytes())
     stage('sources.json', args.sources.read_bytes())
     print('Staged public fixtures', flush=True)
-    wait_for('BLACKBOARD_READY', 240)
+    wait_for(args.ready, 3600)
     args.output.mkdir(parents=True, exist_ok=True)
-    for name in ['results.json', *[s['id'] + '-masked.jpg' for s in sources]]:
+    for name in args.collect or ['results.json', *[s['id'] + '-masked.jpg' for s in sources]]:
         with (args.output / name).open('wb') as output:
             subprocess.run(['adb', '-s', args.serial, 'exec-out', 'run-as', args.package,
                             'cat', 'files/blackboard-eval/' + name], stdout=output, check=True)

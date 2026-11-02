@@ -93,8 +93,10 @@ void main() {
   testWidgets('confirmation cancels queued scans and ignores late results', (
     tester,
   ) async {
-    final texts = editor.FakeDetector()..pending = Completer<RegionDetection>();
-    final objects = editor.FakeDetector();
+    // Objects run first; the text scan is the queued one that must not start.
+    final texts = editor.FakeDetector();
+    final objects = editor.FakeDetector()
+      ..pending = Completer<RegionDetection>();
     await editor.open(
       tester,
       editor.FakeProcessor(200, 100),
@@ -103,29 +105,32 @@ void main() {
       objects: objects,
       settle: false,
     );
-    expect(texts.calls, 1);
+    expect(objects.calls, 1);
     await tester.tap(find.byTooltip('保存前に確認'));
     await tester.pumpAndSettle();
-    texts.pending!.complete(
+    objects.pending!.complete(
       RegionDetection(
         candidates: [
           editor.candidate(
-            CandidateKind.text,
+            CandidateKind.person,
             const Rect.fromLTRB(20, 10, 80, 30),
           ),
         ],
       ),
     );
     await tester.pumpAndSettle();
-    expect(objects.calls, 0);
+    expect(texts.calls, 0);
     await tap(tester, '編集へ戻る');
     expect(editor.overlay(tester).candidates, isEmpty);
-    texts.pending = null;
-    texts.candidates.add(
-      editor.candidate(CandidateKind.text, const Rect.fromLTRB(20, 10, 80, 30)),
+    objects.pending = null;
+    objects.candidates.add(
+      editor.candidate(
+        CandidateKind.person,
+        const Rect.fromLTRB(20, 10, 80, 30),
+      ),
     );
     await tap(tester, '一部を検出できませんでした');
-    expect((texts.calls, objects.calls), (2, 1));
+    expect((texts.calls, objects.calls), (1, 2));
     expect(editor.overlay(tester).candidates.length, 1);
   });
 }

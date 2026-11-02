@@ -52,8 +52,8 @@ VS Codeでは `camereon detector (debug)` を選んで起動できる。既に�
 
 - 共通型: `CandidateKind.person / screen / text`、`RegionCandidate`、`HideRegion`。
 - Flutterから長辺1600px以下の正規化済みPNGを渡し、Androidのバックグラウンドスレッドで推論する。UIスレッドでモデルを実行しない。
-- 640pxと1280pxでアスペクト比を保つletterbox（RGB、114埋め、stride32）を使う。動的形状ONNX、出力 `[1,300,6]`、xyxy・confidence・class ID。confidence 0.25、対象クラス0/62/63/67、2解像度間の同じクラスの重複をIoU 0.7で除く。
-- モデルロード・SHA-256検証・2回の推論後にsession/tensor/bitmapを解放。最大200候補。SDKの型や文字列はFlutterへ返さない。
+- 640pxと1280pxでアスペクト比を保つletterbox（RGB、114埋め、stride32）を使う。動的形状ONNX、出力 `[1,300,6]`、xyxy・confidence・class ID。confidence 0.25、対象クラス0（person）/2・3・5・7（car・motorcycle・bus・truck → 車両）/62・63・67（tv・laptop・cell phone → 画面）、2解像度間の同じクラスの重複をIoU 0.7で除く。車両は長辺が転送画像の6%未満なら除く。
+- モデルはSHA-256検証後にプロセス内で1つのsessionを再利用し（`OnnxSessions`）、各推論後にアリーナを縮小してピーク作業メモリを保持しない。tensor/bitmapは毎回解放し、メモリ不足の通知（`onTrimMemory`）でsessionも閉じる。最大200候補。SDKの型や文字列はFlutterへ返さない。
 - 元写真の座標へ戻し、範囲を外側へ丸めて既存の候補UI・JPEG生成・MediaStore保存へ渡す。再試行でも他の種類の候補・選択履歴を保持する。
 - 新しい物体検出にネットワークコードはない。通常の検出・編集にGemmaのモデルは不要。
 
