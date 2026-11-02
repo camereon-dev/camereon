@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:camereon/core/detection/android_text_region_detector.dart';
+import 'package:camereon/core/photo/hide_region.dart';
+import 'package:camereon/core/detection/region_detector.dart';
+import 'package:camereon/core/detection/android_object_region_detector.dart';
+import 'package:camereon/core/analysis/infrastructure/mlkit_face_detector.dart';
 import 'package:camereon/core/photo/android_photo_saver.dart';
 import 'package:camereon/core/photo/flutter_photo_processor.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
@@ -58,6 +62,11 @@ void main() {
               for (final c in result.candidates)
                 [c.region.left, c.region.top, c.region.right, c.region.bottom],
             ],
+            'polygons': result.candidates
+                .where((c) => c.region.shape == HideShape.polygon)
+                .length,
+            if (mode.detailed)
+              'regions': [for (final c in result.candidates) c.region],
           };
           if (mode.name == 'detail') {
             final jpeg = await processor.redact(source, [
@@ -69,16 +78,22 @@ void main() {
               (source.width, source.height),
             );
             expect(pixels.exif.isEmpty, isTrue);
-            for (final c in result.candidates) {
-              expect(
-                pixels
-                    .getPixel(
-                      (c.region.left + c.region.right) ~/ 2,
-                      (c.region.top + c.region.bottom) ~/ 2,
-                    )
-                    .luminance,
-                lessThan(6),
-              );
+            // The frosted fill derives from the surroundings, so a flat false
+            // positive may look unchanged; real text must change somewhere.
+            if (result.candidates.isNotEmpty) {
+              final before = img.decodePng(source.bytes)!;
+              var changed = 0;
+              for (final c in result.candidates) {
+                final x = (c.region.left + c.region.right) ~/ 2;
+                final y = (c.region.top + c.region.bottom) ~/ 2;
+                final a = pixels.getPixel(x, y);
+                final b = before.getPixel(x, y);
+                if ((a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs() >
+                    24) {
+                  changed++;
+                }
+              }
+              expect(changed, greaterThan(0), reason: id);
             }
             await File('${dir.path}/$id-masked.jpg').writeAsBytes(jpeg.bytes);
             if (id == 'japanese-menu') {
@@ -89,6 +104,44 @@ void main() {
             }
           }
         }
+        // Every detector together, hidden along their shapes, for visual review
+        // of silhouettes, ovals and slanted outlines. Counts only in the log.
+        final objectTimer = Stopwatch()..start();
+        final objects = await AndroidObjectRegionDetector().detect(source);
+        runs['objects'] = {
+          'wall_ms': objectTimer.elapsedMilliseconds,
+          'kinds': {
+            for (final kind in CandidateKind.values)
+              kind.name: objects.candidates.where((c) => c.kind == kind).length,
+          },
+          'polygons': objects.candidates
+              .where((c) => c.region.shape == HideShape.polygon)
+              .length,
+        };
+        final faceTimer = Stopwatch()..start();
+        final faces = await MlKitFaceDetector().detect(source);
+        runs['faces'] = {
+          'wall_ms': faceTimer.elapsedMilliseconds,
+          'count': faces.length,
+        };
+        final redactTimer = Stopwatch()..start();
+        final everything = await processor.redact(source, [
+          for (final c in objects.candidates) c.region,
+          for (final f in faces) f.region,
+          for (final c
+              in (runs['detail'] as Map)['regions'] as List<HideRegion>)
+            c,
+        ]);
+        runs['redact_all'] = {
+          'wall_ms': redactTimer.elapsedMilliseconds,
+          'regions':
+              objects.candidates.length +
+              faces.length +
+              ((runs['detail'] as Map)['regions'] as List).length,
+        };
+        await File('${dir.path}/$id-masked-all.jpg')
+            .writeAsBytes(everything.bytes);
+        (runs['detail'] as Map).remove('regions');
         report.add({
           'id': id,
           'width': source.width,
@@ -100,7 +153,10 @@ void main() {
         print(
           'BLACKBOARD_CASE ${jsonEncode({
             'id': id,
-            'counts': {for (final e in runs.entries) e.key: ((e.value as Map)['boxes'] as List).length},
+            'counts': {for (final e in runs.entries)
+              if ((e.value as Map).containsKey('boxes')) e.key: ((e.value as Map)['boxes'] as List).length},
+            'objects': (runs['objects'] as Map)['kinds'],
+            'faces': (runs['faces'] as Map)['count'],
           })}',
         );
       }

@@ -1,0 +1,218 @@
+{
+ "date": "2026-11-03",
+ "environment": "Android 12 API 31 ARM64 emulator (4 vCPU, 4 GB), Debug test APK (Dart JIT), CPU, ONNX Runtime 1.24.3, host otherwise idle",
+ "models": {
+  "text": "PP-OCRv5 mobile det (unchanged)",
+  "objects": "YOLO26s-seg (replaces YOLO26s det)",
+  "faces": "ML Kit face detection, minFaceSize 0.02"
+ },
+ "per_photo": [
+  {
+   "id": "restaurant-chiyoda",
+   "width": 3762,
+   "height": 4559,
+   "text_detail": {
+    "wall_ms": 3040,
+    "truncated": false,
+    "partial": false,
+    "polygons": 111,
+    "boxes": 111
+   },
+   "objects": {
+    "wall_ms": 1290,
+    "kinds": {
+     "text": 0,
+     "face": 0,
+     "person": 4,
+     "screen": 0,
+     "vehicle": 1
+    },
+    "polygons": 5
+   },
+   "faces": {
+    "wall_ms": 568,
+    "count": 2
+   },
+   "redact_all_full_resolution": {
+    "wall_ms": 4176,
+    "regions": 118
+   }
+  },
+  {
+   "id": "menu-today",
+   "width": 4576,
+   "height": 3432,
+   "text_detail": {
+    "wall_ms": 2627,
+    "truncated": false,
+    "partial": false,
+    "polygons": 108,
+    "boxes": 108
+   },
+   "objects": {
+    "wall_ms": 933,
+    "kinds": {
+     "text": 0,
+     "face": 0,
+     "person": 0,
+     "screen": 0,
+     "vehicle": 0
+    },
+    "polygons": 0
+   },
+   "faces": {
+    "wall_ms": 335,
+    "count": 0
+   },
+   "redact_all_full_resolution": {
+    "wall_ms": 3036,
+    "regions": 108
+   }
+  },
+  {
+   "id": "station-akihabara",
+   "width": 4752,
+   "height": 3168,
+   "text_detail": {
+    "wall_ms": 2191,
+    "truncated": false,
+    "partial": false,
+    "polygons": 12,
+    "boxes": 12
+   },
+   "objects": {
+    "wall_ms": 833,
+    "kinds": {
+     "text": 0,
+     "face": 0,
+     "person": 0,
+     "screen": 0,
+     "vehicle": 0
+    },
+    "polygons": 0
+   },
+   "faces": {
+    "wall_ms": 356,
+    "count": 0
+   },
+   "redact_all_full_resolution": {
+    "wall_ms": 2076,
+    "regions": 12
+   }
+  },
+  {
+   "id": "badge-wikicamp",
+   "width": 5568,
+   "height": 3712,
+   "text_detail": {
+    "wall_ms": 2285,
+    "truncated": false,
+    "partial": false,
+    "polygons": 28,
+    "boxes": 28
+   },
+   "objects": {
+    "wall_ms": 988,
+    "kinds": {
+     "text": 0,
+     "face": 0,
+     "person": 7,
+     "screen": 4,
+     "vehicle": 0
+    },
+    "polygons": 11
+   },
+   "faces": {
+    "wall_ms": 458,
+    "count": 5
+   },
+   "redact_all_full_resolution": {
+    "wall_ms": 5878,
+    "regions": 44
+   }
+  },
+  {
+   "id": "parking-lpr",
+   "width": 3489,
+   "height": 2004,
+   "text_detail": {
+    "wall_ms": 1850,
+    "truncated": false,
+    "partial": false,
+    "polygons": 10,
+    "boxes": 10
+   },
+   "objects": {
+    "wall_ms": 633,
+    "kinds": {
+     "text": 0,
+     "face": 0,
+     "person": 0,
+     "screen": 0,
+     "vehicle": 6
+    },
+    "polygons": 6
+   },
+   "faces": {
+    "wall_ms": 239,
+    "count": 0
+   },
+   "redact_all_full_resolution": {
+    "wall_ms": 1092,
+    "regions": 16
+   }
+  },
+  {
+   "id": "louvre-crowd",
+   "width": 3766,
+   "height": 2596,
+   "text_detail": {
+    "wall_ms": 2205,
+    "truncated": false,
+    "partial": false,
+    "polygons": 10,
+    "boxes": 10
+   },
+   "objects": {
+    "wall_ms": 883,
+    "kinds": {
+     "text": 0,
+     "face": 0,
+     "person": 21,
+     "screen": 2,
+     "vehicle": 0
+    },
+    "polygons": 23
+   },
+   "faces": {
+    "wall_ms": 393,
+    "count": 9
+   },
+   "redact_all_full_resolution": {
+    "wall_ms": 2948,
+    "regions": 42
+   }
+  }
+ ],
+ "editor_flow": [
+  {
+   "id": "badge-wikicamp",
+   "candidates": 44,
+   "detect_ms": 9804,
+   "preview_patches_ms": 1058,
+   "confirm_redact_ms": 5635
+  },
+  {
+   "id": "louvre-crowd",
+   "candidates": 42,
+   "detect_ms": 5204,
+   "preview_patches_ms": 645,
+   "confirm_redact_ms": 2816
+  }
+ ],
+ "editor_flow_peak_test_process_pss_kb": 1070135,
+ "notes": [
+  "Wall times are single runs in a debug test process; the frosted fill and preview run as Dart JIT code there, release builds compile them ahead of time.",
+  "Candidate counts are not accuracy. Visual review of the masked outputs is described in README.md."
+ ]
+}

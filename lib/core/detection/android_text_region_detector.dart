@@ -41,7 +41,11 @@ class AndroidTextRegionDetector implements RegionDetector {
       if (result == null ||
           result['width'] is! num ||
           result['height'] is! num ||
-          result['boxes'] is! List) {
+          result['boxes'] is! List ||
+          (result['polygons'] != null &&
+              (result['polygons'] is! List ||
+                  (result['polygons'] as List).length !=
+                      (result['boxes'] as List).length))) {
         throw const RegionDetectionException();
       }
       final width = (result['width'] as num).toDouble();
@@ -56,7 +60,10 @@ class AndroidTextRegionDetector implements RegionDetector {
         throw const RegionDetectionException();
       }
       final regions = <HideRegion>{};
-      for (final box in result['boxes'] as List) {
+      final polygons = result['polygons'] as List?;
+      final boxes = result['boxes'] as List;
+      for (var index = 0; index < boxes.length; index++) {
+        final box = boxes[index];
         if (box is! List || box.length != 4 || box.any((v) => v is! num)) {
           throw const RegionDetectionException();
         }
@@ -70,16 +77,20 @@ class AndroidTextRegionDetector implements RegionDetector {
             coordinates[1] >= coordinates[3]) {
           throw const RegionDetectionException();
         }
-        final region = HideRegion.fromRect(
-          ui.Rect.fromLTRB(
-            coordinates[0] * photo.width / width,
-            coordinates[1] * photo.height / height,
-            coordinates[2] * photo.width / width,
-            coordinates[3] * photo.height / height,
-          ),
-          imageWidth: photo.width,
-          imageHeight: photo.height,
+        final rect = ui.Rect.fromLTRB(
+          coordinates[0] * photo.width / width,
+          coordinates[1] * photo.height / height,
+          coordinates[2] * photo.width / width,
+          coordinates[3] * photo.height / height,
         );
+        // The outline follows the text's slant; the box stays its bounds.
+        final region =
+            _polygon(polygons?[index], width, height, photo) ??
+            HideRegion.fromRect(
+              rect,
+              imageWidth: photo.width,
+              imageHeight: photo.height,
+            );
         if (region == null) throw const RegionDetectionException();
         regions.add(region);
       }
@@ -96,5 +107,41 @@ class AndroidTextRegionDetector implements RegionDetector {
     } finally {
       _working = false;
     }
+  }
+
+  HideRegion? _polygon(
+    Object? flat,
+    double width,
+    double height,
+    SourcePhoto photo,
+  ) {
+    if (flat == null) return null;
+    if (flat is! List || flat.length < 6 || flat.length.isOdd) {
+      throw const RegionDetectionException();
+    }
+    final values = <double>[];
+    for (final v in flat) {
+      if (v is! num || !v.isFinite || v < 0) {
+        throw const RegionDetectionException();
+      }
+      values.add(v.toDouble());
+    }
+    final points = <ui.Offset>[];
+    for (var i = 0; i < values.length; i += 2) {
+      if (values[i] > width || values[i + 1] > height) {
+        throw const RegionDetectionException();
+      }
+      points.add(
+        ui.Offset(
+          values[i] * photo.width / width,
+          values[i + 1] * photo.height / height,
+        ),
+      );
+    }
+    return HideRegion.polygon(
+      points,
+      imageWidth: photo.width,
+      imageHeight: photo.height,
+    );
   }
 }

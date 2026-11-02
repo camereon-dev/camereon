@@ -1,6 +1,7 @@
 package dev.camereon.camereon.demo
 
 import android.app.Activity
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
@@ -34,7 +35,9 @@ internal class TextRegionChannel(private val activity: Activity, engine: Flutter
                             val detection = TextRegionDetector(activity.assets)
                                 .detect(bytes, width, height, detailed, tuning)
                             activity.runOnUiThread { if (!closed.get()) result.success(detection) }
-                        } catch (_: Throwable) {
+                        } catch (error: Throwable) {
+                            // Only the exception class leaves the process: no message, no image data.
+                            Log.w("camereon", "text detection failed: " + error.javaClass.simpleName)
                             // Includes OutOfMemoryError on large photos: report, never crash.
                             // Never log image contents or native exception payloads.
                             activity.runOnUiThread {

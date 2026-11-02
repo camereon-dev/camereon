@@ -5,6 +5,7 @@ import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:camereon/app.dart';
 import 'package:camereon/features/analysis/prepare_analysis_image.dart';
 import 'package:camereon/core/photo/android_photo_saver.dart';
+import 'package:camereon/core/photo/flutter_photo_processor.dart';
 import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
@@ -148,14 +149,20 @@ void main() {
         final image = img.decodeJpg(jpeg.bytes)!;
         expect(image.exif.isEmpty, isTrue);
         expect(image.exif.thumbnailData, isNull);
+        // Frosted from the surroundings: not black, not the original colour.
+        final normalized = img.decodePng(
+          (await FlutterPhotoProcessor().normalize(bytes)).bytes,
+        )!;
+        final cx = (region.left + region.right) ~/ 2;
+        final cy = (region.top + region.bottom) ~/ 2;
+        final hidden = image.getPixel(cx, cy);
+        final was = normalized.getPixel(cx, cy);
+        expect(hidden.luminance, greaterThan(10));
         expect(
-          image
-              .getPixel(
-                (region.left + region.right) ~/ 2,
-                (region.top + region.bottom) ~/ 2,
-              )
-              .luminance,
-          lessThan(3),
+          (hidden.r - was.r).abs() +
+              (hidden.g - was.g).abs() +
+              (hidden.b - was.b).abs(),
+          greaterThan(40),
         );
         expect(image.getPixel(28, 44).luminance, greaterThan(10));
         expect(

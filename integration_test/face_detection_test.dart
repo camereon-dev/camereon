@@ -150,16 +150,24 @@ void main() {
       );
       expect(savedPixels.exif.isEmpty, isTrue);
       final r = faces.single.region;
-      // Check the entire interior, not only a single central pixel. JPEG edges
-      // may contain codec ringing; allow a two-pixel inset and channel value <5.
+      // The oval interior is replaced by a fill from its surroundings: nearly
+      // every pixel inside (two-pixel inset) differs from the original face.
+      final originalPixels = img.decodeImage(bytes)!;
+      var inside = 0;
+      var changed = 0;
       for (var y = r.top + 2; y < r.bottom - 2; y++) {
         for (var x = r.left + 2; x < r.right - 2; x++) {
-          final p = savedPixels.getPixel(x, y);
-          expect(p.r, lessThan(5));
-          expect(p.g, lessThan(5));
-          expect(p.b, lessThan(5));
+          if (!r.contains(Offset(x + .5, y + .5))) continue;
+          inside++;
+          final a = savedPixels.getPixel(x, y);
+          final b = originalPixels.getPixel(x, y);
+          if ((a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs() > 24) {
+            changed++;
+          }
         }
       }
+      expect(inside, greaterThan(100));
+      expect(changed / inside, greaterThan(.8));
       expect(savedPixels.getPixel(0, 0).luminance, greaterThan(10));
       report['firstUiDetection'] = true;
       report['faceOnlyFrameTapAndUndo'] = true;

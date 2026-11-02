@@ -3,10 +3,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 
 import '../photo/hide_region.dart';
+import '../photo/mask_outline.dart';
 import '../photo/photo_images.dart';
 import 'region_detector.dart';
 
-/// Bundled YOLO26s. Person, display/laptop/phone and vehicle regions only.
+/// Bundled YOLO26s-seg. Person, display/laptop/phone and vehicle regions only.
+/// Each candidate's silhouette mask is traced into a polygon; a candidate
+/// without a usable mask falls back to its rectangle.
 class AndroidObjectRegionDetector implements RegionDetector {
   AndroidObjectRegionDetector({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel('dev.camereon/object_regions');
@@ -73,16 +76,19 @@ class AndroidObjectRegionDetector implements RegionDetector {
             xy[1] >= xy[3]) {
           throw const RegionDetectionException();
         }
-        final region = HideRegion.fromRect(
-          ui.Rect.fromLTRB(
-            xy[0] * photo.width / width,
-            xy[1] * photo.height / height,
-            xy[2] * photo.width / width,
-            xy[3] * photo.height / height,
-          ),
-          imageWidth: photo.width,
-          imageHeight: photo.height,
+        final rect = ui.Rect.fromLTRB(
+          xy[0] * photo.width / width,
+          xy[1] * photo.height / height,
+          xy[2] * photo.width / width,
+          xy[3] * photo.height / height,
         );
+        final region =
+            _silhouette(value['mask'], width, height, photo) ??
+            HideRegion.fromRect(
+              rect,
+              imageWidth: photo.width,
+              imageHeight: photo.height,
+            );
         if (region == null) throw const RegionDetectionException();
         if (!candidates.any((c) => c.kind == kind && c.region == region)) {
           candidates.add(RegionCandidate(kind: kind, region: region));
@@ -97,5 +103,63 @@ class AndroidObjectRegionDetector implements RegionDetector {
     } finally {
       _working = false;
     }
+  }
+
+  /// Mask crops are 8-bit cells over a rectangle of the transferred image.
+  HideRegion? _silhouette(
+    Object? mask,
+    double width,
+    double height,
+    SourcePhoto photo,
+  ) {
+    if (mask == null) return null;
+    if (mask is! Map ||
+        mask['width'] is! int ||
+        mask['height'] is! int ||
+        mask['bytes'] is! Uint8List) {
+      throw const RegionDetectionException();
+    }
+    final w = mask['width'] as int;
+    final h = mask['height'] as int;
+    final bytes = mask['bytes'] as Uint8List;
+    final edges = [
+      for (final key in ['left', 'top', 'right', 'bottom']) mask[key],
+    ];
+    if (w <= 0 ||
+        h <= 0 ||
+        w * h > 1 << 20 ||
+        bytes.length != w * h ||
+        edges.any((v) => v is! num || !v.isFinite)) {
+      throw const RegionDetectionException();
+    }
+    final e = edges.cast<num>().map((v) => v.toDouble()).toList();
+    if (e[0] < 0 ||
+        e[1] < 0 ||
+        e[2] > width ||
+        e[3] > height ||
+        e[0] >= e[2] ||
+        e[1] >= e[3]) {
+      throw const RegionDetectionException();
+    }
+    // Too sparse a mask means the model is unsure of the outline.
+    if (maskCoverage(bytes, w, h) < .05) return null;
+    final outline = traceMask(bytes, w, h);
+    if (outline == null) return null;
+    final points = mapOutline(
+      outline,
+      w,
+      h,
+      ui.Rect.fromLTRB(
+        e[0] * photo.width / width,
+        e[1] * photo.height / height,
+        e[2] * photo.width / width,
+        e[3] * photo.height / height,
+      ),
+    );
+    return HideRegion.polygon(
+      points,
+      imageWidth: photo.width,
+      imageHeight: photo.height,
+    );
   }
 }

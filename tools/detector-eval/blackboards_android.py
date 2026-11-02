@@ -60,7 +60,7 @@ def main():
     print('Staged public fixtures', flush=True)
     wait_for(args.ready, 3600)
     args.output.mkdir(parents=True, exist_ok=True)
-    for name in args.collect or ['results.json', *[s['id'] + '-masked.jpg' for s in sources]]:
+    for name in args.collect or ['results.json', *[s['id'] + '-masked.jpg' for s in sources], *[s['id'] + '-masked-all.jpg' for s in sources]]:
         with (args.output / name).open('wb') as output:
             subprocess.run(['adb', '-s', args.serial, 'exec-out', 'run-as', args.package,
                             'cat', 'files/blackboard-eval/' + name], stdout=output, check=True)

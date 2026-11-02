@@ -31,10 +31,66 @@ internal data class TextBoxGeometry(
         return if (count == 0) 0.0 else sum / count
     }
 
+    /** A point in probability-map or image pixels. */
+    data class Point(val x: Double, val y: Double)
+
     companion object {
-        private data class Point(val x: Double, val y: Double)
         private fun cross(a: Point, b: Point, c: Point) =
             (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+
+        /** Convex hull (monotone chain), counter-clockwise, without the repeated end. */
+        fun hull(input: List<Point>): List<Point> {
+            val points = input.sortedWith(compareBy({ it.x }, { it.y })).distinct()
+            if (points.size < 3) return points
+            fun half(sequence: List<Point>): List<Point> {
+                val chain = mutableListOf<Point>()
+                for (point in sequence) {
+                    while (chain.size >= 2 && cross(chain[chain.size - 2], chain.last(), point) <= 0) {
+                        chain.removeAt(chain.lastIndex)
+                    }
+                    chain.add(point)
+                }
+                return chain.dropLast(1)
+            }
+            return half(points) + half(points.asReversed())
+        }
+
+        /** Grow a convex polygon outward by [margin]: offset every edge, then
+         * hull the offset corners (bevelled corners, never spikes). */
+        fun grown(polygon: List<Point>, margin: Double): List<Point> {
+            if (polygon.size < 3 || margin <= 0) return polygon
+            val extra = mutableListOf<Point>()
+            for (i in polygon.indices) {
+                val a = polygon[i]; val b = polygon[(i + 1) % polygon.size]
+                val dx = b.x - a.x; val dy = b.y - a.y
+                val length = sqrt(dx * dx + dy * dy)
+                if (length == 0.0) continue
+                // Outward normal of a counter-clockwise polygon (y grows downward).
+                val nx = dy / length * margin; val ny = -dx / length * margin
+                extra.add(Point(a.x + nx, a.y + ny)); extra.add(Point(b.x + nx, b.y + ny))
+            }
+            return hull(extra.ifEmpty { polygon })
+        }
+
+        /** The component's hull in probability-map pixel coordinates. */
+        fun outline(indices: IntArray, count: Int, mapWidth: Int, top: Int, bottom: Int): List<Point> {
+            val lefts = IntArray(bottom - top + 1) { Int.MAX_VALUE }
+            val rights = IntArray(lefts.size) { -1 }
+            for (i in 0 until count) {
+                val x = indices[i] % mapWidth
+                val row = indices[i] / mapWidth - top
+                lefts[row] = min(lefts[row], x)
+                rights[row] = max(rights[row], x)
+            }
+            val points = mutableListOf<Point>()
+            for (row in lefts.indices) if (rights[row] >= 0) {
+                // Pixel corners, so the outline encloses whole pixels.
+                val y = (top + row).toDouble()
+                points.add(Point(lefts[row].toDouble(), y)); points.add(Point(lefts[row].toDouble(), y + 1))
+                points.add(Point(rights[row] + 1.0, y)); points.add(Point(rights[row] + 1.0, y + 1))
+            }
+            return hull(points)
+        }
 
         fun component(indices: IntArray, count: Int, mapWidth: Int, top: Int, bottom: Int): TextBoxGeometry {
             // Only each row's extreme points can belong to the convex hull.

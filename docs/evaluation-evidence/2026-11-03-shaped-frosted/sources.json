@@ -1,0 +1,74 @@
+[
+  {
+    "id": "restaurant-chiyoda",
+    "title": "File:Illuminated facade of a 3-storey restaurant with Japanese signs and red paper lanterns, Chiyoda, Tokyo.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Illuminated_facade_of_a_3-storey_restaurant_with_Japanese_signs_and_red_paper_lanterns,_Chiyoda,_Tokyo.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/a5/Illuminated_facade_of_a_3-storey_restaurant_with_Japanese_signs_and_red_paper_lanterns%2C_Chiyoda%2C_Tokyo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "author": "Basile Morin",
+    "license": "CC BY-SA 4.0",
+    "width": 3762,
+    "height": 4559,
+    "bytes": 7936382,
+    "sha256": "00e023662e88739110419551e28426ffc8be5a899a294fdaac8014b28941019f"
+  },
+  {
+    "id": "menu-today",
+    "title": "File:Today's Menu (54372772875).jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Today's_Menu_(54372772875).jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/Today%27s_Menu_%2854372772875%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "author": "Ryohei Noda",
+    "license": "CC BY 2.0",
+    "width": 4576,
+    "height": 3432,
+    "bytes": 1191496,
+    "sha256": "bc97f049b23d8cbbe515b755b0f267e77bcc2a3d91305685e673467d8a2e56ad"
+  },
+  {
+    "id": "station-akihabara",
+    "title": "File:Train station sign at Akihabara station, Tokyo, Japan.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Train_station_sign_at_Akihabara_station,_Tokyo,_Japan.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Train_station_sign_at_Akihabara_station%2C_Tokyo%2C_Japan.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "author": "terrykimura",
+    "license": "CC BY-SA 2.0",
+    "width": 4752,
+    "height": 3168,
+    "bytes": 4846448,
+    "sha256": "cf608796bc6b2832187a8afeca1301524071e01ca974a250ee2f9335fcefe092"
+  },
+  {
+    "id": "badge-wikicamp",
+    "title": "File:WikiCamp Morocco 2026 Day 4 - Woman holding name badge at conference table with attendees - 0013.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:WikiCamp_Morocco_2026_Day_4_-_Woman_holding_name_badge_at_conference_table_with_attendees_-_0013.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/WikiCamp_Morocco_2026_Day_4_-_Woman_holding_name_badge_at_conference_table_with_attendees_-_0013.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "author": "DERDAKI ILIAS",
+    "license": "CC BY-SA 4.0",
+    "width": 5568,
+    "height": 3712,
+    "bytes": 12153137,
+    "sha256": "61f7462715bbc7bfaa8ae4494b131f1e1f920d3ceb70a08e944f6638fae704f5"
+  },
+  {
+    "id": "parking-lpr",
+    "title": "File:License plate recognition system at the entrance of parking lot of large commercial complex - 1.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:License_plate_recognition_system_at_the_entrance_of_parking_lot_of_large_commercial_complex_-_1.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c4/License_plate_recognition_system_at_the_entrance_of_parking_lot_of_large_commercial_complex_-_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "author": "KKPCW",
+    "license": "CC BY-SA 4.0",
+    "width": 3489,
+    "height": 2004,
+    "bytes": 5405884,
+    "sha256": "c4299ba6ffd4eec7bc5d741ac7d489762f1da771dcad0b35d2183ee90d2672c4"
+  },
+  {
+    "id": "louvre-crowd",
+    "title": "File:LouvreMonaLisa.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:LouvreMonaLisa.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/79/LouvreMonaLisa.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "author": "Daniel Salomons",
+    "license": "CC BY-SA 2.5",
+    "width": 3766,
+    "height": 2596,
+    "bytes": 2195099,
+    "sha256": "3597cccf16220616073f1aedaa94782b97ac8f1146b1c7ae8cac1f9ea53af92e"
+  }
+]
