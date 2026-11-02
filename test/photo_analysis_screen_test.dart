@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 
+import 'package:camereon/core/photo/frosted_preview.dart';
 import 'package:camereon/core/analysis/analysis_services.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/analysis/scene_analysis.dart';
@@ -236,6 +237,7 @@ void main() {
             services: AnalysisServices(models: Models(), analyzer: analyzer),
             editorBuilder: (onSourceLoaded) => CapturedPhotoScreen(
               photo: XFile.fromData(Uint8List.fromList([1, 2, 3])),
+              previewer: const FrostedPreviewer.none(),
               processor: processor,
               detector: editor.NoRegions(),
               objectDetector: editor.NoRegions(),
@@ -419,6 +421,7 @@ void main() {
           services: AnalysisServices(models: Models(), analyzer: Analyzer()),
           child: CapturedPhotoScreen(
             photo: XFile.fromData(bytes),
+            previewer: const FrostedPreviewer.none(),
             detector: editor.FakeDetector()
               ..candidates.add(
                 editor.candidate(

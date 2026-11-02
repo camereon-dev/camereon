@@ -43,7 +43,14 @@ void main() {
           )!,
         ]);
         final pixels = img.decodeJpg(jpeg.bytes)!;
-        expect(pixels.getPixel(8, 8).luminance, lessThan(3));
+        // Frosted from the neighbouring blocks: not black, not the original.
+        final hidden = pixels.getPixel(8, 8);
+        final was = img.decodePng(source.bytes)!.getPixel(8, 8);
+        expect(hidden.luminance, greaterThan(20));
+        expect(
+          (hidden.r - was.r).abs() + (hidden.g - was.g).abs(),
+          greaterThan(80),
+        );
         expect(pixels.exif.isEmpty, isTrue);
         expect(pixels.exif.thumbnailData, isNull);
         expect(

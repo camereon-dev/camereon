@@ -42,7 +42,8 @@ class MlKitFaceDetector implements PhotoFaceDetector {
   }
 }
 
-/// Provisional 10% margin on each side; tune against consented fixtures.
+/// 10% margin on each side; the region is the oval inscribed in that box so
+/// the hidden area follows the head instead of a rectangle.
 HideRegion? restoreFaceRegion(
   Rect bounds, {
   required int sourceWidth,
@@ -61,7 +62,7 @@ HideRegion? restoreFaceRegion(
   }
   final x = sourceWidth / inputWidth;
   final y = sourceHeight / inputHeight;
-  return HideRegion.fromRect(
+  return HideRegion.ellipse(
     Rect.fromLTRB(
       (bounds.left - bounds.width * margin) * x,
       (bounds.top - bounds.height * margin) * y,

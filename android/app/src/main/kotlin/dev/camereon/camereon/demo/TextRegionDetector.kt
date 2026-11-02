@@ -15,6 +15,8 @@ import kotlin.math.roundToInt
 
 /** Only regions leave native code. One shared, verified session serves every pass.
  * Input is the editor's oriented RGBA pixels: no PNG encode/decode on either side.
+ * Every box carries the convex outline of its probability component, grown by
+ * the same margin, so tilted text is hidden along its slant, not its bounding box.
  */
 internal class TextRegionDetector(private val assets: AssetManager) {
     fun detect(pixels: ByteArray, width: Int, height: Int, detailed: Boolean = true,
@@ -28,23 +30,28 @@ internal class TextRegionDetector(private val assets: AssetManager) {
         try {
             val environment = OnnxSessions.environment
             val merged = mutableListOf<List<Double>>()
+            val outlines = mutableListOf<List<TextBoxGeometry.Point>>()
             var truncated = false
             var passes = 0
-            fun include(box: List<Double>) {
+            fun include(found: Found) {
+                val box = found.box
                 // A speck of a few pixels is never text the editor could show or tap.
                 if (box[2] - box[0] < 8 && box[3] - box[1] < 8) return
                 var combined = box
+                var outline = found.outline
                 var index = 0
                 while (index < merged.size) {
                     val old = merged[index]
                     if (duplicate(combined, old)) {
                         combined = listOf(min(combined[0], old[0]), min(combined[1], old[1]),
                             max(combined[2], old[2]), max(combined[3], old[3]))
+                        outline = TextBoxGeometry.hull(outline + outlines[index])
                         merged.removeAt(index)
+                        outlines.removeAt(index)
                         index = 0
                     } else index++
                 }
-                if (merged.size < cap) merged.add(combined) else truncated = true
+                if (merged.size < cap) { merged.add(combined); outlines.add(outline) } else truncated = true
             }
             OnnxSessions.use(assets, MODEL, MODEL_SHA256, tuning) { session ->
                 // Keep whole-line context at a higher resolution. Tiny
@@ -55,7 +62,7 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                 // The controlled legacy comparison retains its old scoring.
                 if (!detailed || max(bitmap.width, bitmap.height) <= 960) {
                     truncated = overview.size > cap
-                    merged.addAll(overview.take(cap))
+                    for (found in overview.take(cap)) { merged.add(found.box); outlines.add(found.outline) }
                 } else {
                     // Tiles overlap by 64px, enough for the small text they exist
                     // for; longer lines come from the overview. Each tile is
@@ -68,11 +75,11 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                         val crop = Bitmap.createBitmap(bitmap, x, y,
                             min(tileWidth, bitmap.width - x), min(tileHeight, bitmap.height - y))
                         try {
-                            for (box in infer(crop, 1024, true, session, environment)) {
-                                val mapped = listOf(box[0] + x, box[1] + y, box[2] + x, box[3] + y)
+                            for (found in infer(crop, 1024, true, session, environment)) {
+                                val mapped = found.shifted(x.toDouble(), y.toDouble())
                                 // Enlarged strokes within an already detected
                                 // large text line must not become extra words.
-                                if (overview.none { isLargeLineFragment(mapped, it) }) include(mapped)
+                                if (overview.none { isLargeLineFragment(mapped.box, it.box) }) include(mapped)
                             }
                             passes++
                         } finally { if (crop !== bitmap) crop.recycle() }
@@ -80,19 +87,25 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                     // Prefer a complete finer text line over a blurry,
                     // over-expanded overview box. Partial cropped words do
                     // not replace the complete line from the overview.
-                    for (box in overview) {
+                    for (found in overview) {
+                        val box = found.box
                         val fineLine = merged.any { fine ->
                             duplicate(fine, box) &&
                                 min(fine[2] - fine[0], box[2] - box[0]) /
                                 max(fine[2] - fine[0], box[2] - box[0]) >= .8
                         }
-                        if (!fineLine) include(box)
+                        if (!fineLine) include(found)
                     }
                 }
             }
-            val rectangles = merged.sortedWith(compareBy({ it[1] }, { it[0] }))
+            val order = merged.indices.sortedWith(compareBy({ merged[it][1] }, { merged[it][0] }))
+            val rectangles = order.map { merged[it] }
+            val polygons = order.map { i ->
+                outlines[i].flatMap { listOf(it.x.coerceIn(0.0, bitmap.width.toDouble()),
+                    it.y.coerceIn(0.0, bitmap.height.toDouble())) }
+            }
             return mapOf("width" to bitmap.width, "height" to bitmap.height,
-                "boxes" to rectangles, "truncated" to truncated, "passes" to passes,
+                "boxes" to rectangles, "polygons" to polygons, "truncated" to truncated, "passes" to passes,
                 "elapsedMs" to ((System.nanoTime() - watch) / 1_000_000.0))
         } finally { bitmap.recycle() }
     }
@@ -117,8 +130,15 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                 abs((a[1] + a[3] - b[1] - b[3]) / 2) <= min(ah, bh) * .5)
     }
 
+    /** An axis-aligned box plus the grown convex outline, both in image pixels. */
+    class Found(val box: List<Double>, val outline: List<TextBoxGeometry.Point>) {
+        fun shifted(dx: Double, dy: Double) = Found(
+            listOf(box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy),
+            outline.map { TextBoxGeometry.Point(it.x + dx, it.y + dy) })
+    }
+
     private fun infer(bitmap: Bitmap, side: Int, upscale: Boolean, session: OrtSession,
-                      environment: OrtEnvironment, oriented: Boolean = true): List<List<Double>> {
+                      environment: OrtEnvironment, oriented: Boolean = true): List<Found> {
         val scale = if (upscale) side.toDouble() / max(bitmap.width, bitmap.height)
             else min(1.0, side.toDouble() / max(bitmap.width, bitmap.height))
         val firstWidth = max(1, (bitmap.width * scale).roundToInt())
@@ -200,10 +220,10 @@ internal class TextRegionDetector(private val assets: AssetManager) {
     // the editor still receives conservative axis-aligned redaction bounds.
     private fun boxes(p: FloatArray, width: Int, height: Int, imageWidth: Int,
                       imageHeight: Int, lineFilter: Boolean = false, pixels: IntArray, pixelWidth: Int, pixelHeight: Int,
-                      oriented: Boolean = true): List<List<Double>> {
+                      oriented: Boolean = true): List<Found> {
         val visited = BooleanArray(p.size)
         val queue = IntArray(p.size)
-        val found = mutableListOf<List<Double>>()
+        val found = mutableListOf<Found>()
         for (seed in p.indices) {
             if (visited[seed] || p[seed] < .3f) continue
             var head = 0
@@ -251,14 +271,21 @@ internal class TextRegionDetector(private val assets: AssetManager) {
                 ((top - margin) * pixelHeight / height).toInt(),
                 ceil((right + 1 + margin) * pixelWidth / width).toInt(),
                 ceil((bottom + 1 + margin) * pixelHeight / height).toInt())) continue
-            found.add(listOf(
+            val box = listOf(
                 max(0.0, left - margin) * imageWidth / width,
                 max(0.0, top - margin) * imageHeight / height,
                 min(width.toDouble(), right + 1 + margin) * imageWidth / width,
                 min(height.toDouble(), bottom + 1 + margin) * imageHeight / height,
-            ))
+            )
+            // Legacy axis-aligned mode keeps rectangles; otherwise follow the slant.
+            val outline = if (geometry == null) listOf(
+                TextBoxGeometry.Point(box[0], box[1]), TextBoxGeometry.Point(box[2], box[1]),
+                TextBoxGeometry.Point(box[2], box[3]), TextBoxGeometry.Point(box[0], box[3]))
+            else TextBoxGeometry.grown(TextBoxGeometry.outline(queue, tail, width, top, bottom), margin)
+                .map { TextBoxGeometry.Point(it.x * imageWidth / width, it.y * imageHeight / height) }
+            found.add(Found(box, outline))
         }
-        return found.sortedWith(compareBy({ it[1] }, { it[0] }))
+        return found.sortedWith(compareBy({ it.box[1] }, { it.box[0] }))
     }
 
     companion object {

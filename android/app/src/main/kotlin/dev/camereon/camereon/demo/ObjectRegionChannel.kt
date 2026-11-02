@@ -1,6 +1,7 @@
 package dev.camereon.camereon.demo
 
 import android.app.Activity
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
@@ -26,7 +27,9 @@ internal class ObjectRegionChannel(private val activity: Activity, engine: Flutt
                     try {
                         val detection = ObjectRegionDetector(activity.assets).detect(bytes, width, height, tuning)
                         activity.runOnUiThread { if (!closed.get()) result.success(detection) }
-                    } catch (_: Throwable) {
+                    } catch (error: Throwable) {
+                        // Only the exception class leaves the process: no message, no image data.
+                        Log.w("camereon", "object detection failed: " + error.javaClass.simpleName)
                         // Includes OutOfMemoryError: report a failure instead of crashing.
                         activity.runOnUiThread {
                             if (!closed.get()) result.error("failed", "人物・画面候補を検出できませんでした", null)

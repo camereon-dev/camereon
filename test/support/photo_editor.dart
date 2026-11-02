@@ -7,6 +7,7 @@ import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_processor.dart';
+import 'package:camereon/core/photo/frosted_preview.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
@@ -134,6 +135,7 @@ Future<void> open(
         detector: texts ?? NoRegions(),
         objectDetector: objects ?? NoRegions(),
         faceDetector: faces ?? NoFaces(),
+        previewer: const FrostedPreviewer.none(),
       ),
     ),
   );

@@ -8,6 +8,7 @@ import 'package:camera/camera.dart';
 import 'package:camereon/core/detection/android_text_region_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/android_photo_saver.dart';
+import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
@@ -285,9 +286,30 @@ void main() {
       expect((jpeg.width, jpeg.height), (640, 640));
       final decoded = img.decodeJpg(jpeg.bytes)!;
       expect(decoded.getPixel(78, 205).luminance, greaterThan(240));
-      for (final (x, y) in [(150, 282), (250, 343), (190, 403)]) {
-        expect(decoded.getPixel(x, y).luminance, lessThan(4));
+      // The dark glyphs of each hidden line are gone; the frosted fill takes
+      // the label's white. The first (unselected) line keeps its glyphs.
+      final original = img.decodePng(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      )!;
+      int dark(img.Image image, HideRegion r) {
+        var count = 0;
+        for (var y = r.top; y < r.bottom; y++) {
+          for (var x = r.left; x < r.right; x++) {
+            if (image.getPixel(x, y).luminance < 110) count++;
+          }
+        }
+        return count;
       }
+
+      for (final candidate in texts.skip(1)) {
+        final before = dark(original, candidate.region);
+        expect(before, greaterThan(20));
+        expect(dark(decoded, candidate.region), lessThan(before ~/ 10 + 1));
+      }
+      expect(
+        dark(decoded, texts.first.region),
+        greaterThan(dark(original, texts.first.region) ~/ 2),
+      );
       expect(decoded.exif.isEmpty, isTrue);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();

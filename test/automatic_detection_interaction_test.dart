@@ -5,6 +5,7 @@ import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/features/camera/glass_photo_chrome.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -250,16 +251,20 @@ void main() {
   );
 
   testWidgets(
-    'face-only view hides other frames and preserves already selected masks',
+    'kind chips hide or show every frame of a kind in a single undo step',
     (tester) async {
       final faceRegion = editor.region(const Rect.fromLTRB(40, 20, 80, 55));
       final texts = editor.FakeDetector()
-        ..candidates.add(
+        ..candidates.addAll([
           editor.candidate(
             CandidateKind.text,
             const Rect.fromLTRB(110, 10, 180, 30),
           ),
-        );
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(110, 60, 180, 80),
+          ),
+        ]);
       final processor = editor.FakeProcessor(200, 100);
       await editor.open(
         tester,
@@ -268,26 +273,84 @@ void main() {
         texts: texts,
         faces: CountingFaces([FaceCandidate('one', faceRegion)]),
       );
-      await editor.tapText(tester, '顔だけ');
-      expect(
-        editor
-            .overlay(tester)
-            .candidates
-            .every((c) => c.kind == CandidateKind.face),
-        isTrue,
-      );
-      await editor.tapPixel(tester, const Offset(140, 20));
-      expect(editor.painter(tester).regions, isEmpty);
-      await editor.tapPixel(tester, const Offset(60, 35));
-      await editor.tapText(tester, 'すべて');
-      await editor.tapPixel(tester, const Offset(140, 20));
-      await editor.tapText(tester, '顔だけ');
+      Future<void> chip(String kind) async {
+        await tester.tap(find.byKey(ValueKey('kind-chip-$kind')));
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.text('顔 1'), findsOneWidget);
+      expect(find.text('文字 2'), findsOneWidget);
+      await chip('text');
       expect(editor.painter(tester).regions, [
-        faceRegion,
-        texts.candidates.single.region,
+        texts.candidates[0].region,
+        texts.candidates[1].region,
       ]);
+      // Tapping one frame off leaves a partial count on the chip.
+      await editor.tapPixel(tester, const Offset(140, 70));
+      expect(find.text('文字 1/2'), findsOneWidget);
+      await chip('text');
+      expect(editor.painter(tester).regions.length, 2);
+      await chip('text');
+      expect(editor.painter(tester).regions, isEmpty);
+      await chip('all');
+      expect(editor.painter(tester).regions.length, 3);
+      await editor.tapText(tester, '取り消す');
+      expect(editor.painter(tester).regions, isEmpty);
+      await chip('face');
+      expect(editor.painter(tester).regions, [faceRegion]);
       await editor.tapText(tester, '保存前に確認');
-      expect(processor.received, [faceRegion, texts.candidates.single.region]);
+      expect(processor.received, [faceRegion]);
+    },
+  );
+
+  testWidgets(
+    'long press then drag paints frames hidden; a second stroke clears them',
+    (tester) async {
+      final texts = editor.FakeDetector()
+        ..candidates.addAll([
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(20, 40, 60, 60),
+          ),
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(80, 40, 120, 60),
+          ),
+          editor.candidate(
+            CandidateKind.text,
+            const Rect.fromLTRB(140, 40, 180, 60),
+          ),
+        ]);
+      await editor.open(
+        tester,
+        editor.FakeProcessor(200, 100),
+        editor.FakeSaver(),
+        texts: texts,
+      );
+      final image = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      Offset at(double x, double y) =>
+          image.topLeft + Offset(x / 200 * image.width, y / 100 * image.height);
+      Future<void> stroke(List<Offset> points) async {
+        final gesture = await tester.startGesture(points.first);
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+        for (final point in points.skip(1)) {
+          await gesture.moveTo(point);
+          await tester.pump();
+        }
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      await stroke([at(40, 50), at(100, 50), at(160, 50)]);
+      expect(editor.painter(tester).regions.length, 3);
+      // One undo step for the whole stroke.
+      await editor.tapText(tester, '取り消す');
+      expect(editor.painter(tester).regions, isEmpty);
+      await stroke([at(40, 50), at(100, 50)]);
+      expect(editor.painter(tester).regions.length, 2);
+      // Starting on a hidden frame clears along the stroke instead.
+      await stroke([at(100, 50), at(160, 50)]);
+      expect(editor.painter(tester).regions, [texts.candidates[0].region]);
     },
   );
 
@@ -306,7 +369,7 @@ void main() {
       editor.FakeSaver(),
     );
     expect(find.byType(PhotoGlass), findsNWidgets(3));
-    await editor.tapText(tester, '顔だけ');
+    expect(find.text('候補なし'), findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(
       tester.getRect(find.bySemanticsLabel('撮影した写真')).height,

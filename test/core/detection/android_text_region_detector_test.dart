@@ -214,4 +214,64 @@ void main() {
       );
     }
   });
+
+  test(
+    'polygons beside boxes become slanted outlines in source pixels',
+    () async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          'width': 200,
+          'height': 100,
+          'boxes': [
+            [10, 10, 60, 40],
+            [100, 10, 150, 20],
+          ],
+          'polygons': [
+            [10, 20, 50, 10, 60, 30, 20, 40],
+            null,
+          ],
+        },
+      );
+      final result = await AndroidTextRegionDetector(channel: channel)
+          .detect(photo);
+      final slanted = result.candidates.first.region;
+      expect(slanted.shape, HideShape.polygon);
+      expect(slanted.points, const [
+        Offset(20, 40),
+        Offset(100, 20),
+        Offset(120, 60),
+        Offset(40, 80),
+      ]);
+      expect(slanted.toRect(), const Rect.fromLTRB(20, 20, 120, 80));
+      expect(result.candidates.last.region.shape, HideShape.rectangle);
+      for (final bad in [
+        [
+          [10, 10, 60, 40],
+        ],
+        [
+          [10, 20, 50],
+        ],
+        [
+          [10, 20, 250, 10, 60, 30],
+        ],
+      ]) {
+        messenger.setMockMethodCallHandler(
+          channel,
+          (_) async => {
+            'width': 200,
+            'height': 100,
+            'boxes': [
+              [10, 10, 60, 40],
+            ],
+            'polygons': bad.length == 1 && bad.first.length == 4 ? [] : bad,
+          },
+        );
+        await expectLater(
+          AndroidTextRegionDetector(channel: channel).detect(photo),
+          throwsA(isA<RegionDetectionException>()),
+        );
+      }
+    },
+  );
 }
