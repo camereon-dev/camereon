@@ -106,6 +106,8 @@
 
 テストプロセス（Debug、Dartテストが復号済み写真を保持）の `dumpsys meminfo` TOTAL PSSの最大値: 公開18枚の連続検出で 690 MB、合成小文字で 637 MB、設定比較（セッション3種を順に生成・解放）で 926 MB。製品のRelease APK単体の値や実機の値ではない。2秒間隔の採取。
 
+通常Debug ARM64 APK（`mise run detector-debug-install`、SHA-256先頭 `8b05188bd7cfe535`）は 262,874,111 bytes で、OCR依存を含む前回の 273,953,013 bytes から 11,078,902 bytes 減った。エミュレーターには通常のデバッグアプリを再導入した。
+
 ## 回帰
 
 - `mise run check`: 整形・解析・unit/widget 134件成功（顔と重なる文字候補の非表示、車両の種類、物体→文字の順を追加）。
