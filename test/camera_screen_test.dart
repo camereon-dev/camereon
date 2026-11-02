@@ -25,6 +25,9 @@ class FakeCameraPlatform extends CameraPlatform {
   final List<CameraDescription> cameras;
   final CameraException? error;
   final opened = <String>[];
+  final captureOrientations = <DeviceOrientation>[];
+  final orientationChanges =
+      StreamController<DeviceOrientationChangedEvent>.broadcast();
   int pictures = 0;
   final disposed = <int>[];
   int _nextId = 0;
@@ -68,13 +71,15 @@ class FakeCameraPlatform extends CameraPlatform {
 
   @override
   Stream<DeviceOrientationChangedEvent> onDeviceOrientationChanged() =>
-      const Stream.empty();
+      orientationChanges.stream;
 
   @override
   Future<void> lockCaptureOrientation(
     int cameraId,
     DeviceOrientation orientation,
-  ) async {}
+  ) async {
+    captureOrientations.add(orientation);
+  }
 
   @override
   Widget buildPreview(int cameraId) =>
@@ -129,13 +134,36 @@ void main() {
 
   testWidgets('起動するとすぐに背面カメラのプレビューを表示する', (tester) async {
     useCamera(FakeCameraPlatform());
+    addTearDown(camera.orientationChanges.close);
 
     await tester.pumpWidget(const CamereonApp());
     await tester.pumpAndSettle();
 
     expect(camera.opened, ['back']);
+    expect(camera.captureOrientations, isEmpty);
     expect(find.byKey(const ValueKey('preview-0')), findsOneWidget);
     expect(find.bySemanticsLabel('撮影する'), findsOneWidget);
+  });
+
+  testWidgets('端末の横向きに合わせてカメラ切替アイコンを回転する', (tester) async {
+    useCamera(FakeCameraPlatform());
+    addTearDown(camera.orientationChanges.close);
+
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    camera.orientationChanges.add(
+      const DeviceOrientationChangedEvent(DeviceOrientation.landscapeLeft),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<AnimatedRotation>(
+            find.byKey(const ValueKey('camera-switch-icon')),
+          )
+          .turns,
+      -0.25,
+    );
   });
 
   testWidgets('撮影すると写真の確認画面へ進み、撮り直しでカメラへ戻る', (tester) async {

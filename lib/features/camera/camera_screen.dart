@@ -117,8 +117,6 @@ class _CameraScreenState extends State<CameraScreen>
         enableAudio: false,
       );
       await controller.initialize();
-      // 画面は縦向き固定。端末を傾けてもプレビューが回転しないようにする
-      await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
       if (session != _session) {
         await controller.dispose();
         return;
@@ -247,6 +245,22 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
+  Widget _controlBar(CameraController? controller) {
+    Widget buildBar(DeviceOrientation orientation) => _ControlBar(
+      orientation: orientation,
+      canShoot: controller != null && !_isCapturing,
+      canSwitch: _issue == null && _canSwitchCamera && !_isCapturing,
+      onShoot: _takePicture,
+      onSwitch: _switchCamera,
+    );
+
+    if (controller == null) return buildBar(DeviceOrientation.portraitUp);
+    return ValueListenableBuilder<CameraValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => buildBar(value.deviceOrientation),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -267,12 +281,7 @@ class _CameraScreenState extends State<CameraScreen>
                     : _Preview(controller: controller),
               ),
               const AppVersion(),
-              _ControlBar(
-                canShoot: controller != null && !_isCapturing,
-                canSwitch: issue == null && _canSwitchCamera && !_isCapturing,
-                onShoot: _takePicture,
-                onSwitch: _switchCamera,
-              ),
+              _controlBar(controller),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Wrap(
@@ -324,12 +333,14 @@ class _Preview extends StatelessWidget {
 
 class _ControlBar extends StatelessWidget {
   const _ControlBar({
+    required this.orientation,
     required this.canShoot,
     required this.canSwitch,
     required this.onShoot,
     required this.onSwitch,
   });
 
+  final DeviceOrientation orientation;
   final bool canShoot;
   final bool canSwitch;
   final VoidCallback onShoot;
@@ -351,7 +362,17 @@ class _ControlBar extends StatelessWidget {
                 iconSize: 28,
                 padding: const EdgeInsets.all(12),
                 tooltip: 'カメラを切り替える',
-                icon: const Icon(Icons.cameraswitch_rounded),
+                icon: AnimatedRotation(
+                  key: const ValueKey('camera-switch-icon'),
+                  turns: switch (orientation) {
+                    DeviceOrientation.landscapeLeft => -0.25,
+                    DeviceOrientation.landscapeRight => 0.25,
+                    DeviceOrientation.portraitDown => 0.5,
+                    DeviceOrientation.portraitUp => 0,
+                  },
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(Icons.cameraswitch_rounded),
+                ),
               ),
             ),
           ),
