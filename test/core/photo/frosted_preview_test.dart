@@ -57,4 +57,59 @@ void main() {
       expect(await const FrostedPreviewer.none().patch(region), isNull);
     });
   });
+
+  testWidgets('a patch never repaints a neighbouring hidden area', (
+    tester,
+  ) async {
+    // Two people side by side: hiding B must not paint A's original pixels.
+    final image = img.Image(width: 400, height: 200);
+    img.fill(image, color: img.ColorRgb8(30, 90, 200));
+    img.fillRect(
+      image,
+      x1: 60,
+      y1: 40,
+      x2: 140,
+      y2: 160,
+      color: img.ColorRgb8(250, 30, 30),
+    );
+    img.fillRect(
+      image,
+      x1: 180,
+      y1: 40,
+      x2: 260,
+      y2: 160,
+      color: img.ColorRgb8(30, 250, 30),
+    );
+    final photo = SourcePhoto(
+      bytes: img.encodePng(image),
+      width: 400,
+      height: 200,
+    );
+    final previewer = IsolateFrostedPreviewer(maxSide: 400);
+    final b = HideRegion.fromRect(
+      const Rect.fromLTRB(180, 40, 260, 160),
+      imageWidth: 400,
+      imageHeight: 200,
+    )!;
+    await tester.runAsync(() async {
+      await previewer.load(photo);
+      final patch = (await previewer.patch(b))!;
+      final data = (await patch.image.toByteData())!;
+      final w = patch.image.width;
+      int alphaAt(double x, double y) {
+        final px = (x - patch.bounds.left).floor();
+        final py = (y - patch.bounds.top).floor();
+        if (px < 0 || py < 0 || px >= w || py >= patch.image.height) return 0;
+        return data.getUint8((py * w + px) * 4 + 3);
+      }
+
+      expect(alphaAt(220, 100), 255, reason: 'B itself is covered');
+      // A's interior is transparent in B's patch, wherever B's bounds reach.
+      for (final x in [70.0, 100.0, 130.0, 160.0]) {
+        expect(alphaAt(x, 100), 0, reason: 'x=$x');
+      }
+      patch.dispose();
+      previewer.dispose();
+    });
+  });
 }
