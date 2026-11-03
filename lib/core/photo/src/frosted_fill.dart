@@ -30,6 +30,48 @@ void frostShapes(
   }
 }
 
+/// The frosted fill of one shape as a separate premultiplied RGBA layer.
+///
+/// Only the shape and its outward feather are opaque; everything else is
+/// fully transparent. Layers of overlapping shapes can therefore be stacked
+/// in any order without one layer painting original pixels over another.
+/// [pixels] is read only. Returns null when the shape is outside the image.
+({Uint8List rgba, int left, int top, int width, int height})? frostOverlay(
+  Uint8List pixels,
+  int width,
+  int height,
+  int channels,
+  PixelShape shape,
+) {
+  final band = _band(shape, width, height);
+  if (band == null) return null;
+  final rgba = Uint8List(band.width * band.height * 4);
+  _frost(pixels, width, height, channels, shape, overlay: rgba);
+  return (
+    rgba: rgba,
+    left: band.left,
+    top: band.top,
+    width: band.width,
+    height: band.height,
+  );
+}
+
+/// Pixels a shape writes: its bounds plus the feather, clipped to the image.
+({int left, int top, int width, int height})? _band(
+  PixelShape s,
+  int width,
+  int height,
+) {
+  final window = frostWindow(s, width, height);
+  final int band = featherOf(s).ceil() + 1;
+  final int left = math.max(window.left, s.left - band);
+  final int top = math.max(window.top, s.top - band);
+  final int right = math.min(window.right, s.right + band);
+  final int bottom = math.min(window.bottom, s.bottom + band);
+  if (right <= left || bottom <= top) return null;
+  return (left: left, top: top, width: right - left, height: bottom - top);
+}
+
 /// 形の内側の画素を 1 に。[left]/[top] は出力マスクの原点、[w]/[h] はその大きさ。
 Uint8List rasterize(PixelShape shape, int left, int top, int w, int h) {
   final mask = Uint8List(w * h);
@@ -126,7 +168,16 @@ double reachOf(PixelShape s) =>
   );
 }
 
-void _frost(Uint8List px, int width, int height, int channels, PixelShape s) {
+/// Writes the fill into [px] in place, or, when [overlay] is given, into that
+/// premultiplied RGBA buffer covering exactly [_band] (leaving [px] intact).
+void _frost(
+  Uint8List px,
+  int width,
+  int height,
+  int channels,
+  PixelShape s, {
+  Uint8List? overlay,
+}) {
   final double feather = featherOf(s);
   final double reach = reachOf(s);
   final window = frostWindow(s, width, height);
@@ -134,17 +185,14 @@ void _frost(Uint8List px, int width, int height, int channels, PixelShape s) {
   final int top = window.top;
   final int w = window.right - left;
   final int h = window.bottom - top;
-  if (w <= 0 || h <= 0) return;
   // Only the shape plus its feather band is ever written. The wider window
   // is read-only: it supplies the surrounding colours.
-  final int band = feather.ceil() + 1;
-  final int bandLeft = math.max(left, s.left - band);
-  final int bandTop = math.max(top, s.top - band);
-  final int bandRight = math.min(window.right, s.right + band);
-  final int bandBottom = math.min(window.bottom, s.bottom + band);
-  final int bw = bandRight - bandLeft;
-  final int bh = bandBottom - bandTop;
-  if (bw <= 0 || bh <= 0) return;
+  final bandRect = _band(s, width, height);
+  if (w <= 0 || h <= 0 || bandRect == null) return;
+  final int bandLeft = bandRect.left;
+  final int bandTop = bandRect.top;
+  final int bw = bandRect.width;
+  final int bh = bandRect.height;
   final inside = rasterize(s, bandLeft, bandTop, bw, bh);
 
   // 塗りの色場は縮小した格子で作る。大きくぼかすので解像度は要らない。
@@ -240,6 +288,14 @@ void _frost(Uint8List px, int width, int height, int channels, PixelShape s) {
       final noise = sample[3] == 0
           ? 0.0
           : _noise(bandLeft + x, bandTop + y, seed) * sample[3];
+      if (overlay != null) {
+        final int o = i * 4;
+        overlay[o] = ((sample[0] + noise).clamp(0, 255) * a).round();
+        overlay[o + 1] = ((sample[1] + noise).clamp(0, 255) * a).round();
+        overlay[o + 2] = ((sample[2] + noise).clamp(0, 255) * a).round();
+        overlay[o + 3] = (a * 255).round();
+        continue;
+      }
       final int p = ((bandTop + y) * width + bandLeft + x) * channels;
       px[p] = _mix(px[p], sample[0] + noise, a);
       px[p + 1] = _mix(px[p + 1], sample[1] + noise, a);

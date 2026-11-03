@@ -145,25 +145,46 @@ void main() {
     expect(find.bySemanticsLabel('撮影する'), findsOneWidget);
   });
 
-  testWidgets('端末の横向きに合わせてカメラ切替アイコンを回転する', (tester) async {
+  Future<void> holdPhone(WidgetTester tester, int degrees) async {
+    const codec = StandardMethodCodec();
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      'dev.camereon/device_rotation',
+      codec.encodeMethodCall(
+        MethodCall('changed', {'capture': degrees, 'ui': degrees}),
+      ),
+      (_) {},
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('センサーの向きでアイコンを回し、その向きで撮影する', (tester) async {
     useCamera(FakeCameraPlatform());
     addTearDown(camera.orientationChanges.close);
 
     await tester.pumpWidget(const CamereonApp());
     await tester.pumpAndSettle();
+    // The plugin's display-based orientation stays portrait on a locked screen.
     camera.orientationChanges.add(
-      const DeviceOrientationChangedEvent(DeviceOrientation.landscapeLeft),
+      const DeviceOrientationChangedEvent(DeviceOrientation.portraitUp),
+    );
+    await holdPhone(tester, 90);
+    double turns() => tester
+        .widget<AnimatedRotation>(
+          find.byKey(const ValueKey('camera-switch-icon')),
+        )
+        .turns;
+    expect(turns(), .25);
+    await holdPhone(tester, 270);
+    expect(turns(), -.25);
+
+    await tester.tap(find.bySemanticsLabel('撮影する'));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
     await tester.pumpAndSettle();
-
-    expect(
-      tester
-          .widget<AnimatedRotation>(
-            find.byKey(const ValueKey('camera-switch-icon')),
-          )
-          .turns,
-      -0.25,
-    );
+    expect(camera.captureOrientations, [DeviceOrientation.landscapeRight]);
+    expect(camera.pictures, 1);
   });
 
   testWidgets('撮影すると写真の確認画面へ進み、撮り直しでカメラへ戻る', (tester) async {
