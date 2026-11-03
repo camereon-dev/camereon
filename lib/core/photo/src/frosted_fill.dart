@@ -25,8 +25,26 @@ void frostShapes(
   int channels,
   List<PixelShape> shapes,
 ) {
+  if (shapes.isEmpty) return;
+  // Exclude the union before any region is painted. Otherwise an earlier
+  // region can sample private pixels in a neighbouring, not-yet-painted one.
+  final excluded = Uint8List(width * height);
   for (final shape in shapes) {
-    _frost(pixels, width, height, channels, shape);
+    final left = math.max(0, shape.left);
+    final top = math.max(0, shape.top);
+    final right = math.min(width, shape.right);
+    final bottom = math.min(height, shape.bottom);
+    final w = right - left, h = bottom - top;
+    if (w <= 0 || h <= 0) continue;
+    final mask = rasterize(shape, left, top, w, h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        if (mask[y * w + x] != 0) excluded[(top + y) * width + left + x] = 1;
+      }
+    }
+  }
+  for (final shape in shapes) {
+    _frost(pixels, width, height, channels, shape, excluded);
   }
 }
 
@@ -126,7 +144,14 @@ double reachOf(PixelShape s) =>
   );
 }
 
-void _frost(Uint8List px, int width, int height, int channels, PixelShape s) {
+void _frost(
+  Uint8List px,
+  int width,
+  int height,
+  int channels,
+  PixelShape s,
+  Uint8List excluded,
+) {
   final double feather = featherOf(s);
   final double reach = reachOf(s);
   final window = frostWindow(s, width, height);
@@ -158,14 +183,8 @@ void _frost(Uint8List px, int width, int height, int channels, PixelShape s) {
   final weights = Float64List(gw * gh);
   for (var y = 0; y < h; y += step) {
     final int gy = math.min(gh - 1, (y * scale).floor());
-    final int iy = top + y - bandTop;
     for (var x = 0; x < w; x += step) {
-      final int ix = left + x - bandLeft;
-      if (iy >= 0 &&
-          iy < bh &&
-          ix >= 0 &&
-          ix < bw &&
-          inside[iy * bw + ix] != 0) {
+      if (excluded[(top + y) * width + left + x] != 0) {
         continue;
       }
       final int gi = gy * gw + math.min(gw - 1, (x * scale).floor());
