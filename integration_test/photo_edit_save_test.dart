@@ -40,7 +40,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'sample: open without camera, redact, confirm and save on Android',
+    'sample: open without camera, redact, confirm and save to Photos',
     (tester) async {
       final camera = CameraPlatform.instance;
       CameraPlatform.instance = _UnavailableCamera();
@@ -67,6 +67,11 @@ void main() {
       await editorAction(tester, '保存前に確認');
       expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
       await tester.tap(find.text('写真に保存'));
+      // Photos completion can arrive after Flutter animations settle.
+      for (var i = 0; i < 300; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.text('写真を保存しました').evaluate().isNotEmpty) break;
+      }
       await tester.pumpAndSettle();
       expect(find.text('写真を保存しました'), findsOneWidget);
       await tester.tap(find.text('もう一枚'));
@@ -142,6 +147,12 @@ void main() {
         await editorAction(tester, '保存前に確認');
         expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
         await tester.tap(find.text('写真に保存'));
+        // Native Photos writes can finish after Flutter has no pending frames.
+        // Wait for the observable outcome, rather than only animation settling.
+        for (var i = 0; i < 300; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          if (find.text('写真を保存しました').evaluate().isNotEmpty) break;
+        }
         await tester.pumpAndSettle();
         expect(find.text('写真を保存しました'), findsOneWidget);
         final jpeg = saver.saved!;
