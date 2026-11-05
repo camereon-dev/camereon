@@ -9,7 +9,11 @@ import 'package:path_provider/path_provider.dart';
 Future<void> deleteLeftoverCaptures() async {
   try {
     final cache = await getTemporaryDirectory();
-    await for (final entity in cache.list()) {
+    final captures = Platform.isIOS
+        ? Directory('${cache.path}/camera/pictures')
+        : cache;
+    if (!await captures.exists()) return;
+    await for (final entity in captures.list(followLinks: false)) {
       final name = entity.uri.pathSegments.last;
       if (entity is File && name.startsWith('CAP') && name.endsWith('.jpg')) {
         await entity.delete();

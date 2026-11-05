@@ -14,7 +14,7 @@ import 'src/photo_processing_worker.dart';
 /// 選択変更前の古い結果は呼び出し側で破棄する。
 final class ImagePhotoProcessor implements PhotoProcessor {
   ImagePhotoProcessor({
-    this.maxPixels = 24000000,
+    this.maxPixels = 25000000,
     this.maxInputBytes = 128 * 1024 * 1024,
   }) {
     if (maxPixels <= 0 || maxInputBytes <= 0) {
