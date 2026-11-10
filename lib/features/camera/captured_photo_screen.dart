@@ -86,6 +86,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   Set<RegionCandidate> _selected = {};
   final List<Set<RegionCandidate>> _history = [];
   final _photoTransform = TransformationController();
+  // The confirmation image zooms on its own, starting from the whole photo.
+  final _previewTransform = TransformationController();
+  Offset _previewTapPoint = Offset.zero;
   final Set<bool> _failedScans = {};
   bool _truncated = false;
   bool _detecting = false;
@@ -177,6 +180,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     _faces.removeListener(_faceChanged);
     _faces.dispose();
     _photoTransform.dispose();
+    _previewTransform.dispose();
     _patchTimer?.cancel();
     for (final patch in _patches.values) {
       patch.dispose();
@@ -462,6 +466,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     });
     try {
       final jpeg = await _processor.redact(source, List.of(_redactions));
+      _previewTransform.value = Matrix4.identity();
       if (mounted) setState(() => _preview = jpeg);
     } catch (_) {
       if (mounted) setState(() => _processingFailed = true);
@@ -543,12 +548,24 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                   if (source == null)
                     _loading()
                   else if (preview != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 84, 12, 124),
-                      child: Image.memory(
-                        preview.bytes,
-                        fit: BoxFit.contain,
-                        semanticLabel: '保存する加工済み写真',
+                    // Pinch to check the hidden areas up close; double-tap
+                    // zooms in on that spot and back out.
+                    GestureDetector(
+                      onDoubleTapDown: (details) =>
+                          _previewTapPoint = details.localPosition,
+                      onDoubleTap: _togglePreviewZoom,
+                      child: InteractiveViewer(
+                        transformationController: _previewTransform,
+                        minScale: 1,
+                        maxScale: 8,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 84, 12, 124),
+                          child: Image.memory(
+                            preview.bytes,
+                            fit: BoxFit.contain,
+                            semanticLabel: '保存する加工済み写真',
+                          ),
+                        ),
                       ),
                     )
                   else
@@ -929,6 +946,18 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   void _notify(String message) =>
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
+
+  void _togglePreviewZoom() {
+    if (_previewTransform.value.getMaxScaleOnAxis() > 1.01) {
+      _previewTransform.value = Matrix4.identity();
+      return;
+    }
+    const zoom = 3.0;
+    final p = _previewTapPoint;
+    _previewTransform.value = Matrix4.identity()
+      ..translateByDouble(-p.dx * (zoom - 1), -p.dy * (zoom - 1), 0, 1)
+      ..scaleByDouble(zoom, zoom, 1, 1);
+  }
 
   Future<void> _openSettings() async {
     try {

@@ -158,4 +158,47 @@ void main() {
     expect(find.text('共有できませんでした'), findsOneWidget);
     expect(find.text('もう一枚'), findsOneWidget);
   });
+
+  testWidgets('the confirmation image can be pinched and double-tapped', (
+    tester,
+  ) async {
+    final texts = FakeDetector()
+      ..candidates.add(
+        candidate(CandidateKind.text, const Rect.fromLTRB(20, 20, 80, 60)),
+      );
+    await open(tester, FakeProcessor(200, 100), FakeSaver(), texts: texts);
+    await tapPixel(tester, const Offset(50, 40));
+    await tapText(tester, '保存前に確認');
+    final preview = find.bySemanticsLabel('保存する加工済み写真');
+    final before = tester.getRect(preview);
+    final center = before.center;
+    final first = await tester.startGesture(center - const Offset(20, 0));
+    final second = await tester.startGesture(
+      center + const Offset(20, 0),
+      pointer: 2,
+    );
+    await first.moveTo(center - const Offset(80, 0));
+    await second.moveTo(center + const Offset(80, 0));
+    await tester.pump();
+    await first.up();
+    await second.up();
+    await tester.pumpAndSettle();
+    expect(tester.getRect(preview).width, greaterThan(before.width * 1.5));
+    // Double-tap returns to the whole photo, and again zooms in.
+    Future<void> doubleTap() async {
+      await tester.tapAt(center);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(center);
+      await tester.pumpAndSettle();
+    }
+
+    await doubleTap();
+    expect(tester.getRect(preview).width, closeTo(before.width, 1));
+    await doubleTap();
+    expect(tester.getRect(preview).width, closeTo(before.width * 3, 2));
+    // Coming back to confirmation after editing starts from the whole photo.
+    await tapText(tester, '編集へ戻る');
+    await tapText(tester, '保存前に確認');
+    expect(tester.getRect(preview).width, closeTo(before.width, 1));
+  });
 }
