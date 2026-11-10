@@ -84,6 +84,7 @@
     <main id="main">
       <section class="hero wrap" aria-labelledby="hero-title">
         <div class="hero-copy">
+          <p class="beta-tag"><span></span> Android ベータ版、公開中</p>
           <h1 id="hero-title">
             <span class="rainbow-line">その一枚、</span>
             <span class="rainbow-line">見せたいものだけ。</span>
@@ -93,69 +94,65 @@
           </p>
           <div class="hero-cta">
             <a class="button button-primary" href="#download"
-              ><svg class="icon"><use href="#download-icon" /></svg>Android ベータ版</a
+              ><svg class="icon" aria-hidden="true"><use href="#download-icon" /></svg>Android ベータ版</a
             ><a class="text-link" href="#how"
-              >使い方 <svg class="icon"><use href="#arrow" /></svg
+              >使い方 <svg class="icon" aria-hidden="true"><use href="#arrow" /></svg
             ></a>
           </div>
+          <p class="hero-note">写真の処理は端末内。アカウント登録も不要。</p>
         </div>
         <div class="hero-visual">
+          <span class="visual-orbit" aria-hidden="true"></span>
           <div class="phone">
             <img
               src="./assets/screen-select.webp"
               width="720"
-              height="1496"
-              alt="宛名ラベルの写真で、名前・住所・電話番号の3か所を選んで隠している編集画面"
+              height="1600"
+              alt="ノートパソコンの写真から、隠したい文字を18か所選んだ実際の編集画面"
               fetchpriority="high"
             />
           </div>
+          <div class="floating-label"><svg class="icon" aria-hidden="true"><use href="#shield" /></svg><span>思い出は、そのまま。<br /><strong>写り込みには、ひと工夫。</strong></span></div>
+          <p class="visual-caption">camereon の実際の操作画面</p>
         </div>
       </section>
 
       <section id="how" class="how section" aria-labelledby="how-title">
         <div class="wrap">
-          <h2 id="how-title">見つけて、なじませて、共有。</h2>
+          <p class="section-eyebrow">HOW TO USE</p>
+          <h2 id="how-title">撮って、隠して。<br class="mobile-break" />あとは、あなたらしく。</h2>
+          <p class="section-intro">写真を選んでから、保存するまでの4ステップ。</p>
           <ol class="steps">
             <li class="step">
-              <div class="screen-card">
-                <img
-                  src="./assets/screen-detect.webp"
-                  width="720"
-                  height="1128"
-                  alt="写真の中の文字が、形に沿った枠で4か所見つかった画面"
-                  loading="lazy"
-                />
-              </div>
-              <h3><span class="step-number">1</span>自動で見つける</h3>
-              <p>顔・人・文字・画面・車を、写真の中から探します。</p>
+              <div class="step-copy"><span class="step-number">01</span><h3>写真を用意する</h3><p>カメラで撮影、または写真を選択。サンプルからも試せます。</p></div>
+              <button class="screen-card" type="button" data-screen aria-label="手順1：写真を用意する画面を拡大">
+                <img src="./assets/screen-camera.webp" width="720" height="1600" alt="ノートパソコンを撮影しているカメラ画面" loading="lazy" />
+                <span class="screen-zoom">画面を拡大 ↗</span>
+              </button>
             </li>
             <li class="step">
-              <div class="screen-card">
-                <img
-                  src="./assets/screen-confirm.webp"
-                  width="720"
-                  height="1128"
-                  alt="選んだ3行が、まわりの色になじむように消えている確認画面"
-                  loading="lazy"
-                />
-              </div>
-              <h3><span class="step-number">2</span>なじませて隠す</h3>
-              <p>黒塗りではなく、まわりの色で自然に埋めます。</p>
+              <div class="step-copy"><span class="step-number">02</span><h3>自動で見つける</h3><p>顔・人・文字・画面・車を検出。見つかった候補を枠で表示します。</p></div>
+              <button class="screen-card" type="button" data-screen aria-label="手順2：自動で見つける画面を拡大">
+                <img src="./assets/screen-detect.webp" width="720" height="1600" alt="文字57か所と画面3か所の検出候補を表示した画面" loading="lazy" />
+                <span class="screen-zoom">画面を拡大 ↗</span>
+              </button>
             </li>
             <li class="step">
-              <div class="screen-card">
-                <img
-                  src="./assets/screen-saved.webp"
-                  width="720"
-                  height="1128"
-                  alt="保存後に「共有」「開く」「もう一枚」のボタンが並ぶ画面"
-                  loading="lazy"
-                />
-              </div>
-              <h3><span class="step-number">3</span>保存して、すぐ共有</h3>
-              <p>保存したら、そのまま SNS やメッセージへ。</p>
+              <div class="step-copy"><span class="step-number">03</span><h3>隠すところを選ぶ</h3><p>気になる枠をタップ。選んだところは、まわりの色で自然に隠します。</p></div>
+              <button class="screen-card" type="button" data-screen aria-label="手順3：隠すところを選ぶ画面を拡大">
+                <img src="./assets/screen-select.webp" width="720" height="1600" alt="文字18か所を選び、ミント色の枠で表示した画面" loading="lazy" />
+                <span class="screen-zoom">画面を拡大 ↗</span>
+              </button>
+            </li>
+            <li class="step">
+              <div class="step-copy"><span class="step-number">04</span><h3>確認して、保存する</h3><p>隠し忘れがないか確認して、写真に保存。共有する前に、ひと安心。</p></div>
+              <button class="screen-card" type="button" data-screen aria-label="手順4：確認して保存する画面を拡大">
+                <img src="./assets/screen-confirm.webp" width="720" height="1600" alt="文字を隠した仕上がりと、写真に保存ボタンの確認画面" loading="lazy" />
+                <span class="screen-zoom">画面を拡大 ↗</span>
+              </button>
             </li>
           </ol>
+          <p class="screens-note">実機で撮影した操作例です。検出には見落としがあるため、保存前に確認してください。</p>
         </div>
       </section>
 
@@ -174,7 +171,7 @@
           <h2 id="download-title">サンプルで、すぐ試せます。</h2>
           <p>架空の宛名ラベルで、見つける・隠す・保存するまでを体験できます。</p>
           <a class="button button-lime" href="{{APK_URL}}"
-            ><svg class="icon"><use href="#download-icon" /></svg>ベータ版をダウンロード</a
+            ><svg class="icon" aria-hidden="true"><use href="#download-icon" /></svg>ベータ版をダウンロード</a
           >
           <p class="release-meta">
             {{VERSION}} ・ Android 11 以上 ・ {{SIZE}} ・
@@ -225,6 +222,11 @@
         </div>
       </section>
     </main>
+
+    <dialog class="screen-dialog" aria-label="アプリ画面の拡大表示">
+      <button class="dialog-close" type="button" aria-label="拡大表示を閉じる">閉じる ×</button>
+      <img width="720" height="1600" alt="" />
+    </dialog>
 
     <footer class="site-footer">
       <div class="wrap footer-inner">

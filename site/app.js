@@ -107,3 +107,24 @@
   });
   scheduleInk();
 })();
+
+// Native dialog gives keyboard and touch users the same full-size screenshots.
+(() => {
+  const dialog = document.querySelector('.screen-dialog');
+  if (!dialog || typeof dialog.showModal !== 'function') return;
+  const preview = dialog.querySelector('img');
+  document.querySelectorAll('[data-screen]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const source = button.querySelector('img');
+      preview.src = source.src;
+      preview.alt = source.alt;
+      dialog.showModal();
+    });
+  });
+  dialog.querySelector('.dialog-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (event) => {
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+  });
+})();
