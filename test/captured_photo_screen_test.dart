@@ -134,4 +134,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
   });
+
+  testWidgets('after saving, the photo can be shared or opened at once', (
+    tester,
+  ) async {
+    final processor = FakeProcessor(200, 100);
+    final sharer = FakeSharer();
+    final texts = FakeDetector()
+      ..candidates.add(
+        candidate(CandidateKind.text, const Rect.fromLTRB(20, 20, 80, 60)),
+      );
+    await open(tester, processor, FakeSaver(), texts: texts, sharer: sharer);
+    await tapPixel(tester, const Offset(50, 40));
+    await tapText(tester, '保存前に確認');
+    expect(find.text('共有'), findsNothing);
+    await tapText(tester, '写真に保存');
+    await tapText(tester, '共有');
+    expect(sharer.shared, [processor.jpeg]);
+    await tapText(tester, '開く');
+    expect(sharer.opened, 1);
+    sharer.result = false;
+    await tapText(tester, '共有');
+    expect(find.text('共有できませんでした'), findsOneWidget);
+    expect(find.text('もう一枚'), findsOneWidget);
+  });
 }
