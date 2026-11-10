@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,7 +16,7 @@ import '../../core/detection/region_detector.dart';
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
 import '../../core/photo/flutter_photo_processor.dart';
-import '../../core/photo/ios_photo_saver.dart';
+import '../../core/photo/frosted_preview.dart';
 import '../../core/photo/photo_images.dart';
 import '../../core/photo/photo_processor.dart';
 import '../../core/photo/photo_processing_exception.dart';
@@ -24,6 +25,9 @@ import '../analysis/face_detection_controller.dart';
 import '../analysis/photo_analysis_entry.dart';
 import '../detection/candidate_overlay.dart';
 import 'glass_photo_chrome.dart';
+
+/// Longest side of the editor's decoded photo texture.
+const displayDecodeSide = 4096;
 
 /// Automatic detection; the photograph's frames are the editing controls.
 class CapturedPhotoScreen extends StatefulWidget {
@@ -36,6 +40,7 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.faceDetector,
     this.detector,
     this.objectDetector,
+    this.previewer,
   });
   final XFile photo;
   final ValueChanged<SourcePhoto>? onSourceLoaded;
@@ -44,6 +49,9 @@ class CapturedPhotoScreen extends StatefulWidget {
   final PhotoFaceDetector? faceDetector;
   final RegionDetector? detector;
   final RegionDetector? objectDetector;
+
+  /// Builds the frosted preview of selected areas; tests pass [FrostedPreviewer.none].
+  final FrostedPreviewer? previewer;
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
@@ -52,8 +60,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     with WidgetsBindingObserver {
   late final PhotoProcessor _processor =
       widget.processor ?? FlutterPhotoProcessor();
-  late final PhotoSaver _saver =
-      widget.saver ?? (Platform.isIOS ? IosPhotoSaver() : AndroidPhotoSaver());
+  late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
   late final RegionDetector _detector =
       widget.detector ?? AndroidTextRegionDetector();
   late final RegionDetector _objectDetector =
@@ -61,21 +68,54 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   late final _faces = FaceDetectionController(
     widget.faceDetector ?? MlKitFaceDetector(),
   );
+  late final FrostedPreviewer _previewer =
+      widget.previewer ?? FrostedPreviewer();
+  // Frosted textures per selected region; drawn as-is while zooming.
+  final Map<HideRegion, FrostedPatch> _patches = {};
+  final Set<HideRegion> _pendingPatches = {};
+  Timer? _patchTimer;
+  // Long-press stroke: the first frame decides whether it selects or clears.
+  bool? _strokeSelects;
+  final Set<RegionCandidate> _stroked = {};
   final Map<String, RegionCandidate> _faceCandidates = {};
   List<RegionCandidate> _candidates = [];
   Set<RegionCandidate> _selected = {};
   final List<Set<RegionCandidate>> _history = [];
+  final _photoTransform = TransformationController();
   final Set<bool> _failedScans = {};
   bool _truncated = false;
   bool _detecting = false;
   int _detectionEpoch = 0;
   int _autoDetectionEpoch = 0;
   bool _automaticDetectionStarted = false;
-  bool _facesOnly = false;
   List<RegionCandidate> get _visibleCandidates => [
     ..._faceCandidates.values,
-    if (!_facesOnly) ..._candidates,
+    for (final c in _candidates)
+      if (_selected.contains(c) || !_coveredByFace(c)) c,
   ];
+
+  /// The text detector fires on eyes, glasses and scarf edges. A text frame
+  /// well inside a face, or a frame enclosing most of a face it does not
+  /// otherwise need, is hidden; a coincident frame stays selectable by kind.
+  bool _coveredByFace(RegionCandidate c) {
+    if (c.kind != CandidateKind.text) return false;
+    final r = c.region.toRect();
+    final textArea = r.width * r.height;
+    return _faceCandidates.values.any((face) {
+      final f = face.region.toRect();
+      final i = r.intersect(f);
+      if (i.width <= 0 || i.height <= 0) return false;
+      final shared = i.width * i.height;
+      final faceArea = f.width * f.height;
+      final inside = shared >= textArea * .7 && textArea < faceArea * .9;
+      final enclosing =
+          shared >= faceArea * .7 &&
+          textArea > faceArea * 1.1 &&
+          faceArea >= textArea * .25;
+      return inside || enclosing;
+    });
+  }
+
   List<HideRegion> get _redactions =>
       {for (final c in _selected) c.region}.toList();
   bool get _scanning =>
@@ -132,6 +172,12 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     WidgetsBinding.instance.removeObserver(this);
     _faces.removeListener(_faceChanged);
     _faces.dispose();
+    _photoTransform.dispose();
+    _patchTimer?.cancel();
+    for (final patch in _patches.values) {
+      patch.dispose();
+    }
+    _previewer.dispose();
     _detectionEpoch++;
     _autoDetectionEpoch++;
     if (widget.photo.path.isNotEmpty) File(widget.photo.path).delete().ignore();
@@ -150,6 +196,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       if (!mounted) return;
       setState(() => _source = source);
       widget.onSourceLoaded?.call(source);
+      unawaited(_previewer.load(source).then((_) => _refreshPatches()));
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -185,15 +232,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   Future<void> _detectAll(SourcePhoto source) async {
     final epoch = ++_autoDetectionEpoch;
-    // Keep the two ONNX models' peak allocations separate.
-    await _detect();
+    // Keep the two ONNX models' peak allocations separate. The quick object
+    // pass shows people, screens and vehicles before the longer text tiles.
+    await _detect(objects: true);
     if (!mounted ||
         epoch != _autoDetectionEpoch ||
         !identical(source, _source) ||
         _preview != null) {
       return;
     }
-    await _detect(objects: true);
+    await _detect();
   }
 
   Future<void> _detect({bool objects = false}) async {
@@ -219,7 +267,11 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             a.kind == b.kind && a.region == b.region;
         final previous = _candidates;
         final kinds = objects
-            ? {CandidateKind.person, CandidateKind.screen}
+            ? {
+                CandidateKind.person,
+                CandidateKind.screen,
+                CandidateKind.vehicle,
+              }
             : {CandidateKind.text};
         _candidates = [
           for (final c in previous)
@@ -232,6 +284,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             if (!previous.any((old) => same(c, old))) c,
         ];
         _truncated = _truncated || result.truncated;
+        if (result.partial) _failedScans.add(objects);
       });
     } catch (_) {
       if (mounted && epoch == _detectionEpoch) {
@@ -253,17 +306,112 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   void _toggle(RegionCandidate candidate) {
     if (_busy || _preview != null) return;
+    final next = Set.of(_selected);
+    if (!next.remove(candidate)) next.add(candidate);
+    _select(next);
+  }
+
+  /// One undo step per change, however many frames it touched.
+  void _select(Set<RegionCandidate> next) {
+    if (setEquals(next, _selected)) return;
     setState(() {
       _history.add(Set.of(_selected));
-      if (!_selected.remove(candidate)) _selected.add(candidate);
+      _selected = next;
     });
     unawaited(HapticFeedback.selectionClick());
+    _schedulePatches();
+  }
+
+  /// Hide every frame of one kind, or show them all again when all are hidden.
+  void _toggleKind(CandidateKind? kind) {
+    if (_busy || _preview != null) return;
+    final frames = _visibleCandidates
+        .where((c) => kind == null || c.kind == kind)
+        .toSet();
+    if (frames.isEmpty) return;
+    final allHidden = frames.every(_selected.contains);
+    _select(allHidden ? _selected.difference(frames) : _selected.union(frames));
   }
 
   void _undo() {
     if (_busy || _history.isEmpty) return;
     setState(() => _selected = _history.removeLast());
     unawaited(HapticFeedback.selectionClick());
+    _schedulePatches();
+  }
+
+  // Long press, then drag across frames: paint them hidden (or shown) in one
+  // undo step. A plain drag still pans the zoomed photo.
+  void _strokeStart(Offset point, double scale) {
+    if (_busy || _preview != null) return;
+    _stroked.clear();
+    final hit = _hitCandidate(point, scale);
+    _strokeSelects = hit == null ? true : !_selected.contains(hit);
+    if (hit != null) _strokeOver(hit);
+    unawaited(HapticFeedback.mediumImpact());
+  }
+
+  void _strokeMove(Offset point, double scale) {
+    final hit = _hitCandidate(point, scale);
+    if (hit != null) _strokeOver(hit);
+  }
+
+  void _strokeOver(RegionCandidate candidate) {
+    final selects = _strokeSelects;
+    if (selects == null || !_stroked.add(candidate)) return;
+    if (_selected.contains(candidate) == selects) return;
+    setState(() {
+      if (_stroked.length == 1) _history.add(Set.of(_selected));
+      final next = Set.of(_selected);
+      if (selects) {
+        next.add(candidate);
+      } else {
+        next.remove(candidate);
+      }
+      _selected = next;
+    });
+    unawaited(HapticFeedback.selectionClick());
+  }
+
+  void _strokeEnd() {
+    _strokeSelects = null;
+    _stroked.clear();
+    _schedulePatches();
+  }
+
+  void _schedulePatches() {
+    _patchTimer?.cancel();
+    _patchTimer = Timer(const Duration(milliseconds: 120), _refreshPatches);
+  }
+
+  /// Keep one frosted texture per selected region, computed off the UI thread.
+  Future<void> _refreshPatches() async {
+    if (!mounted) return;
+    final wanted = {for (final c in _selected) c.region};
+    final stale = _patches.keys.where((r) => !wanted.contains(r)).toList();
+    if (stale.isNotEmpty) {
+      setState(() {
+        for (final region in stale) {
+          _patches.remove(region)?.dispose();
+        }
+      });
+    }
+    for (final region in wanted) {
+      if (_patches.containsKey(region) || !_pendingPatches.add(region)) {
+        continue;
+      }
+      unawaited(
+        _previewer.patch(region).then((patch) {
+          _pendingPatches.remove(region);
+          if (patch == null) return;
+          if (!mounted || !_selected.any((c) => c.region == region)) {
+            patch.dispose();
+            return;
+          }
+          setState(() => _patches[region] = patch);
+        }),
+      );
+    }
   }
 
   Future<void> _retake() async {
@@ -373,9 +521,11 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                     opacity: .22,
                     child: ImageFiltered(
                       imageFilter: ui.ImageFilter.blur(sigmaX: 44, sigmaY: 44),
+                      // Heavily blurred: a small decode is indistinguishable.
                       child: Image.memory(
                         source.bytes,
                         fit: BoxFit.cover,
+                        cacheWidth: 512,
                         excludeFromSemantics: true,
                       ),
                     ),
@@ -398,7 +548,12 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                       ),
                     )
                   else
-                    _editor(source),
+                    InteractiveViewer(
+                      transformationController: _photoTransform,
+                      minScale: 1,
+                      maxScale: 8,
+                      child: _editor(source),
+                    ),
                   Positioned(
                     top: 16,
                     left: 16,
@@ -542,15 +697,13 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         ? '上のステータスをタップして再試行'
         : _truncated
         ? '一部の候補を表示しています'
-        : _facesOnly && _selected.any((c) => c.kind != CandidateKind.face)
-        ? '顔の候補のみ表示 · 適用済みの黒塗りは保持'
         : _scanning
         ? '写真の中から、隠せる場所を探しています'
         : _visibleCandidates.isEmpty
         ? '別の写真で試してください'
         : _selected.isEmpty
-        ? '枠をタップして隠す'
-        : 'もう一度タップで解除';
+        ? '枠をタップ · 長押しでなぞって選択 · ピンチで拡大'
+        : 'もう一度タップで解除 · 下のボタンで種類ごとに切替';
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       child: Text(
@@ -566,34 +719,83 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     );
   }
 
-  Widget _filter(String label, bool facesOnly) => Expanded(
-    child: Semantics(
-      selected: _facesOnly == facesOnly,
-      child: InkWell(
-        onTap: _busy ? null : () => setState(() => _facesOnly = facesOnly),
-        borderRadius: BorderRadius.circular(24),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          constraints: const BoxConstraints(minHeight: 48),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            color: _facesOnly == facesOnly
-                ? Colors.white.withValues(alpha: .15)
-                : Colors.transparent,
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: _facesOnly == facesOnly ? Colors.white : Colors.white54,
+  /// One tap hides every frame of a kind (or all of them); tap again to show.
+  Widget _kindChips() {
+    final counts = <CandidateKind?, (int, int)>{};
+    final visible = _visibleCandidates;
+    counts[null] = (visible.length, visible.where(_selected.contains).length);
+    for (final kind in CandidateKind.values) {
+      final frames = visible.where((c) => c.kind == kind);
+      if (frames.isNotEmpty) {
+        counts[kind] = (frames.length, frames.where(_selected.contains).length);
+      }
+    }
+    if (visible.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        child: Text(
+          '候補なし',
+          style: TextStyle(color: Colors.white54, fontSize: 13),
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          for (final entry in counts.entries)
+            if (entry.key != null || counts.length > 2)
+              _kindChip(entry.key, entry.value.$1, entry.value.$2),
+        ],
+      ),
+    );
+  }
+
+  Widget _kindChip(CandidateKind? kind, int total, int hidden) {
+    final all = hidden == total;
+    final label = kind == null ? 'すべて' : kind.label;
+    return Padding(
+      key: ValueKey('kind-chip-${kind?.name ?? 'all'}'),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Semantics(
+        button: true,
+        toggled: all,
+        label: '$labelを${all ? '表示' : '隠す'}',
+        child: InkWell(
+          onTap: _busy ? null : () => _toggleKind(kind),
+          borderRadius: BorderRadius.circular(24),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: all
+                  ? glassMint.withValues(alpha: .9)
+                  : hidden > 0
+                  ? glassMint.withValues(alpha: .18)
+                  : Colors.white.withValues(alpha: .08),
+              border: Border.all(
+                color: all
+                    ? Colors.transparent
+                    : Colors.white.withValues(alpha: .18),
+              ),
+            ),
+            child: Text(
+              hidden > 0 && !all ? '$label $hidden/$total' : '$label $total',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: all ? const Color(0xFF142A25) : Colors.white,
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _dock() => PhotoGlass(
     child: Padding(
@@ -644,8 +846,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             )
           : Row(
               children: [
-                _filter('すべて', false),
-                _filter('顔だけ', true),
+                Expanded(child: _kindChips()),
                 const SizedBox(width: 4),
                 Container(width: 1, height: 20, color: Colors.white12),
                 const SizedBox(width: 4),
@@ -675,7 +876,8 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     }
   }
 
-  void _tapCandidate(Offset point, double scale) {
+  /// Frames under [point], nearest and smallest first. Shapes count, not boxes.
+  List<RegionCandidate> _hits(Offset point, double scale) {
     final tolerance = 8 / scale;
     final hits = _visibleCandidates
         .where((c) => c.region.toRect().inflate(tolerance).contains(point))
@@ -691,6 +893,26 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     }
 
     hits.sort((a, b) {
+      final aContains = a.region.contains(point);
+      final bContains = b.region.contains(point);
+      if (aContains != bContains) return aContains ? -1 : 1;
+      if (!aContains) {
+        double distance(RegionCandidate c) {
+          final r = c.region.toRect();
+          final dx = math.max(
+            0.0,
+            math.max(r.left - point.dx, point.dx - r.right),
+          );
+          final dy = math.max(
+            0.0,
+            math.max(r.top - point.dy, point.dy - r.bottom),
+          );
+          return dx * dx + dy * dy;
+        }
+
+        final order = distance(a).compareTo(distance(b));
+        if (order != 0) return order;
+      }
       final aEdge = edgeDistance(a) <= tolerance;
       final bEdge = edgeDistance(b) <= tolerance;
       if (aEdge != bEdge) return aEdge ? -1 : 1;
@@ -698,6 +920,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         b.region.width * b.region.height,
       );
     });
+    return hits;
+  }
+
+  RegionCandidate? _hitCandidate(Offset point, double scale) {
+    final hits = _hits(point, scale);
+    return hits.isEmpty ? null : hits.first;
+  }
+
+  void _tapCandidate(Offset point, double scale) {
+    final hits = _hits(point, scale);
     if (hits.isEmpty) return;
     final coincident = hits
         .where((c) => c.region == hits.first.region)
@@ -757,6 +989,8 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         Size(source.width * scale, source.height * scale),
         Rect.fromLTWH(12, 84, available.width, available.height),
       );
+      Offset toImage(Offset local) => (local - rect.topLeft) / scale;
+      double tapScale() => scale * _photoTransform.value.getMaxScaleOnAxis();
       return GestureDetector(
         key: const ValueKey('photo-canvas'),
         behavior: HitTestBehavior.opaque,
@@ -764,21 +998,34 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             ? null
             : (event) {
                 if (rect.contains(event.localPosition)) {
-                  _tapCandidate(
-                    (event.localPosition - rect.topLeft) / scale,
-                    scale,
-                  );
+                  _tapCandidate(toImage(event.localPosition), tapScale());
                 }
               },
+        onLongPressStart: _busy
+            ? null
+            : (event) => _strokeStart(toImage(event.localPosition), tapScale()),
+        onLongPressMoveUpdate: _busy
+            ? null
+            : (event) => _strokeMove(toImage(event.localPosition), tapScale()),
+        onLongPressEnd: _busy ? null : (_) => _strokeEnd(),
+        onLongPressCancel: _busy ? null : _strokeEnd,
         child: Stack(
           fit: StackFit.expand,
           children: [
             Positioned.fromRect(
               rect: rect,
               child: RepaintBoundary(
+                // Decode at most 4096px on the long side: enough for 8x zoom
+                // on a phone, and a 20MP photo no longer needs an 83MB texture.
                 child: Image.memory(
                   source.bytes,
                   fit: BoxFit.fill,
+                  cacheWidth: source.width >= source.height
+                      ? math.min(source.width, displayDecodeSide)
+                      : null,
+                  cacheHeight: source.width < source.height
+                      ? math.min(source.height, displayDecodeSide)
+                      : null,
                   semanticLabel: '撮影した写真',
                 ),
               ),
@@ -789,6 +1036,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                 child: CustomPaint(
                   painter: SelectionPainter(
                     regions: List.unmodifiable(_redactions),
+                    patches: Map.unmodifiable(_patches),
                     imageWidth: source.width,
                     imageHeight: source.height,
                   ),
@@ -820,13 +1068,17 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   );
 }
 
+/// Selected areas: the frosted texture once it is ready, a translucent
+/// glass tint until then. No per-frame filtering, so zooming stays cheap.
 class SelectionPainter extends CustomPainter {
   SelectionPainter({
     required this.regions,
     required this.imageWidth,
     required this.imageHeight,
+    this.patches = const {},
   });
   final List<HideRegion> regions;
+  final Map<HideRegion, FrostedPatch> patches;
   final int imageWidth;
   final int imageHeight;
 
@@ -835,9 +1087,25 @@ class SelectionPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
     canvas.scale(size.width / imageWidth, size.height / imageHeight);
-    final paint = Paint()..color = Colors.black;
+    final placeholder = Paint()..color = Colors.white.withValues(alpha: .42);
+    final image = Paint()..filterQuality = FilterQuality.low;
     for (final region in regions) {
-      canvas.drawRect(region.toRect(), paint);
+      final patch = patches[region];
+      if (patch == null) {
+        canvas.drawPath(region.toPath(), placeholder);
+      } else {
+        canvas.drawImageRect(
+          patch.image,
+          Rect.fromLTWH(
+            0,
+            0,
+            patch.image.width.toDouble(),
+            patch.image.height.toDouble(),
+          ),
+          patch.bounds,
+          image,
+        );
+      }
     }
     canvas.restore();
   }
@@ -846,5 +1114,6 @@ class SelectionPainter extends CustomPainter {
   bool shouldRepaint(covariant SelectionPainter oldDelegate) =>
       oldDelegate.imageWidth != imageWidth ||
       oldDelegate.imageHeight != imageHeight ||
-      oldDelegate.regions != regions;
+      oldDelegate.regions != regions ||
+      oldDelegate.patches != patches;
 }

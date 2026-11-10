@@ -1,5 +1,6 @@
 import 'package:camereon/core/detection/android_object_region_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
+import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,6 +36,10 @@ void main() {
               'kind': 'screen',
               'box': [60, 10, 90, 40],
             },
+            {
+              'kind': 'vehicle',
+              'box': [0, 40, 50, 50],
+            },
           ],
         },
       );
@@ -43,6 +48,7 @@ void main() {
       expect(result.candidates.map((c) => c.kind), [
         CandidateKind.person,
         CandidateKind.screen,
+        CandidateKind.vehicle,
       ]);
       final region = result.candidates.first.region;
       expect(
@@ -102,6 +108,86 @@ void main() {
         },
       );
       expect((await detector.detect(photo)).candidates, isEmpty);
+    },
+  );
+
+  test(
+    'a silhouette mask is traced into a polygon inside its rectangle',
+    () async {
+      // 8x8 crop: a filled disc; cells outside the disc stay 0.
+      final mask = Uint8List(64);
+      for (var y = 0; y < 8; y++) {
+        for (var x = 0; x < 8; x++) {
+          final dx = x - 3.5, dy = y - 3.5;
+          if (dx * dx + dy * dy <= 10) mask[y * 8 + x] = 255;
+        }
+      }
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          'width': 100,
+          'height': 50,
+          'truncated': false,
+          'candidates': [
+            {
+              'kind': 'person',
+              'box': [10, 10, 40, 40],
+              'mask': {
+                'width': 8,
+                'height': 8,
+                'bytes': mask,
+                'left': 10,
+                'top': 10,
+                'right': 42,
+                'bottom': 42,
+              },
+            },
+            {
+              'kind': 'vehicle',
+              'box': [50, 10, 90, 40],
+              'mask': {
+                'width': 4,
+                'height': 4,
+                'bytes': Uint8List(16),
+                'left': 50,
+                'top': 10,
+                'right': 90,
+                'bottom': 40,
+              },
+            },
+          ],
+        },
+      );
+      final result = await AndroidObjectRegionDetector(channel: channel)
+          .detect(photo);
+      final person = result.candidates.first.region;
+      expect(person.shape, HideShape.polygon);
+      // The disc fills the crop's centre and stays within the mask rectangle.
+      expect(person.contains(const Offset(52, 52)), isTrue);
+      expect(person.contains(const Offset(22, 22)), isFalse);
+      expect(person.left, greaterThanOrEqualTo(20));
+      expect(person.right, lessThanOrEqualTo(84));
+      // An empty mask falls back to the rectangle.
+      expect(result.candidates.last.region.shape, HideShape.rectangle);
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          'width': 100,
+          'height': 50,
+          'truncated': false,
+          'candidates': [
+            {
+              'kind': 'person',
+              'box': [10, 10, 40, 40],
+              'mask': {'width': 8, 'height': 8, 'bytes': Uint8List(10)},
+            },
+          ],
+        },
+      );
+      await expectLater(
+        AndroidObjectRegionDetector(channel: channel).detect(photo),
+        throwsA(isA<RegionDetectionException>()),
+      );
     },
   );
 }

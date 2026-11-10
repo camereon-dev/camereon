@@ -1,6 +1,6 @@
 # Android検出器プレビュー
 
-撮影した写真・システムの写真選択で開いた画像から、顔・人物・画面・文字を自動検出し、写真上の枠タップで黒塗りを選択・解除できる。YOLO26sとPP-OCRv5をAPKに同梱し、初回の追加モデル取得は不要。
+撮影した写真・システムの写真選択で開いた画像から、顔・人物・画面・車両・文字を自動検出し、写真上の枠タップで隠す・戻すを切り替えられる。YOLO26s-seg（輪郭付き）とPP-OCRv5をAPKに同梱し、初回の追加モデル取得は不要。
 
 通常の編集フローからGemmaの説明・取得画面を外した。過去のGemma検証用コード・依存は残している。今回のAPKは検出結果を範囲候補として使い、投稿可否を判定しない。
 
@@ -52,8 +52,8 @@ VS Codeでは `camereon detector (debug)` を選んで起動できる。既に�
 
 - 共通型: `CandidateKind.person / screen / text`、`RegionCandidate`、`HideRegion`。
 - Flutterから長辺1600px以下の正規化済みPNGを渡し、Androidのバックグラウンドスレッドで推論する。UIスレッドでモデルを実行しない。
-- 640pxと1280pxでアスペクト比を保つletterbox（RGB、114埋め、stride32）を使う。動的形状ONNX、出力 `[1,300,6]`、xyxy・confidence・class ID。confidence 0.25、対象クラス0/62/63/67、2解像度間の同じクラスの重複をIoU 0.7で除く。
-- モデルロード・SHA-256検証・2回の推論後にsession/tensor/bitmapを解放。最大200候補。SDKの型や文字列はFlutterへ返さない。
+- 640pxと1280pxでアスペクト比を保つletterbox（RGB、114埋め、stride32）を使う。動的形状ONNX、出力 `[1,300,38]`（xyxy・confidence・class ID・マスク係数32）と `[1,32,H/4,W/4]`（マスクのプロトタイプ）。採用した各候補について `sigmoid(係数·プロトタイプ)` を枠の範囲だけ計算し、8ビットの切り抜きとして転送画像座標の矩形とともにFlutterへ返す。Flutter側は marching squares で多角形に変換し（`lib/core/photo/mask_outline.dart`）、面積5%未満のマスクは矩形へ戻す。confidence 0.25、対象クラス0（person）/2・3・5・7（car・motorcycle・bus・truck → 車両）/62・63・67（tv・laptop・cell phone → 画面）、2解像度間の同じクラスの重複をIoU 0.7で除く。車両は長辺が転送画像の6%未満なら除く。
+- モデルはSHA-256検証後にプロセス内で1つのsessionを再利用し（`OnnxSessions`）、各推論後にアリーナを縮小してピーク作業メモリを保持しない。tensor/bitmapは毎回解放し、メモリ不足の通知（`onTrimMemory`）でsessionも閉じる。最大200候補。SDKの型や文字列はFlutterへ返さない。
 - 元写真の座標へ戻し、範囲を外側へ丸めて既存の候補UI・JPEG生成・MediaStore保存へ渡す。再試行でも他の種類の候補・選択履歴を保持する。
 - 新しい物体検出にネットワークコードはない。通常の検出・編集にGemmaのモデルは不要。
 
@@ -62,9 +62,11 @@ VS Codeでは `camereon detector (debug)` を選んで起動できる。既に�
 元重みから変換し直す場合:
 
 ```sh
-uv pip install --python /private/tmp/camereon-detector-venv/bin/python -r tools/detector-eval/requirements-export.txt
-/private/tmp/camereon-detector-venv/bin/python tools/detector-eval/export_android.py .private/detector-eval/models/yolo26s.pt
+uv pip install --python /private/tmp/camereon-export-venv/bin/python -r tools/detector-eval/requirements-export.txt
+/private/tmp/camereon-export-venv/bin/python tools/detector-eval/export_android.py .private/detector-eval/models/yolo26s-seg.pt --variant seg
 ```
+
+2026-11-03に検出専用の `yolo26s.onnx`（38,106,089 bytes）から分割モデル `yolo26s-seg.onnx` へ置き換えた。ホストの同一条件では1回の推論が640pxで93→147ms、1280pxで384→588ms（約1.5倍）。
 
 変換スクリプトは元重みのハッシュと変換器バージョンを検査し、出力の動的入力・shapeを実行確認する。ONNXメタデータの日時などで変換後のハッシュは変わるため、生成物とmanifestを一緒に更新する。
 

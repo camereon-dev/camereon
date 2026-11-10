@@ -23,8 +23,8 @@ PR には変更内容、確認方法、未確認の環境を記載する。別�
 | 型 | 内容 |
 | --- | --- |
 | `SourcePhoto` | 編集の元画像。向きを正規化しメタデータを除いたバイト列と画素サイズ |
-| `HideRegion` | 黒塗りする範囲。`SourcePhoto` の画素座標の整数の長方形（外側へ丸める） |
-| `RedactedJpeg` | 黒塗りを焼き込んだ保存用 JPEG |
+| `HideRegion` | 隠す範囲。`SourcePhoto` の画素座標の整数の外接矩形（外側へ丸める）と、形（長方形・楕円・多角形の頂点） |
+| `RedactedJpeg` | 隠す塗りを焼き込んだ保存用 JPEG |
 | `PhotoProcessor` | `normalize`（撮影画像 → `SourcePhoto`）と `redact`（→ `RedactedJpeg`） |
 | `PhotoSaver` | `RedactedJpeg` をギャラリーに保存し、`SaveResult` を返す |
 

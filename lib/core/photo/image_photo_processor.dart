@@ -14,7 +14,7 @@ import 'src/photo_processing_worker.dart';
 /// 選択変更前の古い結果は呼び出し側で破棄する。
 final class ImagePhotoProcessor implements PhotoProcessor {
   ImagePhotoProcessor({
-    this.maxPixels = 24000000,
+    this.maxPixels = 25000000,
     this.maxInputBytes = 128 * 1024 * 1024,
   }) {
     if (maxPixels <= 0 || maxInputBytes <= 0) {
@@ -42,17 +42,9 @@ final class ImagePhotoProcessor implements PhotoProcessor {
     List<HideRegion> regions,
   ) async {
     final bytes = _snapshot(photo.bytes);
-    final rectangles = [
-      for (final r in regions)
-        (left: r.left, top: r.top, right: r.right, bottom: r.bottom),
-    ];
-    final result = await _redact(
-      bytes,
-      photo.width,
-      photo.height,
-      rectangles,
-      maxPixels,
-    );
+    final result = await _redact(bytes, photo.width, photo.height, [
+      for (final r in regions) pixelShape(r),
+    ], maxPixels);
     return RedactedJpeg(
       bytes: result.bytes.asUnmodifiableView(),
       width: result.width,
@@ -70,6 +62,22 @@ final class ImagePhotoProcessor implements PhotoProcessor {
   }
 }
 
+/// isolate へ送れる形に変換する。座標は [HideRegion] と同じ画像座標。
+PixelShape pixelShape(HideRegion r) => (
+  left: r.left,
+  top: r.top,
+  right: r.right,
+  bottom: r.bottom,
+  shape: switch (r.shape) {
+    HideShape.rectangle => 0,
+    HideShape.ellipse => 1,
+    HideShape.polygon => 2,
+  },
+  points: Float64List.fromList([
+    for (final p in r.points) ...[p.dx, p.dy],
+  ]),
+);
+
 // 小さい送信可能な引数だけを捕捉し、processor や UI の状態を送らない。
 Future<ProcessedPixels> _normalize(Uint8List bytes, int maxPixels) =>
     _run(() => normalizePixels(bytes, maxPixels));
@@ -78,7 +86,7 @@ Future<ProcessedPixels> _redact(
   Uint8List bytes,
   int width,
   int height,
-  List<PixelRegion> regions,
+  List<PixelShape> regions,
   int maxPixels,
 ) => _run(() => redactPixels(bytes, width, height, regions, maxPixels));
 

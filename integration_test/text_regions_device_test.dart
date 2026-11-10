@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -7,6 +8,7 @@ import 'package:camera/camera.dart';
 import 'package:camereon/core/detection/android_text_region_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/android_photo_saver.dart';
+import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
@@ -25,10 +27,12 @@ typedef Fixture = ({String name, SourcePhoto photo, List<Rect> expected});
 
 class RecordingSaver implements PhotoSaver {
   RedactedJpeg? jpeg;
+  final completed = Completer<SaveResult>();
   @override
   Future<SaveResult> save(RedactedJpeg photo) async {
     final result = await AndroidPhotoSaver().save(photo);
     if (result is SaveSucceeded) jpeg = photo;
+    completed.complete(result);
     return result;
   }
 }
@@ -144,7 +148,7 @@ void main() {
     (tester) async {
       final corpus = await fixtures();
       for (final (name, detector) in <(String, RegionDetector)>[
-        ('paddle_detector', AndroidTextRegionDetector()),
+        ('paddle_detector', AndroidTextRegionDetector(detailed: false)),
         ('edge_density', EdgeDensityDetector()),
       ]) {
         final cases = <Map<String, Object>>[];
@@ -238,6 +242,29 @@ void main() {
       for (final candidate in texts) {
         await tapCandidate(tester, candidate);
       }
+      final image = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+      final center = texts.first.region.toRect().center;
+      final focal =
+          image.topLeft +
+          Offset(center.dx / 640 * image.width, center.dy / 640 * image.height);
+      final first = await tester.startGesture(
+        focal - const Offset(20, 0),
+        pointer: 1,
+      );
+      final second = await tester.startGesture(
+        focal + const Offset(20, 0),
+        pointer: 2,
+      );
+      await first.moveTo(focal - const Offset(60, 0));
+      await second.moveTo(focal + const Offset(60, 0));
+      await tester.pump();
+      await first.up();
+      await second.up();
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.bySemanticsLabel('撮影した写真')).width,
+        greaterThan(image.width),
+      );
       await tapCandidate(tester, texts.first);
       expect(
         tester
@@ -249,14 +276,40 @@ void main() {
       for (final label in ['保存前に確認', '写真に保存']) {
         await editorAction(tester, label);
       }
+      expect(
+        await saver.completed.future.timeout(const Duration(seconds: 15)),
+        isA<SaveSucceeded>(),
+      );
+      await tester.pumpAndSettle();
       expect(find.text('写真を保存しました'), findsOneWidget);
       final jpeg = saver.jpeg!;
       expect((jpeg.width, jpeg.height), (640, 640));
       final decoded = img.decodeJpg(jpeg.bytes)!;
       expect(decoded.getPixel(78, 205).luminance, greaterThan(240));
-      for (final (x, y) in [(150, 282), (250, 343), (190, 403)]) {
-        expect(decoded.getPixel(x, y).luminance, lessThan(4));
+      // The dark glyphs of each hidden line are gone; the frosted fill takes
+      // the label's white. The first (unselected) line keeps its glyphs.
+      final original = img.decodePng(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      )!;
+      int dark(img.Image image, HideRegion r) {
+        var count = 0;
+        for (var y = r.top; y < r.bottom; y++) {
+          for (var x = r.left; x < r.right; x++) {
+            if (image.getPixel(x, y).luminance < 110) count++;
+          }
+        }
+        return count;
       }
+
+      for (final candidate in texts.skip(1)) {
+        final before = dark(original, candidate.region);
+        expect(before, greaterThan(20));
+        expect(dark(decoded, candidate.region), lessThan(before ~/ 10 + 1));
+      }
+      expect(
+        dark(decoded, texts.first.region),
+        greaterThan(dark(original, texts.first.region) ~/ 2),
+      );
       expect(decoded.exif.isEmpty, isTrue);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();

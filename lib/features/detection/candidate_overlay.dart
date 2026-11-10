@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
@@ -8,6 +6,8 @@ import '../../core/photo/hide_region.dart';
 import '../camera/glass_photo_chrome.dart';
 
 /// Frames are the controls. Selection is keyed by candidate, never geometry.
+/// Each frame follows the candidate's shape (oval, outline, box) and is drawn
+/// with plain strokes only, so hundreds of frames stay cheap while zooming.
 class CandidateOverlay extends StatelessWidget {
   const CandidateOverlay({
     super.key,
@@ -74,59 +74,35 @@ class CandidatePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
+    final toCanvas = Matrix4.diagonal3Values(
+      size.width / imageWidth,
+      size.height / imageHeight,
+      1,
+    ).storage;
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: .35 * reveal)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    final idleFill = Paint()
+      ..color = Colors.white.withValues(alpha: .07 * reveal);
+    final idleEdge = Paint()
+      ..color = Colors.white.withValues(alpha: .7 * reveal)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1;
+    final appliedFill = Paint()
+      ..color = glassMint.withValues(alpha: .12 * reveal);
+    final appliedEdge = Paint()
+      ..color = glassMint.withValues(alpha: .95 * reveal)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
     for (final candidate in candidates) {
       final applied = selected.contains(candidate);
-      final rect = _rect(candidate, size).inflate((1 - reveal) * 6);
-      final radius = math.min(8.0, rect.shortestSide / 5);
-      final color = applied ? glassMint : Colors.white;
-      final frame = RRect.fromRectAndRadius(rect, Radius.circular(radius));
-      canvas.drawRRect(
-        frame,
-        Paint()
-          ..color = Colors.black.withValues(alpha: .4 * reveal)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-      );
-      if (!applied) {
-        canvas.drawRRect(
-          frame,
-          Paint()..color = glassMint.withValues(alpha: .045 * reveal),
-        );
-      }
-      canvas.drawRRect(
-        frame,
-        Paint()
-          ..color = color.withValues(alpha: (applied ? .85 : .5) * reveal)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = applied ? 1.6 : 1,
-      );
-      final edge = Paint()
-        ..color = color.withValues(alpha: reveal)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..strokeCap = StrokeCap.round;
-      final length = math.min(14.0, rect.shortestSide / 3);
-      for (final (corner, dx, dy) in [
-        (rect.topLeft, 1.0, 1.0),
-        (rect.topRight, -1.0, 1.0),
-        (rect.bottomLeft, 1.0, -1.0),
-        (rect.bottomRight, -1.0, -1.0),
-      ]) {
-        canvas.drawPath(
-          Path()
-            ..moveTo(corner.dx, corner.dy + dy * length)
-            ..lineTo(corner.dx, corner.dy + dy * radius)
-            ..quadraticBezierTo(
-              corner.dx,
-              corner.dy,
-              corner.dx + dx * radius,
-              corner.dy,
-            )
-            ..lineTo(corner.dx + dx * length, corner.dy),
-          edge,
-        );
-      }
+      // Shapes are stored in image pixels; scale them into the canvas.
+      final path = candidate.region.toPath().transform(toCanvas);
+      canvas.drawPath(path, shadow);
+      canvas.drawPath(path, applied ? appliedFill : idleFill);
+      canvas.drawPath(path, applied ? appliedEdge : idleEdge);
+      final rect = _rect(candidate, size);
       if (applied && rect.width >= 28 && rect.height >= 28) {
         final center = rect.topRight + const Offset(-12, 12);
         canvas.drawCircle(

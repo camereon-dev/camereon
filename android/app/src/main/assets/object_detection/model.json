@@ -1,10 +1,10 @@
 {
-  "model": "YOLO26s",
-  "source": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s.pt",
-  "source_sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
-  "file": "yolo26s.onnx",
-  "bytes": 38106089,
-  "sha256": "37d160a608d6220748a8cf17312c9d96090e037e3e4bffc0f36a7bfa89d15a98",
+  "model": "YOLO26s-seg",
+  "source": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s-seg.pt",
+  "source_sha256": "3da1d83e31caec96f9300eb4064f4f62882c133c7c264d63dfe61a7c197837a4",
+  "file": "yolo26s-seg.onnx",
+  "bytes": 41726473,
+  "sha256": "230d5fca7f0333668e55d17e0c0dc8eb60f129789e33bce4888c8e6a94983664",
   "export": {
     "ultralytics": "8.4.89",
     "onnx": "1.23.2",
@@ -15,15 +15,21 @@
     "quantize": null
   },
   "input": "RGB float32 / 255; letterbox 114, stride32; long sides 640 and 1280",
-  "output": "[1,300,6] xyxy, confidence, COCO class id",
+  "output": "[1,300,38] xyxy, confidence, COCO class id, 32 mask coefficients; [1,32,H/4,W/4] mask prototypes",
   "classes": {
     "0": "person",
+    "2": "vehicle",
+    "3": "vehicle",
+    "5": "vehicle",
+    "7": "vehicle",
     "62": "screen",
     "63": "screen",
     "67": "screen"
   },
+  "vehicle_minimum_side": "6% of the transferred image's longest side",
   "confidence": 0.25,
   "merge_iou": 0.7,
   "license": "AGPL-3.0",
-  "runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.24.3"
+  "runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.24.3",
+  "masks": "sigmoid(coefficients . prototypes) cropped to each kept box, threshold 0.5; sent to Flutter as an 8-bit crop and traced into a polygon"
 }

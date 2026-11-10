@@ -12,7 +12,7 @@ import 'photo_processor.dart';
 /// export still uses the isolated, metadata-free redaction worker.
 final class FlutterPhotoProcessor implements PhotoProcessor {
   FlutterPhotoProcessor({
-    this.maxPixels = 24000000,
+    this.maxPixels = 25000000,
     this.maxInputBytes = 128 * 1024 * 1024,
   }) : _exporter = ImagePhotoProcessor(
          maxPixels: maxPixels,

@@ -7,6 +7,7 @@ import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_processor.dart';
+import 'package:camereon/core/photo/frosted_preview.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
@@ -93,6 +94,7 @@ class FakeDetector implements RegionDetector {
   int calls = 0;
   bool fail = false;
   bool truncated = false;
+  bool partial = false;
   Completer<RegionDetection>? pending;
   final List<RegionCandidate> candidates = [];
   @override
@@ -100,7 +102,11 @@ class FakeDetector implements RegionDetector {
     calls++;
     if (fail) throw const RegionDetectionException();
     return pending == null
-        ? RegionDetection(candidates: candidates, truncated: truncated)
+        ? RegionDetection(
+            candidates: candidates,
+            truncated: truncated,
+            partial: partial,
+          )
         : pending!.future;
   }
 }
@@ -129,6 +135,7 @@ Future<void> open(
         detector: texts ?? NoRegions(),
         objectDetector: objects ?? NoRegions(),
         faceDetector: faces ?? NoFaces(),
+        previewer: const FrostedPreviewer.none(),
       ),
     ),
   );

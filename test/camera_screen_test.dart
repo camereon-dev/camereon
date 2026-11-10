@@ -25,6 +25,9 @@ class FakeCameraPlatform extends CameraPlatform {
   final List<CameraDescription> cameras;
   final CameraException? error;
   final opened = <String>[];
+  final captureOrientations = <DeviceOrientation>[];
+  final orientationChanges =
+      StreamController<DeviceOrientationChangedEvent>.broadcast();
   int pictures = 0;
   final disposed = <int>[];
   int _nextId = 0;
@@ -68,13 +71,15 @@ class FakeCameraPlatform extends CameraPlatform {
 
   @override
   Stream<DeviceOrientationChangedEvent> onDeviceOrientationChanged() =>
-      const Stream.empty();
+      orientationChanges.stream;
 
   @override
   Future<void> lockCaptureOrientation(
     int cameraId,
     DeviceOrientation orientation,
-  ) async {}
+  ) async {
+    captureOrientations.add(orientation);
+  }
 
   @override
   Widget buildPreview(int cameraId) =>
@@ -129,13 +134,71 @@ void main() {
 
   testWidgets('起動するとすぐに背面カメラのプレビューを表示する', (tester) async {
     useCamera(FakeCameraPlatform());
+    addTearDown(camera.orientationChanges.close);
 
     await tester.pumpWidget(const CamereonApp());
     await tester.pumpAndSettle();
 
     expect(camera.opened, ['back']);
+    expect(camera.captureOrientations, isEmpty);
     expect(find.byKey(const ValueKey('preview-0')), findsOneWidget);
     expect(find.bySemanticsLabel('撮影する'), findsOneWidget);
+  });
+
+  Future<void> holdPhone(WidgetTester tester, int degrees) async {
+    const codec = StandardMethodCodec();
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      'dev.camereon/device_rotation',
+      codec.encodeMethodCall(
+        MethodCall('changed', {'capture': degrees, 'ui': degrees}),
+      ),
+      (_) {},
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('センサーの向きでアイコンを回し、その向きで撮影する', (tester) async {
+    useCamera(FakeCameraPlatform());
+    addTearDown(camera.orientationChanges.close);
+
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    // The plugin's display-based orientation stays portrait on a locked screen.
+    camera.orientationChanges.add(
+      const DeviceOrientationChangedEvent(DeviceOrientation.portraitUp),
+    );
+    await holdPhone(tester, 90);
+    double turns() => tester
+        .widget<AnimatedRotation>(
+          find.byKey(const ValueKey('camera-switch-icon')),
+        )
+        .turns;
+    expect(turns(), .25);
+    await holdPhone(tester, 270);
+    expect(turns(), -.25);
+
+    await tester.tap(find.bySemanticsLabel('撮影する'));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(camera.captureOrientations, [DeviceOrientation.landscapeRight]);
+    expect(camera.pictures, 1);
+  });
+
+  testWidgets('向きが届かない端末（iOS）では撮影向きを固定しない', (tester) async {
+    useCamera(FakeCameraPlatform());
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('撮影する'));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(camera.pictures, 1);
+    expect(camera.captureOrientations, isEmpty);
   });
 
   testWidgets('撮影すると写真の確認画面へ進み、撮り直しでカメラへ戻る', (tester) async {
@@ -210,6 +273,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('カメラが見つかりません'), findsOneWidget);
+  });
+
+  testWidgets('iOSの再表示できない権限拒否は設定への案内を表示する', (tester) async {
+    useCamera(
+      FakeCameraPlatform(
+        error: CameraException('CameraAccessDeniedWithoutPrompt', 'denied'),
+      ),
+    );
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    expect(find.text('カメラの使用が許可されていません'), findsOneWidget);
+    expect(find.text('設定を開く'), findsOneWidget);
+    expect(find.text('許可する'), findsNothing);
+    var openedSettings = false;
+    const settings = MethodChannel('dev.camereon/app_settings');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(settings, (call) async {
+          openedSettings = call.method == 'open';
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(settings, null),
+    );
+    await tester.tap(find.text('設定を開く'));
+    await tester.pumpAndSettle();
+    expect(openedSettings, isTrue);
+  });
+
+  testWidgets('iOSの利用制限を通常の権限拒否と区別する', (tester) async {
+    useCamera(
+      FakeCameraPlatform(
+        error: CameraException('CameraAccessRestricted', 'restricted'),
+      ),
+    );
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    expect(find.text('カメラの利用が制限されています'), findsOneWidget);
+    expect(find.text('許可する'), findsNothing);
+    expect(find.byKey(const ValueKey('pick-photo')), findsOneWidget);
   });
 
   for (final denied in [false, true]) {

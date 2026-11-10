@@ -87,11 +87,23 @@ void main() {
       ]);
       final redacted = img.decodeJpg(jpeg.bytes)!;
       expect((redacted.width, redacted.height), (width, height));
-      expect(redacted.getPixel(8, 8).luminance, lessThanOrEqualTo(2));
+      // The hidden block becomes a blend of its neighbours: never black and
+      // clearly different from the same pixel in the unhidden export.
+      final plain = img.decodeJpg((await processor.redact(source, [])).bytes)!;
+      final hidden = redacted.getPixel(8, 8);
+      final was = plain.getPixel(8, 8);
+      expect(hidden.luminance, greaterThan(20));
       expect(
-        redacted.getPixel(width - 8, height - 8).luminance,
-        greaterThan(10),
+        (hidden.r - was.r).abs() +
+            (hidden.g - was.g).abs() +
+            (hidden.b - was.b).abs(),
+        greaterThan(40),
       );
+      final kept = redacted.getPixel(width - 8, height - 8);
+      final keptWas = plain.getPixel(width - 8, height - 8);
+      expect(kept.r, closeTo(keptWas.r, 3));
+      expect(kept.g, closeTo(keptWas.g, 3));
+      expect(kept.b, closeTo(keptWas.b, 3));
     });
   }
 
@@ -134,8 +146,9 @@ void main() {
       ]);
       expect((jpeg.width, jpeg.height), size);
       final decoded = img.decodeJpg(jpeg.bytes)!;
+      // Nothing is left outside the region, so the fill is neutral grey.
       for (final p in decoded) {
-        expect(p.luminance, lessThanOrEqualTo(2));
+        expect(p.luminance, closeTo(128, 4));
       }
     });
   }
@@ -177,7 +190,7 @@ void main() {
     final result = await pending;
     expect(
       img.decodeJpg(result.bytes)!.getPixel(24, 16).luminance,
-      lessThan(2),
+      closeTo(128, 4),
     );
     expect(() => result.bytes[0] = 0, throwsUnsupportedError);
     final reset = await processor.redact(source, []);

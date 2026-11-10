@@ -38,6 +38,8 @@ jobs:
           CAMEREON_AI_PREVIEW: '1'
         # 実機配布用なので arm64 のみ
         run: bash scripts/build-android-demo.sh --build-number="$GITHUB_RUN_NUMBER" --target-platform android-arm64
+      - name: Test text rectangle geometry
+        run: mise run text-geometry-test
       - name: Upload installable APK
         uses: actions/upload-artifact@v7
         with:

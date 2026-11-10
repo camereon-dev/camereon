@@ -6,8 +6,15 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_version.dart';
 import 'captured_photo_screen.dart';
+import 'device_rotation.dart';
 
-enum _CameraIssue { permissionDenied, noCamera, failed }
+enum _CameraIssue {
+  permissionDenied,
+  permissionSettingsRequired,
+  permissionRestricted,
+  noCamera,
+  failed,
+}
 
 const _appSettings = MethodChannel('dev.camereon/app_settings');
 const _photoPicker = MethodChannel('dev.camereon/photo_picker');
@@ -28,6 +35,7 @@ class _CameraScreenState extends State<CameraScreen>
   _CameraIssue? _issue;
   bool _isCapturing = false;
   bool _editingPhoto = false;
+  final _rotation = DeviceRotation();
 
   // カメラを開く・閉じるたびに進める。古い起動処理の結果を捨てるために使う。
   int _session = 0;
@@ -47,6 +55,7 @@ class _CameraScreenState extends State<CameraScreen>
     WidgetsBinding.instance.removeObserver(this);
     _session++;
     _disposeController(_controller);
+    _rotation.dispose();
     super.dispose();
   }
 
@@ -117,8 +126,6 @@ class _CameraScreenState extends State<CameraScreen>
         enableAudio: false,
       );
       await controller.initialize();
-      // 画面は縦向き固定。端末を傾けてもプレビューが回転しないようにする
-      await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
       if (session != _session) {
         await controller.dispose();
         return;
@@ -133,9 +140,15 @@ class _CameraScreenState extends State<CameraScreen>
       }
       if (session != _session) return;
       setState(() {
-        _issue = e is CameraException && e.code == 'CameraAccessDenied'
-            ? _CameraIssue.permissionDenied
-            : _CameraIssue.failed;
+        _issue = switch (e) {
+          CameraException(code: 'CameraAccessDenied') =>
+            _CameraIssue.permissionDenied,
+          CameraException(code: 'CameraAccessDeniedWithoutPrompt') =>
+            _CameraIssue.permissionSettingsRequired,
+          CameraException(code: 'CameraAccessRestricted') =>
+            _CameraIssue.permissionRestricted,
+          _ => _CameraIssue.failed,
+        };
       });
     }
   }
@@ -158,6 +171,16 @@ class _CameraScreenState extends State<CameraScreen>
 
     setState(() => _isCapturing = true);
     try {
+      // Android は画面が縦固定なので、カメラプラグインの向きは常に縦になる。
+      // 実際に持っている向きで撮るよう、撮影直前にセンサーの向きを指定する。
+      // 向きが届かない iOS はプラグインが実際の向きで撮るので固定しない。
+      if (_rotation.known) {
+        try {
+          await controller.lockCaptureOrientation(_rotation.captureOrientation);
+        } catch (e) {
+          debugPrint('camera: could not set capture orientation: $e');
+        }
+      }
       // カメラが応答しなくなっても撮影ボタンが押せないままにならないようにする
       final photo = await controller.takePicture().timeout(
         const Duration(seconds: 10),
@@ -247,6 +270,18 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
+  Widget _controlBar(CameraController? controller) =>
+      ValueListenableBuilder<int>(
+        valueListenable: _rotation,
+        builder: (context, _, _) => _ControlBar(
+          iconTurns: _rotation.iconTurns,
+          canShoot: controller != null && !_isCapturing,
+          canSwitch: _issue == null && _canSwitchCamera && !_isCapturing,
+          onShoot: _takePicture,
+          onSwitch: _switchCamera,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -267,12 +302,7 @@ class _CameraScreenState extends State<CameraScreen>
                     : _Preview(controller: controller),
               ),
               const AppVersion(),
-              _ControlBar(
-                canShoot: controller != null && !_isCapturing,
-                canSwitch: issue == null && _canSwitchCamera && !_isCapturing,
-                onShoot: _takePicture,
-                onSwitch: _switchCamera,
-              ),
+              _controlBar(controller),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Wrap(
@@ -324,12 +354,14 @@ class _Preview extends StatelessWidget {
 
 class _ControlBar extends StatelessWidget {
   const _ControlBar({
+    required this.iconTurns,
     required this.canShoot,
     required this.canSwitch,
     required this.onShoot,
     required this.onSwitch,
   });
 
+  final double iconTurns;
   final bool canShoot;
   final bool canSwitch;
   final VoidCallback onShoot;
@@ -351,7 +383,12 @@ class _ControlBar extends StatelessWidget {
                 iconSize: 28,
                 padding: const EdgeInsets.all(12),
                 tooltip: 'カメラを切り替える',
-                icon: const Icon(Icons.cameraswitch_rounded),
+                icon: AnimatedRotation(
+                  key: const ValueKey('camera-switch-icon'),
+                  turns: iconTurns,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(Icons.cameraswitch_rounded),
+                ),
               ),
             ),
           ),
@@ -415,6 +452,11 @@ class _CameraMessage extends StatelessWidget {
         '撮影するには、カメラへのアクセスを許可してください。'
             '許可を求める画面が出ない場合は、設定から許可できます。',
       ),
+      _CameraIssue.permissionSettingsRequired => (
+        Icons.no_photography_rounded,
+        'カメラの使用が許可されていません',
+        '設定を開いて、camereonのカメラへのアクセスをオンにしてください。',
+      ),
       _CameraIssue.noCamera => (
         Icons.videocam_off_rounded,
         'カメラが見つかりません',
@@ -424,6 +466,11 @@ class _CameraMessage extends StatelessWidget {
         Icons.error_outline_rounded,
         'カメラを起動できませんでした',
         '他のアプリがカメラを使っていないか確認して、もう一度お試しください。',
+      ),
+      _CameraIssue.permissionRestricted => (
+        Icons.lock_outline_rounded,
+        'カメラの利用が制限されています',
+        '端末の利用制限を確認してください。写真の選択やサンプルは利用できます。',
       ),
     };
 
@@ -450,7 +497,9 @@ class _CameraMessage extends StatelessWidget {
               height: 1.6,
             ),
           ),
-          if (issue != _CameraIssue.noCamera) ...[
+          if (issue != _CameraIssue.noCamera &&
+              issue != _CameraIssue.permissionRestricted &&
+              issue != _CameraIssue.permissionSettingsRequired) ...[
             const SizedBox(height: 28),
             FilledButton(
               onPressed: onRetry,
@@ -459,7 +508,8 @@ class _CameraMessage extends StatelessWidget {
               ),
             ),
           ],
-          if (issue == _CameraIssue.permissionDenied) ...[
+          if (issue == _CameraIssue.permissionDenied ||
+              issue == _CameraIssue.permissionSettingsRequired) ...[
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => _appSettings.invokeMethod<void>('open'),

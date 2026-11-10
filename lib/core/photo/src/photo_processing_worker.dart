@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 
 import '../photo_processing_exception.dart';
+import 'frosted_fill.dart';
 
-typedef PixelRegion = ({int left, int top, int right, int bottom});
+export 'frosted_fill.dart' show PixelShape;
+
 typedef ProcessedPixels = ({Uint8List bytes, int width, int height});
 
 ProcessedPixels normalizePixels(Uint8List bytes, int maxPixels) {
@@ -25,7 +27,7 @@ ProcessedPixels redactPixels(
   Uint8List bytes,
   int width,
   int height,
-  List<PixelRegion> regions,
+  List<PixelShape> regions,
   int maxPixels,
 ) {
   final decoded = _decode(bytes, maxPixels, requireNormalized: true);
@@ -37,8 +39,7 @@ ProcessedPixels redactPixels(
     throw const PhotoProcessingException(PhotoProcessingFailure.invalidSource);
   }
   final clean = copyPixels(decoded);
-  paintRegions(clean, regions);
-  return _encode(clean, jpeg: true);
+  return _encode(paintRegions(clean, regions), jpeg: true);
 }
 
 img.Image _decode(
@@ -210,31 +211,35 @@ img.Image copyPixels(img.Image source) {
   return clean;
 }
 
-/// 半開区間を、終点を含む fillRect の引数に変換する。
-void paintRegions(img.Image image, List<PixelRegion> regions) {
+/// 全領域を検査してから、周囲の色だけで作ったすりガラスの塗りで隠す。
+/// 内側の画素は参照しないので、黒塗りと同じく内容は復元できない。
+img.Image paintRegions(img.Image image, List<PixelShape> regions) {
   for (final r in regions) {
     if (r.left < 0 ||
         r.top < 0 ||
         r.right > image.width ||
         r.bottom > image.height ||
         r.left >= r.right ||
-        r.top >= r.bottom) {
+        r.top >= r.bottom ||
+        r.shape < 0 ||
+        r.shape > 2 ||
+        (r.shape == 2 && (r.points.length < 6 || r.points.length.isOdd)) ||
+        r.points.any((v) => !v.isFinite)) {
       throw const PhotoProcessingException(
         PhotoProcessingFailure.invalidRegion,
       );
     }
   }
-  for (final r in regions) {
-    img.fillRect(
-      image,
-      x1: r.left,
-      y1: r.top,
-      x2: r.right - 1,
-      y2: r.bottom - 1,
-      color: img.ColorRgb8(0, 0, 0),
-      alphaBlend: false,
-    );
-  }
+  if (regions.isEmpty) return image;
+  // toUint8List is a view of the image's own buffer: paint in place, no copy.
+  frostShapes(
+    image.toUint8List(),
+    image.width,
+    image.height,
+    image.numChannels,
+    regions,
+  );
+  return image;
 }
 
 ProcessedPixels _encode(img.Image image, {required bool jpeg}) {

@@ -46,3 +46,16 @@ run = "bash scripts/build-android-detectors.sh --debug"
 [tasks.detector-debug-install]
 description = "検出器Debug APKをビルドして接続端末へインストールする"
 run = "bash scripts/install-android-detectors.sh --debug"
+
+[tasks.small-text-test]
+description = "Androidで小さい文字の検出・従来比較・元画像座標を検証する"
+run = "flutter test integration_test/small_text_device_test.dart"
+
+[tasks.public-photo-text-test]
+description = "公開実写のsources.jsonを配置して文字検出・黒塗り出力を端末で記録する（docs/small-text-detection.md参照）"
+run = "flutter test integration_test/blackboard_text_device_test.dart --dart-define=RUN_BLACKBOARD_TEXT_TESTS=true --timeout none"
+
+[tasks.text-geometry-test]
+description = "文字の傾き・背景スコア・分割計画の幾何をJVM上で検証する"
+dir = "android"
+run = "./gradlew :app:testDebugUnitTest"
