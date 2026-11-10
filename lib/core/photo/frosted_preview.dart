@@ -12,7 +12,8 @@ import 'src/frosted_fill.dart';
 /// 編集画面に重ねる、1 つの範囲のすりガラスの塗り。
 ///
 /// [bounds] は元画像の座標で、[image] はその範囲を表示用解像度で描いたもの。
-/// 一度作れば写真の拡大・移動で描き直す必要はなく、GPU が拡大縮小する。
+/// 形と縁の外側は透明なので、重なる範囲の塗りを何枚重ねても元の写真を
+/// 描き戻さない。一度作れば写真の拡大・移動で描き直す必要はない。
 class FrostedPatch {
   const FrostedPatch(this.region, this.bounds, this.image);
   final HideRegion region;
@@ -144,21 +145,23 @@ class IsolateFrostedPreviewer implements FrostedPreviewer {
         ],
       ]),
     );
-    final Uint8List frosted;
+    // Only the shape and its feather are opaque in the result; the rest of
+    // the window is transparent so stacked patches never repaint originals.
+    final ({Uint8List rgba, int left, int top, int width, int height})? layer;
     try {
-      frosted = await Isolate.run(() {
-        frostShapes(crop, w, h, 4, [local]);
-        return crop;
-      }, debugName: 'frosted-preview');
+      layer = await Isolate.run(
+        () => frostOverlay(crop, w, h, 4, local),
+        debugName: 'frosted-preview',
+      );
     } catch (_) {
       return null;
     }
-    if (_disposed) return null;
+    if (layer == null || _disposed) return null;
     final completer = Completer<ui.Image>();
     ui.decodeImageFromPixels(
-      frosted,
-      w,
-      h,
+      layer.rgba,
+      layer.width,
+      layer.height,
       ui.PixelFormat.rgba8888,
       completer.complete,
     );
@@ -167,13 +170,15 @@ class IsolateFrostedPreviewer implements FrostedPreviewer {
       image.dispose();
       return null;
     }
+    final x = window.left + layer.left;
+    final y = window.top + layer.top;
     return FrostedPatch(
       region,
       ui.Rect.fromLTRB(
-        window.left / sx,
-        window.top / sy,
-        window.right / sx,
-        window.bottom / sy,
+        x / sx,
+        y / sy,
+        (x + layer.width) / sx,
+        (y + layer.height) / sy,
       ),
       image,
     );

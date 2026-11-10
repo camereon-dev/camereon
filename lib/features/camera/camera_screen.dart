@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_version.dart';
 import 'captured_photo_screen.dart';
+import 'device_rotation.dart';
 
 enum _CameraIssue {
   permissionDenied,
@@ -34,6 +35,7 @@ class _CameraScreenState extends State<CameraScreen>
   _CameraIssue? _issue;
   bool _isCapturing = false;
   bool _editingPhoto = false;
+  final _rotation = DeviceRotation();
 
   // カメラを開く・閉じるたびに進める。古い起動処理の結果を捨てるために使う。
   int _session = 0;
@@ -53,6 +55,7 @@ class _CameraScreenState extends State<CameraScreen>
     WidgetsBinding.instance.removeObserver(this);
     _session++;
     _disposeController(_controller);
+    _rotation.dispose();
     super.dispose();
   }
 
@@ -168,6 +171,16 @@ class _CameraScreenState extends State<CameraScreen>
 
     setState(() => _isCapturing = true);
     try {
+      // Android は画面が縦固定なので、カメラプラグインの向きは常に縦になる。
+      // 実際に持っている向きで撮るよう、撮影直前にセンサーの向きを指定する。
+      // 向きが届かない iOS はプラグインが実際の向きで撮るので固定しない。
+      if (_rotation.known) {
+        try {
+          await controller.lockCaptureOrientation(_rotation.captureOrientation);
+        } catch (e) {
+          debugPrint('camera: could not set capture orientation: $e');
+        }
+      }
       // カメラが応答しなくなっても撮影ボタンが押せないままにならないようにする
       final photo = await controller.takePicture().timeout(
         const Duration(seconds: 10),
@@ -257,21 +270,17 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  Widget _controlBar(CameraController? controller) {
-    Widget buildBar(DeviceOrientation orientation) => _ControlBar(
-      orientation: orientation,
-      canShoot: controller != null && !_isCapturing,
-      canSwitch: _issue == null && _canSwitchCamera && !_isCapturing,
-      onShoot: _takePicture,
-      onSwitch: _switchCamera,
-    );
-
-    if (controller == null) return buildBar(DeviceOrientation.portraitUp);
-    return ValueListenableBuilder<CameraValue>(
-      valueListenable: controller,
-      builder: (context, value, _) => buildBar(value.deviceOrientation),
-    );
-  }
+  Widget _controlBar(CameraController? controller) =>
+      ValueListenableBuilder<int>(
+        valueListenable: _rotation,
+        builder: (context, _, _) => _ControlBar(
+          iconTurns: _rotation.iconTurns,
+          canShoot: controller != null && !_isCapturing,
+          canSwitch: _issue == null && _canSwitchCamera && !_isCapturing,
+          onShoot: _takePicture,
+          onSwitch: _switchCamera,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -345,14 +354,14 @@ class _Preview extends StatelessWidget {
 
 class _ControlBar extends StatelessWidget {
   const _ControlBar({
-    required this.orientation,
+    required this.iconTurns,
     required this.canShoot,
     required this.canSwitch,
     required this.onShoot,
     required this.onSwitch,
   });
 
-  final DeviceOrientation orientation;
+  final double iconTurns;
   final bool canShoot;
   final bool canSwitch;
   final VoidCallback onShoot;
@@ -376,12 +385,7 @@ class _ControlBar extends StatelessWidget {
                 tooltip: 'カメラを切り替える',
                 icon: AnimatedRotation(
                   key: const ValueKey('camera-switch-icon'),
-                  turns: switch (orientation) {
-                    DeviceOrientation.landscapeLeft => -0.25,
-                    DeviceOrientation.landscapeRight => 0.25,
-                    DeviceOrientation.portraitDown => 0.5,
-                    DeviceOrientation.portraitUp => 0,
-                  },
+                  turns: iconTurns,
                   duration: const Duration(milliseconds: 200),
                   child: const Icon(Icons.cameraswitch_rounded),
                 ),
