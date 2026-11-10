@@ -21,6 +21,7 @@ import '../../core/photo/photo_images.dart';
 import '../../core/photo/photo_processor.dart';
 import '../../core/photo/photo_processing_exception.dart';
 import '../../core/photo/photo_saver.dart';
+import '../../core/photo/photo_sharer.dart';
 import '../analysis/face_detection_controller.dart';
 import '../analysis/photo_analysis_entry.dart';
 import '../detection/candidate_overlay.dart';
@@ -41,6 +42,7 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.detector,
     this.objectDetector,
     this.previewer,
+    this.sharer,
   });
   final XFile photo;
   final ValueChanged<SourcePhoto>? onSourceLoaded;
@@ -52,6 +54,7 @@ class CapturedPhotoScreen extends StatefulWidget {
 
   /// Builds the frosted preview of selected areas; tests pass [FrostedPreviewer.none].
   final FrostedPreviewer? previewer;
+  final PhotoSharer? sharer;
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
@@ -61,6 +64,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   late final PhotoProcessor _processor =
       widget.processor ?? FlutterPhotoProcessor();
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
+  late final PhotoSharer _sharer = widget.sharer ?? PlatformPhotoSharer();
   late final RegionDetector _detector =
       widget.detector ?? AndroidTextRegionDetector();
   late final RegionDetector _objectDetector =
@@ -801,15 +805,33 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     child: Padding(
       padding: const EdgeInsets.all(8),
       child: _saved
-          ? Center(
-              child: TextButton.icon(
-                onPressed: _busy ? null : _retake,
-                icon: const Icon(Icons.check_rounded, color: glassMint),
-                label: const Text(
-                  'もう一枚',
-                  style: TextStyle(color: Colors.white),
+          ? Row(
+              children: [
+                Expanded(
+                  child: _savedAction(
+                    '共有',
+                    Icons.ios_share_rounded,
+                    _share,
+                    primary: true,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _savedAction(
+                    '開く',
+                    Icons.photo_library_outlined,
+                    _open,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _savedAction(
+                    'もう一枚',
+                    Icons.photo_camera_outlined,
+                    _retake,
+                  ),
+                ),
+              ],
             )
           : _preview != null
           ? Row(
@@ -866,6 +888,47 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             ),
     ),
   );
+
+  Widget _savedAction(
+    String label,
+    IconData icon,
+    VoidCallback action, {
+    bool primary = false,
+  }) => TextButton.icon(
+    onPressed: _busy ? null : action,
+    style: TextButton.styleFrom(
+      minimumSize: const Size(0, 48),
+      backgroundColor: primary ? glassMint : Colors.transparent,
+      foregroundColor: primary ? const Color(0xFF142A25) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    icon: Icon(icon, size: 20),
+    label: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.fade,
+      softWrap: false,
+      style: const TextStyle(fontWeight: FontWeight.w600),
+    ),
+  );
+
+  Future<void> _share() async {
+    final jpeg = _preview;
+    if (jpeg == null) return;
+    if (!await _sharer.share(jpeg) && mounted) {
+      _notify('共有できませんでした');
+    }
+  }
+
+  Future<void> _open() async {
+    if (!await _sharer.open() && mounted) {
+      _notify('写真を開けませんでした。写真アプリから確認してください');
+    }
+  }
+
+  void _notify(String message) =>
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
 
   Future<void> _openSettings() async {
     try {

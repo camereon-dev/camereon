@@ -3,6 +3,8 @@ package dev.camereon.camereon.demo
 import android.graphics.BitmapFactory
 import java.util.UUID
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.content.Intent
@@ -28,6 +30,8 @@ class MainActivity : FlutterActivity() {
     private var saveInProgress = false
     private var pendingSaveBytes: ByteArray? = null
     private var pendingSaveResult: MethodChannel.Result? = null
+    // The image this activity last added to MediaStore; the only one it shares.
+    private var lastSavedUri: Uri? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -88,6 +92,34 @@ class MainActivity : FlutterActivity() {
                 } else {
                     result.notImplemented()
                 }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/photo_share")
+            .setMethodCallHandler { call, result ->
+                val uri = lastSavedUri
+                if (uri == null || call.method !in setOf("share", "open")) {
+                    if (call.method in setOf("share", "open")) result.success(false) else result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val intent = if (call.method == "share") {
+                    Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                        type = "image/jpeg"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newRawUri("", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }, null)
+                } else {
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "image/jpeg")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                }
+                result.success(try {
+                    startActivity(intent)
+                    true
+                } catch (_: ActivityNotFoundException) {
+                    false
+                })
             }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/photo_saver")
@@ -231,19 +263,23 @@ class MainActivity : FlutterActivity() {
 
     private fun saveToGallery(bytes: ByteArray, result: MethodChannel.Result) {
         Thread {
+            var saved: Uri? = null
             val status = try {
-                insertImage(bytes)
+                saved = insertImage(bytes)
                 "saved"
             } catch (_: SecurityException) {
                 "permissionDenied"
             } catch (_: Exception) {
                 "failed"
             }
-            runOnUiThread { finishSave(result, status) }
+            runOnUiThread {
+                if (saved != null) lastSavedUri = saved
+                finishSave(result, status)
+            }
         }.start()
     }
 
-    private fun insertImage(bytes: ByteArray) {
+    private fun insertImage(bytes: ByteArray): Uri {
         val fileName = "camereon_${UUID.randomUUID()}.jpg"
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
@@ -297,6 +333,7 @@ class MainActivity : FlutterActivity() {
             }
             throw error
         }
+        return uri
     }
 
     private fun finishSave(result: MethodChannel.Result, status: String) {

@@ -9,6 +9,7 @@ import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/core/photo/photo_processor.dart';
 import 'package:camereon/core/photo/frosted_preview.dart';
 import 'package:camereon/core/photo/photo_saver.dart';
+import 'package:camereon/core/photo/photo_sharer.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:flutter/material.dart';
@@ -63,6 +64,23 @@ class FakeProcessor implements PhotoProcessor {
     received = List.of(regions);
     if (fail) throw StateError('processing');
     return pending == null ? jpeg : pending!.future;
+  }
+}
+
+class FakeSharer implements PhotoSharer {
+  final shared = <RedactedJpeg>[];
+  int opened = 0;
+  bool result = true;
+  @override
+  Future<bool> share(RedactedJpeg jpeg) async {
+    shared.add(jpeg);
+    return result;
+  }
+
+  @override
+  Future<bool> open() async {
+    opened++;
+    return result;
   }
 }
 
@@ -124,6 +142,7 @@ Future<void> open(
   RegionDetector? texts,
   RegionDetector? objects,
   PhotoFaceDetector? faces,
+  PhotoSharer? sharer,
   bool settle = true,
 }) async {
   await tester.pumpWidget(
@@ -136,6 +155,7 @@ Future<void> open(
         objectDetector: objects ?? NoRegions(),
         faceDetector: faces ?? NoFaces(),
         previewer: const FrostedPreviewer.none(),
+        sharer: sharer ?? FakeSharer(),
       ),
     ),
   );
