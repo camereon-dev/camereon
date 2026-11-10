@@ -16,7 +16,7 @@
       dark ? "ライトモードに切り替える" : "ダークモードに切り替える",
     );
     document.querySelector('meta[name="theme-color"]').content = dark
-      ? "#121b16"
+      ? "#111a15"
       : "#f6f7f2";
   }
 
