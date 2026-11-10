@@ -187,6 +187,20 @@ void main() {
     expect(camera.pictures, 1);
   });
 
+  testWidgets('向きが届かない端末（iOS）では撮影向きを固定しない', (tester) async {
+    useCamera(FakeCameraPlatform());
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('撮影する'));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(camera.pictures, 1);
+    expect(camera.captureOrientations, isEmpty);
+  });
+
   testWidgets('撮影すると写真の確認画面へ進み、撮り直しでカメラへ戻る', (tester) async {
     useCamera(FakeCameraPlatform());
 
@@ -259,6 +273,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('カメラが見つかりません'), findsOneWidget);
+  });
+
+  testWidgets('iOSの再表示できない権限拒否は設定への案内を表示する', (tester) async {
+    useCamera(
+      FakeCameraPlatform(
+        error: CameraException('CameraAccessDeniedWithoutPrompt', 'denied'),
+      ),
+    );
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    expect(find.text('カメラの使用が許可されていません'), findsOneWidget);
+    expect(find.text('設定を開く'), findsOneWidget);
+    expect(find.text('許可する'), findsNothing);
+    var openedSettings = false;
+    const settings = MethodChannel('dev.camereon/app_settings');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(settings, (call) async {
+          openedSettings = call.method == 'open';
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(settings, null),
+    );
+    await tester.tap(find.text('設定を開く'));
+    await tester.pumpAndSettle();
+    expect(openedSettings, isTrue);
+  });
+
+  testWidgets('iOSの利用制限を通常の権限拒否と区別する', (tester) async {
+    useCamera(
+      FakeCameraPlatform(
+        error: CameraException('CameraAccessRestricted', 'restricted'),
+      ),
+    );
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    expect(find.text('カメラの利用が制限されています'), findsOneWidget);
+    expect(find.text('許可する'), findsNothing);
+    expect(find.byKey(const ValueKey('pick-photo')), findsOneWidget);
   });
 
   for (final denied in [false, true]) {

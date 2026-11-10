@@ -36,6 +36,52 @@ Uint8List halves(int w, int h) {
 }
 
 void main() {
+  for (final regions in <String, List<PixelShape>>{
+    'overlapping': [shape(0, 18, 8, 50, 40), shape(0, 35, 15, 70, 45)],
+    'ellipse and polygon': [
+      shape(1, 12, 8, 48, 40),
+      shape(2, 40, 4, 80, 44, [40, 4, 80, 16, 65, 44, 40, 38]),
+    ],
+    'edges': [shape(0, 0, 0, 24, 48), shape(0, 20, 0, 96, 48)],
+  }.entries) {
+    test('hidden-pixel independence: ${regions.key}', () {
+      const w = 96, h = 48;
+      final first = halves(w, h);
+      final second = Uint8List.fromList(first);
+      for (final region in regions.value) {
+        final mask = rasterize(region, 0, 0, w, h);
+        for (var i = 0; i < mask.length; i++) {
+          if (mask[i] == 0) continue;
+          second[i * 3] = 255;
+          second[i * 3 + 1] = 0;
+          second[i * 3 + 2] = 255;
+        }
+      }
+      frostShapes(first, w, h, 3, regions.value);
+      frostShapes(second, w, h, 3, regions.value);
+      expect(second, orderedEquals(first));
+    });
+  }
+
+  test('all hidden regions are excluded from colour sampling', () {
+    const w = 96, h = 48;
+    final regions = [shape(0, 24, 12, 44, 36), shape(0, 46, 12, 66, 36)];
+    final first = halves(w, h);
+    final second = Uint8List.fromList(first);
+    // The two inputs differ only inside the second selected region.
+    for (var y = 12; y < 36; y++) {
+      for (var x = 46; x < 66; x++) {
+        final i = (y * w + x) * 3;
+        second[i] = 255;
+        second[i + 1] = 0;
+        second[i + 2] = 255;
+      }
+    }
+    frostShapes(first, w, h, 3, regions);
+    frostShapes(second, w, h, 3, regions);
+    expect(second, orderedEquals(first));
+  });
+
   test('rasterize: ellipse and polygon cover their shape, not the box', () {
     final ellipse = rasterize(shape(1, 0, 0, 40, 20), 0, 0, 40, 20);
     expect(ellipse[10 * 40 + 20], 1, reason: 'center');

@@ -23,6 +23,11 @@ class DeviceRotation extends ValueNotifier<int> {
   bool _disposed = false;
   int uiDegrees = 0;
 
+  /// Whether the platform reported a rotation. iOS has no such channel: its
+  /// camera plugin already follows the physical orientation, so it must not
+  /// be overridden with an assumed portrait.
+  bool known = false;
+
   void _set(Object? message) {
     if (_disposed || message is! Map) return;
     final capture = message['capture'];
@@ -31,6 +36,7 @@ class DeviceRotation extends ValueNotifier<int> {
       return;
     }
     uiDegrees = ui % 360;
+    known = true;
     if (value == capture % 360) {
       notifyListeners();
     } else {

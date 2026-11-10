@@ -9,7 +9,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('端末上で起動するとカメラ画面を表示する', (tester) async {
-    app.main();
+    await app.main();
     // 権限ダイアログが出ていても、カメラ画面と撮影ボタンは表示される
     await tester.pump(const Duration(seconds: 2));
 

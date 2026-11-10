@@ -35,7 +35,7 @@ class MlKitFaceDetectionHandler(messenger: BinaryMessenger) {
                 // four more faces than 0.05 in a crowded gallery photo (1600px input).
                 val minFaceSize = (call.argument<Double>("minFaceSize") ?: 0.02).toFloat()
                 if (bytes == null || bytes.size > 128 * 1024 * 1024 ||
-                    width <= 0 || height <= 0 || width.toLong() * height > 24000000 ||
+                    width <= 0 || height <= 0 || width.toLong() * height > 25000000 ||
                     !minFaceSize.isFinite() || minFaceSize <= 0f || minFaceSize > 1f) {
                     result.error("invalidImage", "Invalid source image", null)
                 } else {
