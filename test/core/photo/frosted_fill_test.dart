@@ -124,4 +124,40 @@ void main() {
       expect((px[i * 4 + 1] - 200).abs(), lessThan(12));
     }
   });
+
+  test('overlay layers are transparent outside the shape and its feather', () {
+    const w = 96, h = 48;
+    final px = halves(w, h);
+    final before = Uint8List.fromList(px);
+    final layer = frostOverlay(px, w, h, 3, shape(1, 28, 12, 68, 36))!;
+    expect(px, before, reason: 'the source is read only');
+    // The layer covers only the shape plus a few feather pixels.
+    expect(layer.left, inInclusiveRange(20, 28));
+    expect(layer.left + layer.width, inInclusiveRange(68, 76));
+    int alphaAt(int x, int y) =>
+        layer.rgba[((y - layer.top) * layer.width + (x - layer.left)) * 4 + 3];
+    expect(alphaAt(48, 24), 255, reason: 'centre of the ellipse');
+    expect(alphaAt(layer.left, layer.top), 0, reason: 'corner of the layer');
+    // Premultiplied: no channel exceeds alpha.
+    for (var i = 0; i < layer.rgba.length; i += 4) {
+      final a = layer.rgba[i + 3];
+      expect(layer.rgba[i], lessThanOrEqualTo(a));
+      expect(layer.rgba[i + 1], lessThanOrEqualTo(a));
+      expect(layer.rgba[i + 2], lessThanOrEqualTo(a));
+    }
+    // Compositing the layer gives the same pixels as painting in place.
+    final inPlace = Uint8List.fromList(before);
+    frostShapes(inPlace, w, h, 3, [shape(1, 28, 12, 68, 36)]);
+    for (var y = layer.top; y < layer.top + layer.height; y++) {
+      for (var x = layer.left; x < layer.left + layer.width; x++) {
+        final o = ((y - layer.top) * layer.width + (x - layer.left)) * 4;
+        final a = layer.rgba[o + 3] / 255;
+        for (var c = 0; c < 3; c++) {
+          final composed =
+              layer.rgba[o + c] + before[(y * w + x) * 3 + c] * (1 - a);
+          expect(composed, closeTo(inPlace[(y * w + x) * 3 + c], 2));
+        }
+      }
+    }
+  });
 }
