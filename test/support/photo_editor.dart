@@ -125,6 +125,10 @@ Future<void> open(
   RegionDetector? objects,
   PhotoFaceDetector? faces,
   bool settle = true,
+  List<RegionCandidate> Function(SourcePhoto)? initialCandidates,
+  RegionDetector? addresses,
+  bool includeOtherCandidates = true,
+  bool startWithConfirmation = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -136,6 +140,10 @@ Future<void> open(
         objectDetector: objects ?? NoRegions(),
         faceDetector: faces ?? NoFaces(),
         previewer: const FrostedPreviewer.none(),
+        initialCandidates: initialCandidates,
+        addressDetector: addresses ?? NoRegions(),
+        includeOtherCandidates: includeOtherCandidates,
+        startWithConfirmation: startWithConfirmation,
       ),
     ),
   );

@@ -111,6 +111,7 @@ void main() {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => CapturedPhotoScreen(
+                        includeOtherCandidates: true,
                         photo: XFile(file.path),
                         saver: saver,
                         detector: CoordinateFixtureDetector(),

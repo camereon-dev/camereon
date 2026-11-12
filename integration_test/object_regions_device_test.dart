@@ -137,7 +137,12 @@ void main() {
         final temp = File('${support.path}/detector-editor.png');
         await temp.writeAsBytes(last.bytes);
         await tester.pumpWidget(
-          MaterialApp(home: CapturedPhotoScreen(photo: XFile(temp.path))),
+          MaterialApp(
+            home: CapturedPhotoScreen(
+              includeOtherCandidates: true,
+              photo: XFile(temp.path),
+            ),
+          ),
         );
         await tester.pumpAndSettle();
         final screen = tester

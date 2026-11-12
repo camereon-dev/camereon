@@ -13,6 +13,7 @@ import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
 import '../../core/detection/android_text_region_detector.dart';
 import '../../core/detection/android_object_region_detector.dart';
 import '../../core/detection/region_detector.dart';
+import '../../core/detection/japanese_address_detector.dart';
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
 import '../../core/photo/flutter_photo_processor.dart';
@@ -41,7 +42,14 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.detector,
     this.objectDetector,
     this.previewer,
+    this.initialCandidates,
+    this.addressDetector,
+    this.includeOtherCandidates = false,
+    this.startWithConfirmation = false,
   });
+
+  /// Captures first show the automatically redacted result before editing.
+  final bool startWithConfirmation;
   final XFile photo;
   final ValueChanged<SourcePhoto>? onSourceLoaded;
   final PhotoProcessor? processor;
@@ -49,6 +57,14 @@ class CapturedPhotoScreen extends StatefulWidget {
   final PhotoFaceDetector? faceDetector;
   final RegionDetector? detector;
   final RegionDetector? objectDetector;
+  final RegionDetector? addressDetector;
+
+  /// Legacy multi-kind editor is retained only for detector evaluation.
+  final bool includeOtherCandidates;
+
+  /// Trusted candidates in normalized photo coordinates, hidden before display.
+  /// Called once after loading; user choices are never reset by detection.
+  final List<RegionCandidate> Function(SourcePhoto)? initialCandidates;
 
   /// Builds the frosted preview of selected areas; tests pass [FrostedPreviewer.none].
   final FrostedPreviewer? previewer;
@@ -63,6 +79,11 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
   late final RegionDetector _detector =
       widget.detector ?? AndroidTextRegionDetector();
+  late final RegionDetector _addressDetector =
+      widget.addressDetector ?? JapaneseAddressDetector();
+  bool _addressDetecting = false;
+  bool _addressFailed = false;
+  final Set<HideRegion> _seenAddresses = {};
   late final RegionDetector _objectDetector =
       widget.objectDetector ?? AndroidObjectRegionDetector();
   late final _faces = FaceDetectionController(
@@ -91,8 +112,23 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   List<RegionCandidate> get _visibleCandidates => [
     ..._faceCandidates.values,
     for (final c in _candidates)
-      if (_selected.contains(c) || !_coveredByFace(c)) c,
+      if (_selected.contains(c) ||
+          (!_coveredByFace(c) && !_coveredByAddress(c)))
+        c,
   ];
+
+  // OCR can return smaller text frames inside a known address. Keep a single
+  // tap target there, even after the address has been revealed.
+  bool _coveredByAddress(RegionCandidate candidate) {
+    if (candidate.kind != CandidateKind.text) return false;
+    final rect = candidate.region.toRect();
+    return _candidates.where((c) => c.kind == CandidateKind.address).any((c) {
+      final overlap = rect.intersect(c.region.toRect());
+      return overlap.width > 0 &&
+          overlap.height > 0 &&
+          overlap.width * overlap.height >= rect.width * rect.height * .7;
+    });
+  }
 
   /// The text detector fires on eyes, glasses and scarf edges. A text frame
   /// well inside a face, or a frame enclosing most of a face it does not
@@ -119,11 +155,15 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   List<HideRegion> get _redactions =>
       {for (final c in _selected) c.region}.toList();
   bool get _scanning =>
-      _detecting || _faces.status == FaceDetectionStatus.detecting;
+      _addressDetecting ||
+      _detecting ||
+      _faces.status == FaceDetectionStatus.detecting;
   bool get _canRetry =>
-      !_scanning && (_failedScans.isNotEmpty || _faces.canRetry);
+      !_scanning &&
+      (_addressFailed || _failedScans.isNotEmpty || _faces.canRetry);
   SourcePhoto? _source;
   RedactedJpeg? _preview;
+  late bool _waitingForConfirmation = widget.startWithConfirmation;
   bool _covered = false;
   bool _busy = true;
   bool _loadFailed = false;
@@ -145,12 +185,23 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     if (!mounted) return;
     setState(() {
       for (final face in _faces.candidates) {
-        _faceCandidates.putIfAbsent(
-          face.id,
-          () => RegionCandidate(kind: CandidateKind.face, region: face.region),
-        );
+        _faceCandidates.putIfAbsent(face.id, () {
+          final candidate = RegionCandidate(
+            kind: CandidateKind.face,
+            region: face.region,
+          );
+          if (!widget.includeOtherCandidates) {
+            _selected.add(candidate);
+            for (final previous in _history) {
+              previous.add(candidate);
+            }
+          }
+          return candidate;
+        });
       }
     });
+    _schedulePatches();
+    scheduleMicrotask(_maybePrepareInitialConfirmation);
   }
 
   @override
@@ -194,7 +245,21 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         await widget.photo.readAsBytes(),
       );
       if (!mounted) return;
-      setState(() => _source = source);
+      final initial =
+          (widget.initialCandidates?.call(source) ?? const <RegionCandidate>[])
+              .where(
+                (c) =>
+                    widget.includeOtherCandidates ||
+                    c.kind == CandidateKind.address,
+              )
+              .toList();
+      setState(() {
+        _source = source;
+        _candidates = List.of(initial);
+        _selected = initial.toSet();
+        _history.clear();
+        _seenAddresses.addAll(initial.map((c) => c.region));
+      });
       widget.onSourceLoaded?.call(source);
       unawaited(_previewer.load(source).then((_) => _refreshPatches()));
     } catch (error) {
@@ -227,6 +292,10 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     }
     _automaticDetectionStarted = true;
     unawaited(_faces.detect(source));
+    if (!widget.includeOtherCandidates) {
+      unawaited(_detectAddresses(source));
+      return;
+    }
     unawaited(_detectAll(source));
   }
 
@@ -243,6 +312,56 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     }
     await _detect();
   }
+
+  Future<void> _detectAddresses(SourcePhoto source) async {
+    if (_busy || _addressDetecting) return;
+    final epoch = ++_detectionEpoch;
+    setState(() {
+      _addressDetecting = true;
+      _addressFailed = false;
+    });
+    try {
+      final result = await _addressDetector.detect(source);
+      if (!mounted || epoch != _detectionEpoch || _preview != null) return;
+      setState(() {
+        for (final c in result.candidates) {
+          if (c.kind != CandidateKind.address || _knownAddress(c.region)) {
+            continue;
+          }
+          _seenAddresses.add(c.region);
+          _candidates.add(c);
+          _selected.add(c);
+          // Automatic discovery isn't an undo step. Earlier user actions must
+          // not accidentally reveal addresses discovered after those actions.
+          for (final previous in _history) {
+            previous.add(c);
+          }
+        }
+        _addressFailed = result.partial;
+        _truncated = _truncated || result.truncated;
+      });
+      _schedulePatches();
+    } catch (_) {
+      if (mounted && epoch == _detectionEpoch) {
+        setState(() => _addressFailed = true);
+      }
+    } finally {
+      if (mounted && epoch == _detectionEpoch) {
+        setState(() => _addressDetecting = false);
+        scheduleMicrotask(_maybePrepareInitialConfirmation);
+      }
+    }
+  }
+
+  bool _knownAddress(HideRegion region) => _seenAddresses.any((old) {
+    final a = old.toRect();
+    final b = region.toRect();
+    final overlap = a.intersect(b);
+    final area = overlap.width > 0 && overlap.height > 0
+        ? overlap.width * overlap.height
+        : 0;
+    return area >= a.width * a.height * .7 && area >= b.width * b.height * .7;
+  });
 
   Future<void> _detect({bool objects = false}) async {
     final source = _source;
@@ -301,6 +420,10 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     final source = _source;
     if (_busy || _covered || !_canRetry || source == null) return;
     if (_faces.canRetry) unawaited(_faces.detect(source));
+    if (!widget.includeOtherCandidates) {
+      unawaited(_detectAddresses(source));
+      return;
+    }
     unawaited(_detectAll(source));
   }
 
@@ -443,9 +566,37 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
+  void _maybePrepareInitialConfirmation() {
+    if (!mounted ||
+        !_waitingForConfirmation ||
+        !_automaticDetectionStarted ||
+        _busy ||
+        _scanning ||
+        _canRetry ||
+        _processingFailed ||
+        _covered ||
+        _source == null ||
+        _preview != null) {
+      return;
+    }
+    unawaited(_prepare());
+  }
+
+  void _openEditor() {
+    setState(() {
+      _waitingForConfirmation = false;
+      _preview = null;
+      _saveFailure = null;
+    });
+  }
+
   Future<void> _prepare() async {
     final source = _source;
-    if (_busy || source == null) return;
+    if (_busy ||
+        source == null ||
+        (!widget.includeOtherCandidates && _scanning)) {
+      return;
+    }
     _faces.cancel();
     setState(() {
       // Returning from confirmation must still offer a way to finish a scan.
@@ -458,7 +609,12 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     });
     try {
       final jpeg = await _processor.redact(source, List.of(_redactions));
-      if (mounted) setState(() => _preview = jpeg);
+      if (mounted) {
+        setState(() {
+          _preview = jpeg;
+          _waitingForConfirmation = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _processingFailed = true);
     } finally {
@@ -546,6 +702,15 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                         fit: BoxFit.contain,
                         semanticLabel: '保存する加工済み写真',
                       ),
+                    )
+                  else if (_waitingForConfirmation)
+                    Center(
+                      child: _canRetry || _processingFailed
+                          ? const Text(
+                              '確認用の写真を準備できませんでした',
+                              style: TextStyle(color: Colors.white70),
+                            )
+                          : const CircularProgressIndicator(color: glassMint),
                     )
                   else
                     InteractiveViewer(
@@ -698,12 +863,18 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         : _truncated
         ? '一部の候補を表示しています'
         : _scanning
-        ? '写真の中から、隠せる場所を探しています'
+        ? (widget.includeOtherCandidates
+              ? '写真の中から、隠せる場所を探しています'
+              : '写真の中から住所と顔を探しています')
         : _visibleCandidates.isEmpty
-        ? '別の写真で試してください'
+        ? (widget.includeOtherCandidates
+              ? '別の写真で試してください'
+              : '住所・顔の候補がありません。別の写真で試してください')
         : _selected.isEmpty
         ? '枠をタップ · 長押しでなぞって選択 · ピンチで拡大'
-        : 'もう一度タップで解除 · 下のボタンで種類ごとに切替';
+        : widget.includeOtherCandidates
+        ? 'もう一度タップで解除 · 下のボタンで種類ごとに切替'
+        : 'もう一度タップで解除 · 「住所」「顔」で一括切替';
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       child: Text(
@@ -812,19 +983,22 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
               ),
             )
           : _preview != null
-          ? Row(
+          ? Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
               children: [
-                GlassIconButton(
-                  label: '編集へ戻る',
-                  icon: Icons.arrow_back_rounded,
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                          _preview = null;
-                          _saveFailure = null;
-                        }),
+                Tooltip(
+                  message: widget.startWithConfirmation ? '編集する' : '編集へ戻る',
+                  child: TextButton.icon(
+                    onPressed: _busy ? null : _openEditor,
+                    icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                    label: const Text(
+                      '編集する',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
                 ),
-                const Spacer(),
                 if (_saveFailure == SaveFailureReason.permissionDenied)
                   TextButton(
                     onPressed: _busy ? null : _openSettings,
@@ -841,7 +1015,21 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+              ],
+            )
+          : _waitingForConfirmation
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  onPressed: _busy || _scanning ? null : _openEditor,
+                  child: const Text('編集する'),
+                ),
+                if (_processingFailed)
+                  TextButton(
+                    onPressed: _busy ? null : _prepare,
+                    child: const Text('確認画像を再作成'),
+                  ),
               ],
             )
           : Row(
@@ -860,7 +1048,10 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                   label: '保存前に確認',
                   icon: Icons.arrow_forward_rounded,
                   primary: true,
-                  onPressed: _busy ? null : _prepare,
+                  onPressed:
+                      _busy || (!widget.includeOtherCandidates && _scanning)
+                      ? null
+                      : _prepare,
                 ),
               ],
             ),
@@ -975,101 +1166,107 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     );
   }
 
-  Widget _editor(SourcePhoto source) => LayoutBuilder(
-    builder: (context, constraints) {
-      final available = Size(
-        math.max(1, constraints.maxWidth - 24),
-        math.max(1, constraints.maxHeight - 208),
-      );
-      final scale = math.min(
-        available.width / source.width,
-        available.height / source.height,
-      );
-      final rect = Alignment.center.inscribe(
-        Size(source.width * scale, source.height * scale),
-        Rect.fromLTWH(12, 84, available.width, available.height),
-      );
-      Offset toImage(Offset local) => (local - rect.topLeft) / scale;
-      double tapScale() => scale * _photoTransform.value.getMaxScaleOnAxis();
-      return GestureDetector(
-        key: const ValueKey('photo-canvas'),
-        behavior: HitTestBehavior.opaque,
-        onTapUp: _busy
-            ? null
-            : (event) {
-                if (rect.contains(event.localPosition)) {
-                  _tapCandidate(toImage(event.localPosition), tapScale());
-                }
-              },
-        onLongPressStart: _busy
-            ? null
-            : (event) => _strokeStart(toImage(event.localPosition), tapScale()),
-        onLongPressMoveUpdate: _busy
-            ? null
-            : (event) => _strokeMove(toImage(event.localPosition), tapScale()),
-        onLongPressEnd: _busy ? null : (_) => _strokeEnd(),
-        onLongPressCancel: _busy ? null : _strokeEnd,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned.fromRect(
-              rect: rect,
-              child: RepaintBoundary(
-                // Decode at most 4096px on the long side: enough for 8x zoom
-                // on a phone, and a 20MP photo no longer needs an 83MB texture.
-                child: Image.memory(
-                  source.bytes,
-                  fit: BoxFit.fill,
-                  cacheWidth: source.width >= source.height
-                      ? math.min(source.width, displayDecodeSide)
-                      : null,
-                  cacheHeight: source.width < source.height
-                      ? math.min(source.height, displayDecodeSide)
-                      : null,
-                  semanticLabel: '撮影した写真',
-                ),
-              ),
-            ),
-            Positioned.fromRect(
-              rect: rect,
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: SelectionPainter(
-                    regions: List.unmodifiable(_redactions),
-                    patches: Map.unmodifiable(_patches),
-                    imageWidth: source.width,
-                    imageHeight: source.height,
+  Widget _editor(SourcePhoto source) =>
+      !widget.includeOtherCandidates && _scanning
+      ? _loading()
+      : LayoutBuilder(
+          builder: (context, constraints) {
+            final available = Size(
+              math.max(1, constraints.maxWidth - 24),
+              math.max(1, constraints.maxHeight - 208),
+            );
+            final scale = math.min(
+              available.width / source.width,
+              available.height / source.height,
+            );
+            final rect = Alignment.center.inscribe(
+              Size(source.width * scale, source.height * scale),
+              Rect.fromLTWH(12, 84, available.width, available.height),
+            );
+            Offset toImage(Offset local) => (local - rect.topLeft) / scale;
+            double tapScale() =>
+                scale * _photoTransform.value.getMaxScaleOnAxis();
+            return GestureDetector(
+              key: const ValueKey('photo-canvas'),
+              behavior: HitTestBehavior.opaque,
+              onTapUp: _busy
+                  ? null
+                  : (event) {
+                      if (rect.contains(event.localPosition)) {
+                        _tapCandidate(toImage(event.localPosition), tapScale());
+                      }
+                    },
+              onLongPressStart: _busy
+                  ? null
+                  : (event) =>
+                        _strokeStart(toImage(event.localPosition), tapScale()),
+              onLongPressMoveUpdate: _busy
+                  ? null
+                  : (event) =>
+                        _strokeMove(toImage(event.localPosition), tapScale()),
+              onLongPressEnd: _busy ? null : (_) => _strokeEnd(),
+              onLongPressCancel: _busy ? null : _strokeEnd,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fromRect(
+                    rect: rect,
+                    child: RepaintBoundary(
+                      // Decode at most 4096px on the long side: enough for 8x zoom
+                      // on a phone, and a 20MP photo no longer needs an 83MB texture.
+                      child: Image.memory(
+                        source.bytes,
+                        fit: BoxFit.fill,
+                        cacheWidth: source.width >= source.height
+                            ? math.min(source.width, displayDecodeSide)
+                            : null,
+                        cacheHeight: source.width < source.height
+                            ? math.min(source.height, displayDecodeSide)
+                            : null,
+                        semanticLabel: '撮影した写真',
+                      ),
+                    ),
                   ),
-                ),
+                  Positioned.fromRect(
+                    rect: rect,
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: SelectionPainter(
+                          regions: List.unmodifiable(_redactions),
+                          patches: Map.unmodifiable(_patches),
+                          imageWidth: source.width,
+                          imageHeight: source.height,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned.fromRect(
+                    rect: rect,
+                    child: RepaintBoundary(
+                      child: CandidateOverlay(
+                        candidates: _visibleCandidates,
+                        selectedCandidates: Set.unmodifiable(_selected),
+                        imageWidth: source.width,
+                        imageHeight: source.height,
+                        onToggle: _busy ? null : _toggle,
+                      ),
+                    ),
+                  ),
+                  Positioned.fromRect(
+                    rect: rect,
+                    child: RepaintBoundary(
+                      child: PhotoScanEffect(active: _scanning && !_covered),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            Positioned.fromRect(
-              rect: rect,
-              child: RepaintBoundary(
-                child: CandidateOverlay(
-                  candidates: _visibleCandidates,
-                  selectedCandidates: Set.unmodifiable(_selected),
-                  imageWidth: source.width,
-                  imageHeight: source.height,
-                  onToggle: _busy ? null : _toggle,
-                ),
-              ),
-            ),
-            Positioned.fromRect(
-              rect: rect,
-              child: RepaintBoundary(
-                child: PhotoScanEffect(active: _scanning && !_covered),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
+            );
+          },
+        );
 }
 
-/// Selected areas: the frosted texture once it is ready, a translucent
-/// glass tint until then. No per-frame filtering, so zooming stays cheap.
+/// Selected areas: the frosted texture once ready, an opaque cover until then.
+/// The original text must not show through while patches are being prepared.
 class SelectionPainter extends CustomPainter {
   SelectionPainter({
     required this.regions,
@@ -1087,7 +1284,7 @@ class SelectionPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
     canvas.scale(size.width / imageWidth, size.height / imageHeight);
-    final placeholder = Paint()..color = Colors.white.withValues(alpha: .42);
+    final placeholder = Paint()..color = const Color(0xFFE2E8E5);
     final image = Paint()..filterQuality = FilterQuality.low;
     for (final region in regions) {
       final patch = patches[region];

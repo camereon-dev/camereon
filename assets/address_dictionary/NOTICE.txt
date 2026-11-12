@@ -1,0 +1,18 @@
+camereon address dictionary
+
+出典：「アドレス・ベース・レジストリ 全国 町字マスター」（デジタル庁）
+https://dataset.address-br.digital.go.jp/documents/b80e77a0e2d24e5692be4af885eb3de7
+https://data.address-br.digital.go.jp/mt_town/mt_town_all.csv.zip
+
+上記データをcamereonが加工して作成しました。
+加工内容：地名の抽出・重複除去、数字・記号だけの項目と漢字以外の1文字の地名・省略表記の除外、行政区分の接尾辞や字・大字・小字の接頭辞を省いた別表記の追加、検索用バイナリへの変換。
+デジタル庁が作成した未加工データではありません。
+
+データ利用規約：
+https://www.digital.go.jp/policies/base_registry_address_tos
+公共データ利用規約（第1.0版）PDL1.0
+カタログのライセンス表示：Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+
+データの更新時点と取得ファイルのSHA-256は、同梱のmanifest.jsonを参照してください。
+本辞書は住所候補を検出するためのものです。所在地の実在や最新性、認識精度を保証するものではありません。
