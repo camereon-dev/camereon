@@ -38,7 +38,12 @@ void main() {
         await File('${dir.path}/$id.jpg').copy(temp.path);
         final opened = Stopwatch()..start();
         await tester.pumpWidget(
-          MaterialApp(home: CapturedPhotoScreen(photo: XFile(temp.path))),
+          MaterialApp(
+            home: CapturedPhotoScreen(
+              includeOtherCandidates: true,
+              photo: XFile(temp.path),
+            ),
+          ),
         );
         // Pump until every detector has finished (status leaves 検出中).
         Future<void> pumpUntil(bool Function() done, Duration limit) async {

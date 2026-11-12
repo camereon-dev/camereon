@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:camereon/app.dart';
+import 'package:camereon/features/camera/captured_photo_screen.dart';
+import 'package:camereon/core/detection/place_name_dictionary.dart';
+import 'package:camereon/core/detection/region_detector.dart';
+import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:camereon/features/camera/glass_photo_chrome.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -185,6 +189,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(camera.captureOrientations, [DeviceOrientation.landscapeRight]);
     expect(camera.pictures, 1);
+    expect(
+      tester
+          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
+          .startWithConfirmation,
+      isTrue,
+    );
   });
 
   testWidgets('向きが届かない端末（iOS）では撮影向きを固定しない', (tester) async {
@@ -198,6 +208,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(camera.pictures, 1);
+    expect(
+      tester
+          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
+          .startWithConfirmation,
+      isTrue,
+    );
     expect(camera.captureOrientations, isEmpty);
   });
 
@@ -215,6 +231,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(camera.pictures, 1);
+    expect(
+      tester
+          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
+          .startWithConfirmation,
+      isTrue,
+    );
     expect(camera.disposed, contains(0));
     expect(find.byTooltip('撮り直す'), findsOneWidget);
 
@@ -317,6 +339,24 @@ void main() {
 
   for (final denied in [false, true]) {
     testWidgets('カメラ${denied ? '権限なし' : 'なし'}でもサンプルを編集できる', (tester) async {
+      await tester.runAsync(() => PlaceNameDictionary.load());
+      const ocr = MethodChannel('dev.camereon/japanese_ocr');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        ocr,
+        (_) async => {
+          'lines': [
+            [
+              {
+                'text': '東京都',
+                'box': [80, 329, 150, 356],
+              },
+            ],
+          ],
+        },
+      );
+      addTearDown(() => messenger.setMockMethodCallHandler(ocr, null));
       useCamera(
         FakeCameraPlatform(
           cameras: denied ? const [_back] : const [],
@@ -347,6 +387,14 @@ void main() {
 
       expect(camera.pictures, 0);
       expect(find.bySemanticsLabel('撮影した写真'), findsOneWidget);
+      expect(
+        tester
+            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+            .selectedCandidates
+            .single
+            .kind,
+        CandidateKind.address,
+      );
       expect(find.byTooltip('保存前に確認'), findsOneWidget);
       final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
       await tester.dragFrom(rect.center, const Offset(30, 30));
@@ -354,6 +402,9 @@ void main() {
       expect(find.byType(FilterChip), findsNothing);
       expect(find.byTooltip('保存前に確認'), findsOneWidget);
       await tester.tap(find.byTooltip('撮り直す'));
+      await tester.pumpAndSettle();
+      expect(find.text('編集を破棄しますか？'), findsOneWidget);
+      await tester.tap(find.text('破棄する'));
       await tester.pumpAndSettle();
       expect(find.text('サンプルで試す'), findsOneWidget);
       expect(

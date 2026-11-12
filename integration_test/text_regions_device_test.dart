@@ -227,7 +227,11 @@ void main() {
       final saver = RecordingSaver();
       await tester.pumpWidget(
         MaterialApp(
-          home: CapturedPhotoScreen(photo: XFile(file.path), saver: saver),
+          home: CapturedPhotoScreen(
+            includeOtherCandidates: true,
+            photo: XFile(file.path),
+            saver: saver,
+          ),
         ),
       );
       await tester.pumpAndSettle();
