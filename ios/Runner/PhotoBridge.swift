@@ -34,6 +34,28 @@ final class PhotoBridge: NSObject, PHPickerViewControllerDelegate {
         }
         self?.save(bytes.data, result: result)
       }
+    // Only the flattened, redacted JPEG from Dart is ever shared.
+    FlutterMethodChannel(name: "dev.camereon/photo_share", binaryMessenger: messenger)
+      .setMethodCallHandler { [weak self] call, result in
+        switch call.method {
+        case "share":
+          guard let bytes = (call.arguments as? [String: Any])?["bytes"] as? FlutterStandardTypedData
+          else {
+            result(false)
+            return
+          }
+          self?.share(bytes.data, result: result)
+        case "open":
+          // iOS cannot open one specific asset; Photos opens on recent items.
+          guard let url = URL(string: "photos-redirect://") else {
+            result(false)
+            return
+          }
+          UIApplication.shared.open(url, options: [:]) { result($0) }
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
     // Also exercised by device tests with oriented/HEIC inputs.
     FlutterMethodChannel(name: "dev.camereon/image_normalizer", binaryMessenger: messenger)
       .setMethodCallHandler { [weak self] call, result in
@@ -154,6 +176,48 @@ final class PhotoBridge: NSObject, PHPickerViewControllerDelegate {
     CGImageDestinationAddImage(destination, clean, nil)
     guard CGImageDestinationFinalize(destination) else { throw PhotoError.invalid }
     return output as Data
+  }
+
+  private static func topViewController() -> UIViewController? {
+    guard
+      var presenter = UIApplication.shared.connectedScenes
+        .compactMap({ $0 as? UIWindowScene }).flatMap({ $0.windows })
+        .first(where: { $0.isKeyWindow })?.rootViewController
+    else { return nil }
+    while let presented = presenter.presentedViewController { presenter = presented }
+    return presenter
+  }
+
+  /// Share sheet over a temporary JPEG file, so X, Messages and "Save to
+  /// Files" all receive a real image file. The file is removed afterwards.
+  private func share(_ bytes: Data, result: @escaping FlutterResult) {
+    guard bytes.count >= 4, bytes.count <= 128 * 1024 * 1024, bytes[0] == 0xFF, bytes[1] == 0xD8,
+      let presenter = Self.topViewController()
+    else {
+      result(false)
+      return
+    }
+    let file = FileManager.default.temporaryDirectory
+      .appendingPathComponent("camereon_\(UUID().uuidString).jpg")
+    do {
+      try bytes.write(to: file, options: [.atomic, .completeFileProtection])
+    } catch {
+      result(false)
+      return
+    }
+    let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+    sheet.completionWithItemsHandler = { _, _, _, _ in
+      try? FileManager.default.removeItem(at: file)
+    }
+    if let popover = sheet.popoverPresentationController {
+      // iPad: anchor near the bottom bar, where the share button is.
+      let bounds = presenter.view.bounds
+      popover.sourceView = presenter.view
+      popover.sourceRect = CGRect(x: bounds.midX, y: bounds.maxY - 80, width: 1, height: 1)
+      popover.permittedArrowDirections = []
+    }
+    presenter.present(sheet, animated: true)
+    result(true)
   }
 
   private func save(_ bytes: Data, result: @escaping FlutterResult) {
