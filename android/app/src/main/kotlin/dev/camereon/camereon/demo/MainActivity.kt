@@ -21,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var faces: MlKitFaceDetectionHandler? = null
+    private var textRecognition: MlKitTextRecognitionHandler? = null
     private var textRegionChannel: TextRegionChannel? = null
     private var objectRegionChannel: ObjectRegionChannel? = null
     private var deviceRotation: DeviceRotationChannel? = null
@@ -35,6 +36,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        textRecognition = MlKitTextRecognitionHandler(flutterEngine.dartExecutor.binaryMessenger)
         faces = MlKitFaceDetectionHandler(flutterEngine.dartExecutor.binaryMessenger)
         textRegionChannel = TextRegionChannel(this, flutterEngine)
         objectRegionChannel = ObjectRegionChannel(this, flutterEngine)

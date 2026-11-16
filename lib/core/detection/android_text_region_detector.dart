@@ -9,15 +9,25 @@ import 'region_detector.dart';
 /// Bundled PP-OCRv5 mobile detector. Only bounding boxes come back over the
 /// bridge; the photo crosses it as raw RGBA pixels (no PNG round trip).
 class AndroidTextRegionDetector implements RegionDetector {
-  AndroidTextRegionDetector({MethodChannel? channel, this.detailed = true})
-    : _channel = channel ?? const MethodChannel('dev.camereon/text_regions');
+  AndroidTextRegionDetector({
+    MethodChannel? channel,
+    this.detailed = true,
+    this.emailMaskingEnabled = true,
+  }) : _channel = channel ?? const MethodChannel('dev.camereon/text_regions');
+
   final MethodChannel _channel;
 
   /// The legacy whole-image pass remains available for controlled comparisons.
   final bool detailed;
+  final bool emailMaskingEnabled;
+
   int get _maxSide => detailed ? 2560 : 960;
   int get _maxCandidates => detailed ? 500 : 200;
   bool _working = false;
+
+  static final RegExp _emailRegExp = RegExp(
+    r'[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.]+',
+  );
 
   @override
   Future<RegionDetection> detect(SourcePhoto photo) async {
@@ -29,8 +39,6 @@ class AndroidTextRegionDetector implements RegionDetector {
     }
     _working = true;
     try {
-      // Bound the transfer size; work from the exact same oriented pixels as
-      // the editor, not the camera JPEG's metadata.
       final pixels = await rawThumbnail(photo, _maxSide);
       final result = await _channel.invokeMapMethod<String, dynamic>('detect', {
         'bytes': pixels.bytes,
@@ -62,6 +70,8 @@ class AndroidTextRegionDetector implements RegionDetector {
       final regions = <HideRegion>{};
       final polygons = result['polygons'] as List?;
       final boxes = result['boxes'] as List;
+      final texts = result['texts'] as List?;
+
       for (var index = 0; index < boxes.length; index++) {
         final box = boxes[index];
         if (box is! List || box.length != 4 || box.any((v) => v is! num)) {
@@ -77,23 +87,47 @@ class AndroidTextRegionDetector implements RegionDetector {
             coordinates[1] >= coordinates[3]) {
           throw const RegionDetectionException();
         }
-        final rect = ui.Rect.fromLTRB(
-          coordinates[0] * photo.width / width,
-          coordinates[1] * photo.height / height,
-          coordinates[2] * photo.width / width,
-          coordinates[3] * photo.height / height,
-        );
-        // The outline follows the text's slant; the box stays its bounds.
-        final region =
-            _polygon(polygons?[index], width, height, photo) ??
-            HideRegion.fromRect(
-              rect,
-              imageWidth: photo.width,
-              imageHeight: photo.height,
-            );
+
+        final isEmail =
+            emailMaskingEnabled &&
+            texts != null &&
+            index < texts.length &&
+            _textMatchesEmail(texts[index]?.toString() ?? '');
+
+        HideRegion? region;
+        if (isEmail) {
+          const padding = 6.0;
+          final paddedRect = ui.Rect.fromLTRB(
+            (coordinates[0] - padding) * photo.width / width,
+            (coordinates[1] - padding) * photo.height / height,
+            (coordinates[2] + padding) * photo.width / width,
+            (coordinates[3] + padding) * photo.height / height,
+          );
+          region = HideRegion.fromRect(
+            paddedRect,
+            imageWidth: photo.width,
+            imageHeight: photo.height,
+          );
+        } else {
+          final rect = ui.Rect.fromLTRB(
+            coordinates[0] * photo.width / width,
+            coordinates[1] * photo.height / height,
+            coordinates[2] * photo.width / width,
+            coordinates[3] * photo.height / height,
+          );
+          region =
+              _polygon(polygons?[index], width, height, photo) ??
+              HideRegion.fromRect(
+                rect,
+                imageWidth: photo.width,
+                imageHeight: photo.height,
+              );
+        }
+
         if (region == null) throw const RegionDetectionException();
         regions.add(region);
       }
+
       return RegionDetection(
         candidates: [
           for (final region in regions)
@@ -107,6 +141,10 @@ class AndroidTextRegionDetector implements RegionDetector {
     } finally {
       _working = false;
     }
+  }
+
+  bool _textMatchesEmail(String text) {
+    return _emailRegExp.hasMatch(text);
   }
 
   HideRegion? _polygon(

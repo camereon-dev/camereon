@@ -1,6 +1,8 @@
 import Flutter
 import ImageIO
 import MLKitFaceDetection
+import MLKitTextRecognition
+import MLKitTextRecognitionJapanese
 import MLKitVision
 import UIKit
 
@@ -13,7 +15,7 @@ final class DetectionBridge {
   private var memoryObserver: NSObjectProtocol?
 
   init(messenger: FlutterBinaryMessenger) {
-    for kind in ["face_detection", "text_regions", "object_regions"] {
+    for kind in ["face_detection", "text_regions", "object_regions", "text_recognition"] {
       FlutterMethodChannel(name: "dev.camereon/\(kind)", binaryMessenger: messenger)
         .setMethodCallHandler { [weak self] call, result in
           guard let self else {
@@ -27,7 +29,7 @@ final class DetectionBridge {
             }
             return
           }
-          guard call.method == "detect" else {
+          guard call.method == "detect" || call.method == "recognize" else {
             result(FlutterMethodNotImplemented)
             return
           }
@@ -39,20 +41,20 @@ final class DetectionBridge {
           self.worker.async {
             let response: Any
             do {
-              response = try autoreleasepool { () -> [String: Any] in
+              response = try autoreleasepool { () -> Any in
                 switch kind {
                 case "face_detection": return try Self.faces(arguments)
                 case "text_regions":
                   let detailed = arguments["detailed"] as? Bool ?? true
                   return try TextRegionDetector(runtime: self.runtime).detect(
                     PixelImage(arguments, limit: detailed ? 2560 : 960), detailed: detailed)
+                case "text_recognition": return try Self.recognize(arguments)
                 default:
                   return try ObjectRegionDetector(runtime: self.runtime).detect(
                     PixelImage(arguments, limit: 1600))
                 }
               }
             } catch {
-              // No image bytes, OCR text or native exception payloads in logs.
               response = FlutterError(
                 code: "detectionFailed", message: "候補を検出できませんでした", details: nil)
             }
@@ -63,6 +65,7 @@ final class DetectionBridge {
           }
         }
     }
+    // ... rest of init ...
     memoryObserver = NotificationCenter.default.addObserver(
       forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
     ) { [weak self] _ in
@@ -70,6 +73,24 @@ final class DetectionBridge {
       self.worker.async { self.runtime.release() }
     }
   }
+
+  private static func recognize(_ arguments: [String: Any]) throws -> Any {
+    guard let bytes = arguments["bytes"] as? FlutterStandardTypedData,
+          let width = arguments["width"] as? Int, let height = arguments["height"] as? Int,
+          let uiImage = UIImage(data: bytes.data) else { throw DetectionError() }
+
+    let recognizer = TextRecognizer.textRecognizer(options: JapaneseTextRecognizerOptions())
+    let image = VisionImage(image: uiImage)
+    image.orientation = .up
+
+    let text = try recognizer.results(in: image)
+    return text.blocks.map { block in
+        ["text": block.text,
+         "box": [block.frame.minX, block.frame.minY, block.frame.maxX, block.frame.maxY]]
+    }
+  }
+  // ... rest of class ...
+
 
   deinit {
     if let memoryObserver { NotificationCenter.default.removeObserver(memoryObserver) }

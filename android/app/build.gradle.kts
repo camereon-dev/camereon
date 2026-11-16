@@ -110,3 +110,4 @@ dependencies {
     // Detection model only: Apache-2.0 PP-OCRv5 + MIT ONNX Runtime.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
 }
+    implementation("com.google.mlkit:text-recognition:16.0.1")

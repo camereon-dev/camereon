@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../detection/email_text_recognizer.dart';
+
 import '../../core/analysis/face_detection.dart';
 import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
 import '../../core/detection/android_text_region_detector.dart';
@@ -74,8 +76,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   );
   late final FrostedPreviewer _previewer =
       widget.previewer ?? FrostedPreviewer();
-  // Frosted textures per selected region; drawn as-is while zooming.
   final Map<HideRegion, FrostedPatch> _patches = {};
+  late final _emailRecognizer = EmailTextRecognizer();
+
   final Set<HideRegion> _pendingPatches = {};
   Timer? _patchTimer;
   // Long-press stroke: the first frame decides whether it selects or clears.
@@ -236,6 +239,22 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     _automaticDetectionStarted = true;
     unawaited(_faces.detect(source));
     unawaited(_detectAll(source));
+    unawaited(_autoDetectEmails(source));
+  }
+
+  Future<void> _autoDetectEmails(SourcePhoto source) async {
+    final emailRegions = await _emailRecognizer.detectEmailRegions(source);
+    if (!mounted || !identical(source, _source) || emailRegions.isEmpty) {
+      return;
+    }
+    setState(() {
+      for (final region in emailRegions) {
+        final candidate = RegionCandidate(kind: CandidateKind.text, region: region);
+        _candidates.add(candidate);
+        _selected.add(candidate);
+      }
+    });
+    _schedulePatches();
   }
 
   Future<void> _detectAll(SourcePhoto source) async {
