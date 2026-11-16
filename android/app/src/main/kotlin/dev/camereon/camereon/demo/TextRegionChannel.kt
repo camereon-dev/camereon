@@ -32,8 +32,19 @@ internal class TextRegionChannel(private val activity: Activity, engine: Flutter
                 } else {
                     executor.execute {
                         try {
-                            val detection = TextRegionDetector(activity.assets)
-                                .detect(bytes, width, height, detailed, tuning)
+                            // Independent failures: preserve PP-OCR text candidates if OCR fails,
+                            // and preserve phone candidates if the text-region model fails.
+                            val text = runCatching {
+                                TextRegionDetector(activity.assets).detect(bytes, width, height, detailed, tuning)
+                            }
+                            val phones = runCatching { PhoneRegionDetector().detect(bytes, width, height) }
+                            if (text.isFailure && phones.isFailure) throw IllegalStateException("Detection failed")
+                            val detection = (text.getOrNull() ?: mapOf(
+                                "width" to width, "height" to height, "boxes" to emptyList<List<Double>>()
+                            )).toMutableMap()
+                            detection["phoneBoxes"] = phones.getOrNull()?.boxes ?: emptyList<List<Double>>()
+                            detection["partial"] = detection["partial"] == true || text.isFailure || phones.isFailure
+                            detection["truncated"] = detection["truncated"] == true || phones.getOrNull()?.truncated == true
                             activity.runOnUiThread { if (!closed.get()) result.success(detection) }
                         } catch (error: Throwable) {
                             // Only the exception class leaves the process: no message, no image data.

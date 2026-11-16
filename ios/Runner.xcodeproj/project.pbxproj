@@ -24,6 +24,8 @@
 		A9B4DE366871A8D8252055A0 /* DetectionRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FC1C5903434FB5C0006218A /* DetectionRuntime.swift */; };
 		F779C300614667BFF25A871A /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B8D3BA4DFC12A71A47AF5499 /* assets */; };
 		FFD920909FE1E26D6789C414 /* TextRegionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 922062CF7214A765B21FB739 /* TextRegionDetector.swift */; };
+		916ED0D2F578DE1DF8C6642D /* PhoneNumberMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 681B99E9FA0B014A09037710 /* PhoneNumberMatcher.swift */; };
+		E34FF8EE7A5DFF8DE36EAA55 /* PhoneRegionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43455E8A142820C9185AED41 /* PhoneRegionDetector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +84,8 @@
 		CDD1B12B02E8FBF8B21C2318 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		F290AEB92DD3C334FD4BCB9A /* ObjectRegionDetector.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObjectRegionDetector.swift; sourceTree = "<group>"; };
 		FF42ABEE8D8A03DDDD6A4195 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		681B99E9FA0B014A09037710 /* PhoneNumberMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneNumberMatcher.swift; sourceTree = "<group>"; };
+		43455E8A142820C9185AED41 /* PhoneRegionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneRegionDetector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -184,6 +188,8 @@
 				1153DCBCDE6A3D1A39C4F68C /* PhotoBridge.swift */,
 				8B0EC63303CE37AAB91D458F /* TextGeometry.swift */,
 				1FC1C5903434FB5C0006218A /* DetectionRuntime.swift */,
+				681B99E9FA0B014A09037710 /* PhoneNumberMatcher.swift */,
+				43455E8A142820C9185AED41 /* PhoneRegionDetector.swift */,
 				922062CF7214A765B21FB739 /* TextRegionDetector.swift */,
 				F290AEB92DD3C334FD4BCB9A /* ObjectRegionDetector.swift */,
 				0F68B826A70A3668869F3EF5 /* DetectionBridge.swift */,
@@ -410,6 +416,8 @@
 				611BE71D896BAC1A7BE5598B /* PhotoBridge.swift in Sources */,
 				2CDEE286267F1DED586D76EB /* TextGeometry.swift in Sources */,
 				A9B4DE366871A8D8252055A0 /* DetectionRuntime.swift in Sources */,
+				916ED0D2F578DE1DF8C6642D /* PhoneNumberMatcher.swift in Sources */,
+				E34FF8EE7A5DFF8DE36EAA55 /* PhoneRegionDetector.swift in Sources */,
 				FFD920909FE1E26D6789C414 /* TextRegionDetector.swift in Sources */,
 				7BA1973B421665E4E9CEE279 /* ObjectRegionDetector.swift in Sources */,
 				78D83B6620C2E3458D7C5802 /* DetectionBridge.swift in Sources */,

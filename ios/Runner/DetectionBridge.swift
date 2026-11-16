@@ -44,8 +44,23 @@ final class DetectionBridge {
                 case "face_detection": return try Self.faces(arguments)
                 case "text_regions":
                   let detailed = arguments["detailed"] as? Bool ?? true
-                  return try TextRegionDetector(runtime: self.runtime).detect(
-                    PixelImage(arguments, limit: detailed ? 2560 : 960), detailed: detailed)
+                  let image = try PixelImage(arguments, limit: detailed ? 2560 : 960)
+                  var detection: [String: Any] = [
+                    "width": image.width, "height": image.height, "boxes": [[Double]](),
+                  ]
+                  var textFailed = false
+                  var phoneFailed = false
+                  do {
+                    detection = try TextRegionDetector(runtime: self.runtime).detect(image, detailed: detailed)
+                  } catch { textFailed = true }
+                  do {
+                    let phones = try PhoneRegionDetector().detect(image)
+                    detection["phoneBoxes"] = phones.boxes
+                    detection["truncated"] = (detection["truncated"] as? Bool ?? false) || phones.truncated
+                  } catch { phoneFailed = true }
+                  if textFailed && phoneFailed { throw DetectionError() }
+                  detection["partial"] = (detection["partial"] as? Bool ?? false) || textFailed || phoneFailed
+                  return detection
                 default:
                   return try ObjectRegionDetector(runtime: self.runtime).detect(
                     PixelImage(arguments, limit: 1600))

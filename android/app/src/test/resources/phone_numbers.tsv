@@ -1,0 +1,30 @@
+mobile	TEL: 090-0000-0000	090-0000-0000
+landline	Name TEL: 03-0000-0000 Address	03-0000-0000
+long-area	01234-0-0000	01234-0-0000
+toll-free	0120-000-000	0120-000-000
+toll-free-0800	0800-000-0000	0800-000-0000
+ip	050 0000 0000	050 0000 0000
+no-hyphens	09000000000	09000000000
+fullwidth	電話：０９０－００００－００００	０９０－００００－００００
+unicode-dash	090ー0000−0000	090ー0000−0000
+international-mobile	+81 90-0000-0000	+81 90-0000-0000
+international-landline	+81-3-0000-0000	+81-3-0000-0000
+international-optional-zero	+81 (0)90-0000-0000	+81 (0)90-0000-0000
+two-phones	090-0000-0000 03-0000-0000	090-0000-0000|03-0000-0000
+parentheses	(03) 0000-0000	(03) 0000-0000
+emoji	📞 090-0000-0000 名前	090-0000-0000
+postal	〒000-0000	-
+date	2026-11-16	-
+time	09:00-18:00	-
+short	090-000-0000	-
+long	090000000000	-
+suffix	090-0000-0000-9	-
+card	4000-0000-0000-0000	-
+id	A09000000000	-
+id-suffix	09000000000A	-
+part-of-id	1234-090-0000-0000	-
+foreign	+44 20-0000-0000	-
+bad-international	+81 090-0000-0000	-
+empty		-
+plain-text	Name and address only	-
+attached-label	TEL(03)0000-0000	(03)0000-0000

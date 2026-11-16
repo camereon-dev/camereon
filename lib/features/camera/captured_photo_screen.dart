@@ -85,6 +85,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   List<RegionCandidate> _candidates = [];
   Set<RegionCandidate> _selected = {};
   final List<Set<RegionCandidate>> _history = [];
+  // Remember automatic choices, including phones the user subsequently reveals.
+  // A retry must never undo a user's tap or an undo operation.
+  final Set<HideRegion> _automaticallySeenPhones = {};
   final _photoTransform = TransformationController();
   // The confirmation image zooms on its own, starting from the whole photo.
   final _previewTransform = TransformationController();
@@ -280,7 +283,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                 CandidateKind.screen,
                 CandidateKind.vehicle,
               }
-            : {CandidateKind.text};
+            : {CandidateKind.text, CandidateKind.phone};
         _candidates = [
           for (final c in previous)
             if (!kinds.contains(c.kind) ||
@@ -293,7 +296,32 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         ];
         _truncated = _truncated || result.truncated;
         if (result.partial) _failedScans.add(objects);
+        if (!objects) {
+          final automatic = _candidates.where((c) {
+            if (c.kind != CandidateKind.phone) return false;
+            final r = c.region.toRect();
+            final seen = _automaticallySeenPhones.any((old) {
+              final previous = old.toRect();
+              final overlap = r.intersect(previous);
+              if (overlap.isEmpty) return false;
+              final intersection = overlap.width * overlap.height;
+              return intersection /
+                      (r.width * r.height +
+                          previous.width * previous.height -
+                          intersection) >
+                  .5;
+            });
+            if (seen) return false;
+            _automaticallySeenPhones.add(c.region);
+            return true;
+          }).toSet();
+          if (automatic.isNotEmpty) {
+            _history.add(Set.of(_selected));
+            _selected = _selected.union(automatic);
+          }
+        }
       });
+      if (!objects) _schedulePatches();
     } catch (_) {
       if (mounted && epoch == _detectionEpoch) {
         setState(() => _failedScans.add(objects));
@@ -1129,6 +1157,10 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                   painter: SelectionPainter(
                     regions: List.unmodifiable(_redactions),
                     patches: Map.unmodifiable(_patches),
+                    opaqueRegions: {
+                      for (final c in _selected)
+                        if (c.kind == CandidateKind.phone) c.region,
+                    },
                     imageWidth: source.width,
                     imageHeight: source.height,
                   ),
@@ -1168,9 +1200,13 @@ class SelectionPainter extends CustomPainter {
     required this.imageWidth,
     required this.imageHeight,
     this.patches = const {},
+    this.opaqueRegions = const {},
   });
   final List<HideRegion> regions;
   final Map<HideRegion, FrostedPatch> patches;
+
+  /// Automatically hidden phones must not remain legible while a patch loads.
+  final Set<HideRegion> opaqueRegions;
   final int imageWidth;
   final int imageHeight;
 
@@ -1180,11 +1216,15 @@ class SelectionPainter extends CustomPainter {
     canvas.clipRect(Offset.zero & size);
     canvas.scale(size.width / imageWidth, size.height / imageHeight);
     final placeholder = Paint()..color = Colors.white.withValues(alpha: .42);
+    final opaquePlaceholder = Paint()..color = Colors.white;
     final image = Paint()..filterQuality = FilterQuality.low;
     for (final region in regions) {
       final patch = patches[region];
       if (patch == null) {
-        canvas.drawPath(region.toPath(), placeholder);
+        canvas.drawPath(
+          region.toPath(),
+          opaqueRegions.contains(region) ? opaquePlaceholder : placeholder,
+        );
       } else {
         canvas.drawImageRect(
           patch.image,

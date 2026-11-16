@@ -56,48 +56,59 @@ class AndroidTextRegionDetector implements RegionDetector {
           height <= 0 ||
           width > _maxSide ||
           height > _maxSide ||
-          (result['boxes'] as List).length > _maxCandidates) {
+          (result['boxes'] as List).length > _maxCandidates ||
+          (result['phoneBoxes'] != null &&
+              (result['phoneBoxes'] is! List ||
+                  (result['phoneBoxes'] as List).length > 100))) {
         throw const RegionDetectionException();
       }
-      final regions = <HideRegion>{};
-      final polygons = result['polygons'] as List?;
-      final boxes = result['boxes'] as List;
-      for (var index = 0; index < boxes.length; index++) {
-        final box = boxes[index];
-        if (box is! List || box.length != 4 || box.any((v) => v is! num)) {
-          throw const RegionDetectionException();
+      final regions = <CandidateKind, Set<HideRegion>>{};
+      for (final (kind, boxes, polygons) in <(CandidateKind, List, List?)>[
+        (
+          CandidateKind.text,
+          result['boxes'] as List,
+          result['polygons'] as List?,
+        ),
+        (CandidateKind.phone, result['phoneBoxes'] as List? ?? const [], null),
+      ]) {
+        for (var index = 0; index < boxes.length; index++) {
+          final box = boxes[index];
+          if (box is! List || box.length != 4 || box.any((v) => v is! num)) {
+            throw const RegionDetectionException();
+          }
+          final coordinates = box.cast<num>().map((v) => v.toDouble()).toList();
+          if (coordinates.any((v) => !v.isFinite) ||
+              coordinates[0] < 0 ||
+              coordinates[1] < 0 ||
+              coordinates[2] > width ||
+              coordinates[3] > height ||
+              coordinates[0] >= coordinates[2] ||
+              coordinates[1] >= coordinates[3]) {
+            throw const RegionDetectionException();
+          }
+          final rect = ui.Rect.fromLTRB(
+            coordinates[0] * photo.width / width,
+            coordinates[1] * photo.height / height,
+            coordinates[2] * photo.width / width,
+            coordinates[3] * photo.height / height,
+          );
+          // The outline follows the text's slant; the box stays its bounds.
+          final region =
+              _polygon(polygons?[index], width, height, photo) ??
+              HideRegion.fromRect(
+                rect,
+                imageWidth: photo.width,
+                imageHeight: photo.height,
+              );
+          if (region == null) throw const RegionDetectionException();
+          regions.putIfAbsent(kind, () => <HideRegion>{}).add(region);
         }
-        final coordinates = box.cast<num>().map((v) => v.toDouble()).toList();
-        if (coordinates.any((v) => !v.isFinite) ||
-            coordinates[0] < 0 ||
-            coordinates[1] < 0 ||
-            coordinates[2] > width ||
-            coordinates[3] > height ||
-            coordinates[0] >= coordinates[2] ||
-            coordinates[1] >= coordinates[3]) {
-          throw const RegionDetectionException();
-        }
-        final rect = ui.Rect.fromLTRB(
-          coordinates[0] * photo.width / width,
-          coordinates[1] * photo.height / height,
-          coordinates[2] * photo.width / width,
-          coordinates[3] * photo.height / height,
-        );
-        // The outline follows the text's slant; the box stays its bounds.
-        final region =
-            _polygon(polygons?[index], width, height, photo) ??
-            HideRegion.fromRect(
-              rect,
-              imageWidth: photo.width,
-              imageHeight: photo.height,
-            );
-        if (region == null) throw const RegionDetectionException();
-        regions.add(region);
       }
       return RegionDetection(
         candidates: [
-          for (final region in regions)
-            RegionCandidate(kind: CandidateKind.text, region: region),
+          for (final entry in regions.entries)
+            for (final region in entry.value)
+              RegionCandidate(kind: entry.key, region: region),
         ],
         truncated: result['truncated'] == true,
         partial: result['partial'] == true,

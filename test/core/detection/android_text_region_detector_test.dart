@@ -19,6 +19,95 @@ void main() {
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
   test(
+    'phone subranges are returned separately in original image coordinates',
+    () async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          'width': 200,
+          'height': 100,
+          'boxes': [
+            [10, 20, 190, 50],
+          ],
+          'phoneBoxes': [
+            [90.2, 20.2, 180.1, 49.1],
+            [90.2, 20.2, 180.1, 49.1],
+          ],
+        },
+      );
+      final result = await AndroidTextRegionDetector(channel: channel)
+          .detect(photo);
+      expect(result.candidates.map((c) => c.kind), [
+        CandidateKind.text,
+        CandidateKind.phone,
+      ]);
+      expect(
+        result.candidates.last.region,
+        HideRegion.fromRect(
+          const Rect.fromLTRB(180.4, 40.4, 360.2, 98.2),
+          imageWidth: 400,
+          imageHeight: 200,
+        ),
+      );
+    },
+  );
+
+  test(
+    'phone-only results survive text-model failure and stay marked partial',
+    () async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          'width': 400,
+          'height': 200,
+          'boxes': [],
+          'phoneBoxes': [
+            [100, 20, 300, 50],
+          ],
+          'partial': true,
+        },
+      );
+      final result = await AndroidTextRegionDetector(channel: channel)
+          .detect(photo);
+      expect(result.candidates.single.kind, CandidateKind.phone);
+      expect(result.partial, isTrue);
+    },
+  );
+
+  test(
+    'rejects malformed phone geometry and never accepts OCR text as a box',
+    () async {
+      for (final phones in [
+        'private text',
+        [
+          [0, 0, 500, 50],
+        ],
+        [
+          [0, 0, double.nan, 50],
+        ],
+        [
+          [10, 20, 10, 40],
+        ],
+        List.generate(101, (_) => [10, 20, 80, 40]),
+      ]) {
+        messenger.setMockMethodCallHandler(
+          channel,
+          (_) async => {
+            'width': 400,
+            'height': 200,
+            'boxes': [],
+            'phoneBoxes': phones,
+          },
+        );
+        await expectLater(
+          AndroidTextRegionDetector(channel: channel).detect(photo),
+          throwsA(isA<RegionDetectionException>()),
+        );
+      }
+    },
+  );
+
+  test(
     'maps thumbnail rectangles outward to source coordinates and deduplicates',
     () async {
       messenger.setMockMethodCallHandler(channel, (call) async {
