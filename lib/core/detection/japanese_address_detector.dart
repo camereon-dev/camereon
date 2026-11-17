@@ -82,12 +82,15 @@ class JapaneseAddressDetector implements RegionDetector {
         lines.add(glyphs);
       }
       return RegionDetection(
-        candidates: japaneseAddressCandidates(
-          lines,
-          photo.width,
-          photo.height,
-          dictionary: dictionary,
-        ),
+        candidates: [
+          ...japaneseAddressCandidates(
+            lines,
+            photo.width,
+            photo.height,
+            dictionary: dictionary,
+          ),
+          ...emailCandidates(lines, photo.width, photo.height),
+        ],
         truncated: response['truncated'] == true,
       );
     } catch (_) {
@@ -96,6 +99,83 @@ class JapaneseAddressDetector implements RegionDetector {
       _working = false;
     }
   }
+}
+
+final _email = RegExp(
+  r"[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
+  r"(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,63}",
+  caseSensitive: false,
+);
+final _emailLocalCharacter = RegExp(r"[A-Z0-9.!#$%&'*+/=?^_`{|}~-]");
+final _emailDomainCharacter = RegExp(r'[A-Z0-9-]');
+
+/// Detect emails from the same per-character OCR boxes used for addresses.
+/// Only matching glyph bounds are included, rather than the enclosing line.
+List<RegionCandidate> emailCandidates(
+  List<List<AddressGlyph>> lines,
+  int width,
+  int height,
+) {
+  final regions = <HideRegion>{};
+  for (final line in lines) {
+    final text = StringBuffer();
+    final positions = <Rect?>[];
+    Rect? previous;
+    for (final glyph in line) {
+      final normalized = String.fromCharCodes(
+        glyph.text.runes.map(
+          (r) => r >= 0xFF01 && r <= 0xFF5E ? r - 0xFEE0 : r,
+        ),
+      );
+      if (normalized.isEmpty) continue;
+      if (previous != null &&
+          glyph.bounds.left - previous.right > previous.height * .75) {
+        text.write(' ');
+        positions.add(null);
+      }
+      previous = glyph.bounds;
+      for (final character in normalized.split('')) {
+        text.write(character);
+        positions.add(RegExp(r'\s').hasMatch(character) ? null : glyph.bounds);
+      }
+    }
+
+    final value = text.toString();
+    for (final match in _email.allMatches(value)) {
+      final followedByDomainContinuation =
+          match.end < value.length &&
+          (_emailDomainCharacter.hasMatch(value[match.end]) ||
+              (value[match.end] == '.' &&
+                  match.end + 1 < value.length &&
+                  _emailDomainCharacter.hasMatch(value[match.end + 1])));
+      if ((match.start > 0 &&
+              _emailLocalCharacter.hasMatch(value[match.start - 1])) ||
+          followedByDomainContinuation) {
+        continue;
+      }
+      Rect? bounds;
+      var hasGap = false;
+      for (var i = match.start; i < match.end; i++) {
+        final glyphBounds = positions[i];
+        if (glyphBounds == null) {
+          hasGap = true;
+          break;
+        }
+        bounds = bounds?.expandToInclude(glyphBounds) ?? glyphBounds;
+      }
+      if (hasGap || bounds == null) continue;
+      final region = HideRegion.fromRect(
+        bounds.inflate(2),
+        imageWidth: width,
+        imageHeight: height,
+      );
+      if (region != null) regions.add(region);
+    }
+  }
+  return [
+    for (final region in regions)
+      RegionCandidate(kind: CandidateKind.email, region: region),
+  ];
 }
 
 class AddressGlyph {

@@ -9,6 +9,31 @@ import 'support/photo_editor.dart';
 export 'support/photo_editor.dart';
 
 void main() {
+  testWidgets('OCR email candidates are selected and individually toggleable', (
+    tester,
+  ) async {
+    final emails = FakeDetector()
+      ..candidates.add(
+        candidate(CandidateKind.email, const Rect.fromLTRB(40, 20, 100, 40)),
+      );
+    await open(
+      tester,
+      FakeProcessor(200, 100),
+      FakeSaver(),
+      addresses: emails,
+      includeOtherCandidates: false,
+    );
+
+    expect(emails.calls, 1);
+    expect(painter(tester).regions, [emails.candidates.single.region]);
+    expect(find.text('メール 1'), findsOneWidget);
+
+    await tapText(tester, 'メール 1');
+    expect(painter(tester).regions, isEmpty);
+    await tapText(tester, 'メール 1');
+    expect(painter(tester).regions, [emails.candidates.single.region]);
+  });
+
   testWidgets(
     'partial detection remains editable and retries without losing selection',
     (tester) async {

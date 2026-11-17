@@ -239,6 +239,39 @@ void main() {
     expect(found, hasLength(3));
     expect(found.map((c) => c.region.right), [42, 32, 42]);
   });
+  test(
+    'email masks cover only the matched characters with two-pixel padding',
+    () {
+      final found = emailCandidates(
+        [glyphs('連絡先:foo.bar+tag@example.co.jp、')],
+        1000,
+        200,
+      );
+      expect(found, hasLength(1));
+      expect(found.single.kind, CandidateKind.email);
+      expect(found.single.region.toRect(), const Rect.fromLTRB(48, 8, 302, 28));
+    },
+  );
+  test('email followed by a sentence period excludes the period', () {
+    final found = emailCandidates([glyphs('foo@example.com.')], 1000, 200);
+    expect(found, hasLength(1));
+    expect(found.single.region.toRect(), const Rect.fromLTRB(8, 8, 162, 28));
+  });
+  test(
+    'full-width email characters are recognized and invalid emails ignored',
+    () {
+      final fullWidth = emailCandidates([glyphs('ａ＠ｅｘａｍｐｌｅ．ｃｏｍ')], 1000, 200);
+      expect(fullWidth, hasLength(1));
+      expect(
+        emailCandidates(
+          [glyphs('name..part@example.c and user@invalid')],
+          1000,
+          200,
+        ),
+        isEmpty,
+      );
+    },
+  );
 
   const channel = MethodChannel('test/japanese_ocr');
   final messenger =
@@ -277,6 +310,34 @@ void main() {
       result.candidates.every((c) => c.kind == CandidateKind.address),
       isTrue,
     );
+  });
+  test('native OCR boxes produce an email candidate', () async {
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => {
+        'lines': [
+          for (final line in [glyphs('連絡先:x@a.co!')])
+            [
+              for (final g in line)
+                {
+                  'text': g.text,
+                  'box': [
+                    g.bounds.left,
+                    g.bounds.top,
+                    g.bounds.right,
+                    g.bounds.bottom,
+                  ],
+                },
+            ],
+        ],
+      },
+    );
+    final result = await JapaneseAddressDetector(channel: channel)
+        .detect(photo);
+    final email = result.candidates
+        .where((candidate) => candidate.kind == CandidateKind.email)
+        .single;
+    expect(email.region.toRect(), const Rect.fromLTRB(48, 8, 112, 28));
   });
   test('rejects malformed and out-of-image OCR geometry', () async {
     for (final box in [

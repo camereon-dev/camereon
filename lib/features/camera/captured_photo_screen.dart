@@ -85,6 +85,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   bool _addressDetecting = false;
   bool _addressFailed = false;
   final Set<HideRegion> _seenAddresses = {};
+  final Set<HideRegion> _seenEmails = {};
   late final RegionDetector _objectDetector =
       widget.objectDetector ?? const NoRegionDetector();
   late final _faces = FaceDetectionController(
@@ -252,7 +253,8 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
               .where(
                 (c) =>
                     widget.includeOtherCandidates ||
-                    c.kind == CandidateKind.address,
+                    c.kind == CandidateKind.address ||
+                    c.kind == CandidateKind.email,
               )
               .toList();
       setState(() {
@@ -260,7 +262,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         _candidates = List.of(initial);
         _selected = initial.toSet();
         _history.clear();
-        _seenAddresses.addAll(initial.map((c) => c.region));
+        _seenAddresses.addAll(
+          initial
+              .where((c) => c.kind == CandidateKind.address)
+              .map((c) => c.region),
+        );
+        _seenEmails.addAll(
+          initial
+              .where((c) => c.kind == CandidateKind.email)
+              .map((c) => c.region),
+        );
       });
       widget.onSourceLoaded?.call(source);
       unawaited(_previewer.load(source).then((_) => _refreshPatches()));
@@ -325,14 +336,21 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       if (!mounted || epoch != _detectionEpoch || _preview != null) return;
       setState(() {
         for (final c in result.candidates) {
-          if (c.kind != CandidateKind.address || _knownAddress(c.region)) {
+          if (c.kind != CandidateKind.address &&
+              c.kind != CandidateKind.email) {
             continue;
           }
-          _seenAddresses.add(c.region);
+          final known = c.kind == CandidateKind.address
+              ? _knownAddress(c.region)
+              : _knownEmail(c.region);
+          if (known) continue;
+          (c.kind == CandidateKind.address ? _seenAddresses : _seenEmails).add(
+            c.region,
+          );
           _candidates.add(c);
           _selected.add(c);
           // Automatic discovery isn't an undo step. Earlier user actions must
-          // not accidentally reveal addresses discovered after those actions.
+          // not accidentally reveal newly discovered sensitive text.
           for (final previous in _history) {
             previous.add(c);
           }
@@ -354,6 +372,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   }
 
   bool _knownAddress(HideRegion region) => _seenAddresses.any((old) {
+    final a = old.toRect();
+    final b = region.toRect();
+    final overlap = a.intersect(b);
+    final area = overlap.width > 0 && overlap.height > 0
+        ? overlap.width * overlap.height
+        : 0;
+    return area >= a.width * a.height * .7 && area >= b.width * b.height * .7;
+  });
+
+  bool _knownEmail(HideRegion region) => _seenEmails.any((old) {
     final a = old.toRect();
     final b = region.toRect();
     final overlap = a.intersect(b);
@@ -877,16 +905,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         : _scanning
         ? (widget.includeOtherCandidates
               ? '写真の中から、隠せる場所を探しています'
-              : '写真の中から住所と顔を探しています')
+              : '写真の中から住所・メール・顔を探しています')
         : _visibleCandidates.isEmpty
         ? (widget.includeOtherCandidates
               ? '別の写真で試してください'
-              : '住所・顔の候補がありません。別の写真で試してください')
+              : '住所・メール・顔の候補がありません。別の写真で試してください')
         : _selected.isEmpty
         ? '枠をタップ · 長押しでなぞって選択 · ピンチで拡大'
         : widget.includeOtherCandidates
         ? 'もう一度タップで解除 · 下のボタンで種類ごとに切替'
-        : 'もう一度タップで解除 · 「住所」「顔」で一括切替';
+        : 'もう一度タップで解除 · 「住所」「メール」「顔」で一括切替';
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       child: Text(
