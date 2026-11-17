@@ -7,9 +7,12 @@ import 'place_name_dictionary.dart';
 
 /// On-device Japanese OCR. Text stays in memory and is never logged or stored.
 class JapaneseAddressDetector implements RegionDetector {
-  JapaneseAddressDetector({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('dev.camereon/japanese_ocr');
+  JapaneseAddressDetector({
+    MethodChannel? channel,
+    this._nativeTimeout = const Duration(seconds: 60),
+  }) : _channel = channel ?? const MethodChannel('dev.camereon/japanese_ocr');
   final MethodChannel _channel;
+  final Duration _nativeTimeout;
   bool _working = false;
 
   @override
@@ -19,10 +22,16 @@ class JapaneseAddressDetector implements RegionDetector {
     try {
       final dictionary = await PlaceNameDictionary.load();
       final pixels = await rawThumbnail(photo, 2560);
-      final response = await _channel.invokeMapMethod<String, dynamic>(
-        'detect',
-        {'bytes': pixels.bytes, 'width': pixels.width, 'height': pixels.height},
-      );
+      final response = await _channel
+          .invokeMapMethod<String, dynamic>('detect', {
+            'bytes': pixels.bytes,
+            'width': pixels.width,
+            'height': pixels.height,
+          })
+          .timeout(
+            _nativeTimeout,
+            onTimeout: () => throw const RegionDetectionException(),
+          );
       if (response == null ||
           response['lines'] is! List ||
           (response['lines'] as List).length > 1000) {

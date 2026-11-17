@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:camereon/core/detection/japanese_address_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/photo_images.dart';
@@ -297,5 +299,18 @@ void main() {
         throwsA(isA<RegionDetectionException>()),
       );
     }
+  });
+  test('native call that never returns fails instead of hanging', () async {
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) => Completer<Object?>().future,
+    );
+    await expectLater(
+      JapaneseAddressDetector(
+        channel: channel,
+        nativeTimeout: const Duration(milliseconds: 50),
+      ).detect(photo),
+      throwsA(isA<RegionDetectionException>()),
+    );
   });
 }

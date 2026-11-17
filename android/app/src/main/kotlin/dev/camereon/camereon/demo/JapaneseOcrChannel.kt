@@ -18,14 +18,13 @@ internal class JapaneseOcrChannel(messenger: BinaryMessenger) {
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var closed = false
-    private var busy = false
 
     init {
         channel.setMethodCallHandler { call, result ->
             if (call.method != "detect") {
                 result.notImplemented()
-            } else if (closed || busy) {
-                result.error("busy", "住所を読み取れませんでした", null)
+            } else if (closed) {
+                result.error("closed", "住所を読み取れませんでした", null)
             } else {
                 val bytes = call.argument<ByteArray>("bytes")
                 val width = call.argument<Int>("width") ?: 0
@@ -34,7 +33,7 @@ internal class JapaneseOcrChannel(messenger: BinaryMessenger) {
                     bytes.size != width * height * 4) {
                     result.error("invalidImage", "画像を読み取れませんでした", null)
                 } else {
-                    busy = true
+                    // 単一ワーカーなので、前の読み取りが残っていても順番に処理する（撮り直しで失敗扱いにしない）
                     worker.execute {
                         var bitmap: Bitmap? = null
                         var recognizer: com.google.mlkit.vision.text.TextRecognizer? = null
@@ -61,13 +60,12 @@ internal class JapaneseOcrChannel(messenger: BinaryMessenger) {
                                 }
                             }
                             main.post {
-                                busy = false
                                 if (!closed) result.success(mapOf("lines" to lines,
                                     "truncated" to (allLines.size > 1000)))
                             }
-                        } catch (_: Exception) {
+                        } catch (_: Throwable) {
+                            // OutOfMemoryError などの Error でも Dart 側の呼び出しを必ず完了させる
                             main.post {
-                                busy = false
                                 if (!closed) result.error("failed", "住所を読み取れませんでした", null)
                             }
                         } finally {

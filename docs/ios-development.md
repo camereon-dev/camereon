@@ -5,7 +5,7 @@
 ## 環境と署名
 
 - `mise.toml` のFlutter/Dart、Xcode、CocoaPodsを使用する。
-- iOSの対応下限は15.5。実機での確認範囲は末尾の検証記録を参照。
+- iOSの対応下限は16.0（日本語の文字認識にVisionのリビジョン3が必要なため）。実機での確認範囲は末尾の検証記録を参照。
 - XcodeにApple Accountでサインインし、Personal Teamを選ぶ。iPhoneのDeveloper Modeを有効にし、Macを信頼する。
 - この構成はカメラ、写真の選択・追加、同梱モデルの端末内推論に特別な有料entitlementを要求しない。
 - `ios/Flutter/Signing.xcconfig` はGit管理外。次の内容を自分のTeam IDで作成する。
