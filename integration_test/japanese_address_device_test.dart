@@ -26,7 +26,7 @@ class RecordingSaver implements PhotoSaver {
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets('native Japanese OCR: only public addresses toggle and save', (
+  testWidgets('native OCR: address and phone masks toggle and save', (
     tester,
   ) async {
     final recorder = ui.PictureRecorder();
@@ -36,7 +36,7 @@ void main() {
     final rows = [
       '東京都新宿区西新宿2丁目8番1号',
       '大阪府大阪市北区中之島1丁目3番20号',
-      '山田花子 様',
+      'NAME SAMPLE',
       '電話 03-0000-1234',
       'お届け先 ご案内',
     ];
@@ -85,7 +85,9 @@ void main() {
     expect(overlay.candidates.length, greaterThanOrEqualTo(4));
     final count = overlay.candidates.length;
     expect(
-      overlay.candidates.every((c) => c.kind == CandidateKind.address),
+      overlay.candidates.every(
+        (c) => c.kind == CandidateKind.address || c.kind == CandidateKind.phone,
+      ),
       isTrue,
     );
     expect(overlay.selectedCandidates, hasLength(count));
@@ -104,6 +106,11 @@ void main() {
     final hidden = tester
         .widget<CandidateOverlay>(find.byType(CandidateOverlay))
         .selectedCandidates
+        .where(
+          (candidate) =>
+              candidate.kind == CandidateKind.address &&
+              candidate.region.top < 200,
+        )
         .last;
     await editorAction(tester, '保存前に確認');
     // pumpAndSettle only waits for frames, not native image processing or IO.
@@ -138,6 +145,6 @@ void main() {
     expect(difference(hidden.region.toRect()), greaterThan(15));
     expect(difference(first.region.toRect()), lessThan(5));
     expect(difference(const Rect.fromLTWH(40, 240, 500, 40)), lessThan(5));
-    expect(difference(const Rect.fromLTWH(40, 340, 500, 40)), lessThan(5));
+    expect(difference(const Rect.fromLTWH(40, 340, 500, 40)), greaterThan(5));
   });
 }

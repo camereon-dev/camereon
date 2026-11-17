@@ -12,6 +12,7 @@ import '../../core/analysis/face_detection.dart';
 import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
 import '../../core/detection/region_detector.dart';
 import '../../core/detection/japanese_address_detector.dart';
+import '../../core/detection/japanese_phone_number_detector.dart';
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
 import '../../core/photo/flutter_photo_processor.dart';
@@ -84,7 +85,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       widget.addressDetector ?? JapaneseAddressDetector();
   bool _addressDetecting = false;
   bool _addressFailed = false;
-  final Set<HideRegion> _seenAddresses = {};
+  final Map<CandidateKind, Set<HideRegion>> _seenOcrRegions = {};
   late final RegionDetector _objectDetector =
       widget.objectDetector ?? const NoRegionDetector();
   late final _faces = FaceDetectionController(
@@ -252,15 +253,18 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
               .where(
                 (c) =>
                     widget.includeOtherCandidates ||
-                    c.kind == CandidateKind.address,
+                    c.kind == CandidateKind.address ||
+                    c.kind == CandidateKind.phone,
               )
               .toList();
       setState(() {
         _source = source;
         _candidates = List.of(initial);
-        _selected = initial.toSet();
+        _selected = initial.where(_automaticallySelect).toSet();
         _history.clear();
-        _seenAddresses.addAll(initial.map((c) => c.region));
+        for (final c in initial) {
+          _seenOcrRegions.putIfAbsent(c.kind, () => {}).add(c.region);
+        }
       });
       widget.onSourceLoaded?.call(source);
       unawaited(_previewer.load(source).then((_) => _refreshPatches()));
@@ -325,16 +329,19 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       if (!mounted || epoch != _detectionEpoch || _preview != null) return;
       setState(() {
         for (final c in result.candidates) {
-          if (c.kind != CandidateKind.address || _knownAddress(c.region)) {
+          if ((c.kind != CandidateKind.address &&
+                  c.kind != CandidateKind.phone) ||
+              _knownOcrCandidate(c)) {
             continue;
           }
-          _seenAddresses.add(c.region);
+          _seenOcrRegions.putIfAbsent(c.kind, () => {}).add(c.region);
           _candidates.add(c);
-          _selected.add(c);
-          // Automatic discovery isn't an undo step. Earlier user actions must
-          // not accidentally reveal addresses discovered after those actions.
-          for (final previous in _history) {
-            previous.add(c);
+          if (_automaticallySelect(c)) {
+            _selected.add(c);
+            // New automatic masks must survive undo of an earlier user action.
+            for (final previous in _history) {
+              previous.add(c);
+            }
           }
         }
         _addressFailed = result.partial;
@@ -353,15 +360,20 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     }
   }
 
-  bool _knownAddress(HideRegion region) => _seenAddresses.any((old) {
-    final a = old.toRect();
-    final b = region.toRect();
-    final overlap = a.intersect(b);
-    final area = overlap.width > 0 && overlap.height > 0
-        ? overlap.width * overlap.height
-        : 0;
-    return area >= a.width * a.height * .7 && area >= b.width * b.height * .7;
-  });
+  bool _automaticallySelect(RegionCandidate candidate) =>
+      candidate is! PhoneNumberCandidate || candidate.automaticallySelected;
+
+  bool _knownOcrCandidate(RegionCandidate candidate) =>
+      (_seenOcrRegions[candidate.kind] ?? const <HideRegion>{}).any((old) {
+        final a = old.toRect();
+        final b = candidate.region.toRect();
+        final overlap = a.intersect(b);
+        final area = overlap.width > 0 && overlap.height > 0
+            ? overlap.width * overlap.height
+            : 0;
+        return area >= a.width * a.height * .7 &&
+            area >= b.width * b.height * .7;
+      });
 
   Future<void> _detect({bool objects = false}) async {
     final source = _source;
@@ -886,7 +898,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         ? '枠をタップ · 長押しでなぞって選択 · ピンチで拡大'
         : widget.includeOtherCandidates
         ? 'もう一度タップで解除 · 下のボタンで種類ごとに切替'
-        : 'もう一度タップで解除 · 「住所」「顔」で一括切替';
+        : 'もう一度タップで解除 · 「住所」「電話番号」「顔」で一括切替';
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
       child: Text(
