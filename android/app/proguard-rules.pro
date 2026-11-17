@@ -1,6 +1,3 @@
-# ONNX Runtime uses JNI. Preserve class and method names in release builds.
--keep class ai.onnxruntime.** { *; }
-
 # ML Kit finds its component registrars through manifest meta-data and creates
 # them by reflection with the default constructor. The consumer rule only keeps
 # the classes, and R8 full mode then drops the constructor, so

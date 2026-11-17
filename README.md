@@ -16,7 +16,7 @@ iPhoneはMacからPersonal Teamで直接インストールする。[導入・再
 
 撮影後の自動検出は [オンデバイス解析の設計案](docs/ai-analysis-design.md) を参照する。OCR と VLM の単独検証、共通の入出力、本体への結合方針をまとめている。
 
-Androidの人物・画面検出、別IDのAPKビルド・インストールは [Android検出器プレビュー](docs/android-detectors.md) を参照する。Gemmaの過去の検証は [Gemma 4 組み込み手順](docs/gemma-integration.md) に残す。
+人物・画面・車両・一般文字の検出（ONNX Runtime、YOLO、PP-OCR）と Gemma による写真の説明は、アプリから削除した。過去の検証記録は [Android検出器プレビュー](docs/android-detectors.md) と [Gemma 4 組み込み手順](docs/gemma-integration.md) に残すが、手順は現在のコードでは動かない。現在の検出は日本語の住所（OCR と地名辞書）と顔だけ。
 
 ## 写真を用意せずに試す
 

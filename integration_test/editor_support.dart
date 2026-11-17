@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/photo_images.dart';
@@ -52,4 +55,21 @@ class CoordinateFixtureDetector implements RegionDetector {
       ),
     ],
   );
+}
+
+/// Size Flutter itself gets when it decodes [bytes] (EXIF orientation applied).
+Future<({int width, int height})> instantiateDecodedSize(
+  Uint8List bytes,
+) async {
+  final codec = await ui.instantiateImageCodec(bytes);
+  try {
+    final frame = await codec.getNextFrame();
+    try {
+      return (width: frame.image.width, height: frame.image.height);
+    } finally {
+      frame.image.dispose();
+    }
+  } finally {
+    codec.dispose();
+  }
 }
