@@ -17,7 +17,10 @@ class PhoneNumberCandidate extends RegionCandidate {
   final bool automaticallySelected;
 }
 
-final _numbers = RegExp(r'(?:\+[0-9]|\([0-9]|[0-9])(?:[0-9 ()-]*[0-9])?');
+final _numbers = RegExp(
+  r'(?:\+[0-9Oo]|\([0-9Oo]|[0-9Oo])(?:[0-9Oo ()-]*[0-9Oo])?',
+);
+typedef _PhoneLine = ({String text, List<Rect?> positions, Rect bounds});
 const _phoneLabels = r'電話番号|携帯電話|携帯番号|電話|携帯|TEL(?:EPHONE)?|PHONE|連絡先';
 final _phoneLabel = RegExp(
   '(?:$_phoneLabels)(?:は)?[ :：.]*\$',
@@ -42,9 +45,7 @@ String _normalize(String text) => String.fromCharCodes([
       unit,
 ]);
 
-({String text, List<Rect?> positions, Rect bounds}) _line(
-  List<PhoneGlyph> glyphs,
-) {
+_PhoneLine _line(List<PhoneGlyph> glyphs) {
   final text = StringBuffer();
   final positions = <Rect?>[];
   Rect? previous;
@@ -53,12 +54,17 @@ String _normalize(String text) => String.fromCharCodes([
     final r = glyph.bounds;
     if (r.isEmpty || !r.isFinite) continue;
     bounds = bounds == null ? r : bounds.expandToInclude(r);
-    if (previous != null &&
-        r.left - previous.right >
-            math.max(24, math.max(r.height, previous.height) * 1.5)) {
-      // A separate column must not become part of this phone number or label.
-      text.write('\t');
-      positions.add(null);
+    if (previous != null) {
+      final height = math.max(r.height, previous.height);
+      final gap = r.left - previous.right;
+      if (!_sameRow(previous, r) || gap > height) {
+        text.write('\t');
+        positions.add(null);
+      } else if (gap > height * .25) {
+        // Keep an OCR gap visible so fragment length checks can inspect it.
+        text.write(' ');
+        positions.add(null);
+      }
     }
     final value = _normalize(glyph.text);
     text.write(value);
@@ -73,8 +79,117 @@ String _normalize(String text) => String.fromCharCodes([
 }
 
 String? _numberDigits(String raw) {
-  final digits = raw.replaceAll(RegExp(r'[+ ()\-]'), '');
+  // Correct O/o only inside number-like runs, never in the source OCR text.
+  if (!RegExp(r'[0-9]').hasMatch(raw)) return null;
+  final digits = raw
+      .replaceAll(RegExp(r'[Oo]'), '0')
+      .replaceAll(RegExp(r'[+ ()\-]'), '');
   return RegExp(r'^[0-9]+$').hasMatch(digits) ? digits : null;
+}
+
+bool _sameRow(Rect a, Rect b) =>
+    math.min(a.bottom, b.bottom) - math.max(a.top, b.top) >=
+    math.min(a.height, b.height) * .5;
+
+Rect? _rangeBounds(_PhoneLine line, int start, int end) {
+  Rect? box;
+  for (final position in line.positions.sublist(start, end)) {
+    if (position != null) {
+      box = box == null ? position : box.expandToInclude(position);
+    }
+  }
+  return box;
+}
+
+bool _nearby(Rect a, Rect b) =>
+    _sameRow(a, b) &&
+    b.left >= a.right - 2 &&
+    b.left - a.right <= math.max(a.height, b.height);
+
+// OCR may return parts of one printed row as separate observations. Join only
+// a trailing numeric fragment and a numeric-only observation of 3+ digits each.
+List<_PhoneLine> _joinNearbyLines(List<_PhoneLine> lines) {
+  final joined = <_PhoneLine>[];
+  final consumed = <int>{};
+  for (var i = 0; i < lines.length; i++) {
+    if (consumed.contains(i)) continue;
+    var current = lines[i];
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (var j = i + 1; j < lines.length; j++) {
+        if (consumed.contains(j)) continue;
+        final other = lines[j];
+        if (!_sameRow(current.bounds, other.bounds)) continue;
+        _PhoneLine? merged;
+        for (final pair in [(current, other), (other, current)]) {
+          final (left, right) = pair;
+          final leftMatches = _numbers.allMatches(left.text).toList();
+          final rightMatch = _numbers.firstMatch(right.text);
+          if (leftMatches.isEmpty || rightMatch == null) continue;
+          final last = leftMatches.last;
+          if (!RegExp(r'^[ ()-]*$').hasMatch(left.text.substring(last.end)) ||
+              !RegExp(r'^[ ()-]*$')
+                  .hasMatch(right.text.substring(0, rightMatch.start)) ||
+              right.text.substring(rightMatch.end).trim().isNotEmpty) {
+            continue;
+          }
+          final a = _numberDigits(last.group(0)!);
+          final b = _numberDigits(rightMatch.group(0)!);
+          if (a == null || b == null || a.length < 3 || b.length < 3) continue;
+          final leftBox = _rangeBounds(left, last.start, last.end);
+          final rightBox = _rangeBounds(
+            right,
+            rightMatch.start,
+            rightMatch.end,
+          );
+          if (leftBox == null ||
+              rightBox == null ||
+              !_nearby(leftBox, rightBox)) {
+            continue;
+          }
+          merged = (
+            text: '${left.text} ${right.text}',
+            positions: [...left.positions, null, ...right.positions],
+            bounds: left.bounds.expandToInclude(right.bounds),
+          );
+          break;
+        }
+        if (merged == null) continue;
+        current = merged;
+        consumed.add(j);
+        changed = true;
+        break;
+      }
+    }
+    joined.add(current);
+  }
+  return joined;
+}
+
+// A space joins numeric chunks only if each has 3+ digits and their boxes are
+// close on the same row. Tabs preserve boundaries without shifting offsets.
+String _numberText(_PhoneLine line) {
+  final units = line.text.codeUnits.toList();
+  for (final gap in RegExp(r' +').allMatches(line.text)) {
+    final before = RegExp(r'[0-9Oo]+$')
+        .firstMatch(line.text.substring(0, gap.start));
+    final after = RegExp(r'^[0-9Oo]+').firstMatch(line.text.substring(gap.end));
+    if (before == null || after == null) continue;
+    final a = _rangeBounds(line, before.start, gap.start);
+    final b = _rangeBounds(line, gap.end, gap.end + after.end);
+    if (before.group(0)!.length >= 3 &&
+        after.group(0)!.length >= 3 &&
+        a != null &&
+        b != null &&
+        _nearby(a, b)) {
+      continue;
+    }
+    for (var i = gap.start; i < gap.end; i++) {
+      units[i] = 9;
+    }
+  }
+  return String.fromCharCodes(units);
 }
 
 bool _automaticallyMaskNumber(String number) {
@@ -92,10 +207,10 @@ List<PhoneNumberCandidate> japanesePhoneNumberCandidates(
   int imageHeight,
 ) {
   final result = <PhoneNumberCandidate>[];
-  final prepared = lines.map(_line).toList();
+  final prepared = _joinNearbyLines(lines.map(_line).toList());
   for (var lineIndex = 0; lineIndex < prepared.length; lineIndex++) {
     final line = prepared[lineIndex];
-    for (final match in _numbers.allMatches(line.text)) {
+    for (final match in _numbers.allMatches(_numberText(line))) {
       final prefix = line.text.substring(0, match.start);
       final sameLineLabel = _phoneLabel.hasMatch(prefix.split('\t').last);
       if (match.start > 0 &&
@@ -128,6 +243,8 @@ List<PhoneNumberCandidate> japanesePhoneNumberCandidates(
                 math.max(24, previous.bounds.height * 2);
       }
       final complete = _automaticallyMaskNumber(number);
+      // A guessed O/o correction must satisfy an automatic masking rule.
+      if (RegExp(r'[Oo]').hasMatch(match.group(0)!) && !complete) continue;
       final local =
           labelled &&
           !match.group(0)!.startsWith('+') &&
