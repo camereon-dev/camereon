@@ -59,8 +59,13 @@ void main() {
       final phones = result.candidates
           .whereType<PhoneNumberCandidate>()
           .toList();
-      expect(phones, hasLength(3));
-      expect(phones.map((p) => p.automaticallySelected), [true, false, false]);
+      expect(phones, hasLength(4));
+      expect(phones.map((p) => p.automaticallySelected), [
+        true,
+        false,
+        true,
+        false,
+      ]);
       expect(
         result.candidates
             .where((c) => c.kind == CandidateKind.address)

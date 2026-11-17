@@ -136,7 +136,11 @@ List<_PhoneLine> _joinNearbyLines(List<_PhoneLine> lines) {
           }
           final a = _numberDigits(last.group(0)!);
           final b = _numberDigits(rightMatch.group(0)!);
-          if (a == null || b == null || a.length < 3 || b.length < 3) continue;
+          final international = last.group(0)!.startsWith('+81');
+          // +81 and the following 1/2-digit area/mobile prefix are explicit
+          // parts of one international number, not arbitrary short fragments.
+          if (a == null || b == null) continue;
+          if (!international && (a.length < 3 || b.length < 3)) continue;
           final leftBox = _rangeBounds(left, last.start, last.end);
           final rightBox = _rangeBounds(
             right,
@@ -168,9 +172,14 @@ List<_PhoneLine> _joinNearbyLines(List<_PhoneLine> lines) {
 }
 
 // A space joins numeric chunks only if each has 3+ digits and their boxes are
-// close on the same row. Tabs preserve boundaries without shifting offsets.
+// close on the same row. Explicit +81 notation may contain shorter groups.
+// Tabs preserve boundaries without shifting offsets.
 String _numberText(_PhoneLine line) {
   final units = line.text.codeUnits.toList();
+  final internationalRuns = _numbers.allMatches(line.text).where((match) {
+    final raw = match.group(0)!;
+    return raw.startsWith('+81') && (_numberDigits(raw)?.length ?? 0) >= 11;
+  }).toList();
   for (final gap in RegExp(r' +').allMatches(line.text)) {
     final before = RegExp(r'[0-9Oo]+$')
         .firstMatch(line.text.substring(0, gap.start));
@@ -178,8 +187,11 @@ String _numberText(_PhoneLine line) {
     if (before == null || after == null) continue;
     final a = _rangeBounds(line, before.start, gap.start);
     final b = _rangeBounds(line, gap.end, gap.end + after.end);
-    if (before.group(0)!.length >= 3 &&
-        after.group(0)!.length >= 3 &&
+    final international = internationalRuns.any(
+      (run) => run.start <= gap.start && run.end >= gap.end,
+    );
+    if ((international ||
+            (before.group(0)!.length >= 3 && after.group(0)!.length >= 3)) &&
         a != null &&
         b != null &&
         _nearby(a, b)) {
