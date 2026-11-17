@@ -83,6 +83,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: CapturedPhotoScreen(
+            includeOtherCandidates: true,
             photo: XFile.fromData(bytes),
             faceDetector: observed,
             saver: saver,

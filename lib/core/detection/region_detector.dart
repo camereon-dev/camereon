@@ -6,6 +6,7 @@ import '../photo/photo_images.dart';
 
 /// Shared candidate contract. Detectors only return regions, never OCR text.
 enum CandidateKind {
+  address('住所'),
   text('文字'),
   face('顔'),
   person('人物'),

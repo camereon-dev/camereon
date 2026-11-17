@@ -91,7 +91,10 @@ void main() {
                             models: store,
                             analyzer: analyzer,
                           ),
-                          child: CapturedPhotoScreen(photo: XFile(file.path)),
+                          child: CapturedPhotoScreen(
+                            includeOtherCandidates: true,
+                            photo: XFile(file.path),
+                          ),
                         ),
                       ),
                     ),

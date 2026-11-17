@@ -20,6 +20,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var japaneseOcr: JapaneseOcrChannel? = null
     private var faces: MlKitFaceDetectionHandler? = null
     private var textRegionChannel: TextRegionChannel? = null
     private var objectRegionChannel: ObjectRegionChannel? = null
@@ -35,6 +36,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        japaneseOcr = JapaneseOcrChannel(flutterEngine.dartExecutor.binaryMessenger)
         faces = MlKitFaceDetectionHandler(flutterEngine.dartExecutor.binaryMessenger)
         textRegionChannel = TextRegionChannel(this, flutterEngine)
         objectRegionChannel = ObjectRegionChannel(this, flutterEngine)
@@ -235,6 +237,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        japaneseOcr?.close()
+        japaneseOcr = null
         OnnxSessions.release()
         faces?.close()
         faces = null

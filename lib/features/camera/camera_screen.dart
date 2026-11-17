@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/app_version.dart';
+import '../../core/detection/region_detector.dart';
+import '../../core/detection/place_name_dictionary.dart';
+import '../../core/photo/photo_images.dart';
 import 'captured_photo_screen.dart';
 import 'device_rotation.dart';
 
@@ -186,7 +189,7 @@ class _CameraScreenState extends State<CameraScreen>
         const Duration(seconds: 10),
       );
       if (!mounted) return;
-      await _editPhoto(photo);
+      await _editPhoto(photo, startWithConfirmation: true);
     } catch (e) {
       debugPrint('camera: failed to take picture: $e');
       if (!mounted) return;
@@ -242,7 +245,11 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  Future<void> _editPhoto(XFile photo) async {
+  Future<void> _editPhoto(
+    XFile photo, {
+    List<RegionCandidate> Function(SourcePhoto)? initialCandidates,
+    bool startWithConfirmation = false,
+  }) async {
     var hadCamera = false;
     _editingPhoto = true;
     try {
@@ -256,7 +263,13 @@ class _CameraScreenState extends State<CameraScreen>
       }
       if (!mounted) return;
       await Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => CapturedPhotoScreen(photo: photo)),
+        MaterialPageRoute(
+          builder: (_) => CapturedPhotoScreen(
+            photo: photo,
+            startWithConfirmation: startWithConfirmation,
+            initialCandidates: initialCandidates,
+          ),
+        ),
       );
     } finally {
       _editingPhoto = false;
@@ -305,20 +318,44 @@ class _CameraScreenState extends State<CameraScreen>
               _controlBar(controller),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Wrap(
-                  alignment: WrapAlignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextButton.icon(
-                      key: const ValueKey('pick-photo'),
-                      onPressed: _isCapturing ? null : _openPhoto,
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('写真を選ぶ'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton.icon(
+                            key: const ValueKey('pick-photo'),
+                            onPressed: _isCapturing ? null : _openPhoto,
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text(
+                              '写真を選ぶ',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: TextButton.icon(
+                            key: const ValueKey('open-sample'),
+                            onPressed: _isCapturing ? null : _openSample,
+                            icon: const Icon(Icons.image_outlined),
+                            label: const Text(
+                              'サンプルで試す',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    TextButton.icon(
-                      key: const ValueKey('open-sample'),
-                      onPressed: _isCapturing ? null : _openSample,
-                      icon: const Icon(Icons.image_outlined),
-                      label: const Text('サンプルで試す'),
+                    TextButton(
+                      onPressed: () {
+                        PlaceNameDictionary.registerLicense();
+                        showLicensePage(
+                          context: context,
+                          applicationName: 'camereon',
+                        );
+                      },
+                      child: const Text('データ出典・ライセンス'),
                     ),
                   ],
                 ),

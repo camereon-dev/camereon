@@ -236,6 +236,7 @@ void main() {
                 throw StateError('must not read original again'),
             services: AnalysisServices(models: Models(), analyzer: analyzer),
             editorBuilder: (onSourceLoaded) => CapturedPhotoScreen(
+              includeOtherCandidates: true,
               photo: XFile.fromData(Uint8List.fromList([1, 2, 3])),
               previewer: const FrostedPreviewer.none(),
               processor: processor,
@@ -420,6 +421,7 @@ void main() {
           loadImage: () async => bytes,
           services: AnalysisServices(models: Models(), analyzer: Analyzer()),
           child: CapturedPhotoScreen(
+            includeOtherCandidates: true,
             photo: XFile.fromData(bytes),
             previewer: const FrostedPreviewer.none(),
             detector: editor.FakeDetector()

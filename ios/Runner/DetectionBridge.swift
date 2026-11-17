@@ -3,6 +3,7 @@ import ImageIO
 import MLKitFaceDetection
 import MLKitVision
 import UIKit
+import Vision
 
 /// All expensive work is serialized; a memory warning queues release after the
 /// active call, never invalidating a session while ONNX Runtime is using it.
@@ -13,7 +14,7 @@ final class DetectionBridge {
   private var memoryObserver: NSObjectProtocol?
 
   init(messenger: FlutterBinaryMessenger) {
-    for kind in ["face_detection", "text_regions", "object_regions"] {
+    for kind in ["face_detection", "text_regions", "object_regions", "japanese_ocr"] {
       FlutterMethodChannel(name: "dev.camereon/\(kind)", binaryMessenger: messenger)
         .setMethodCallHandler { [weak self] call, result in
           guard let self else {
@@ -41,6 +42,7 @@ final class DetectionBridge {
             do {
               response = try autoreleasepool { () -> [String: Any] in
                 switch kind {
+                case "japanese_ocr": return try Self.japaneseOcr(arguments)
                 case "face_detection": return try Self.faces(arguments)
                 case "text_regions":
                   let detailed = arguments["detailed"] as? Bool ?? true
@@ -73,6 +75,45 @@ final class DetectionBridge {
 
   deinit {
     if let memoryObserver { NotificationCenter.default.removeObserver(memoryObserver) }
+  }
+
+  private static func japaneseOcr(_ arguments: [String: Any]) throws -> [String: Any] {
+    let pixels = try PixelImage(arguments, limit: 2560)
+    guard let provider = CGDataProvider(data: Data(pixels.bytes) as CFData),
+      let image = CGImage(width: pixels.width, height: pixels.height,
+        bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: pixels.width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    else { throw DetectionError() }
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    guard try request.supportedRecognitionLanguages().contains("ja-JP") else {
+      throw DetectionError()
+    }
+    request.recognitionLanguages = ["ja-JP", "en-US"]
+    request.usesLanguageCorrection = false
+    try VNImageRequestHandler(cgImage: image, orientation: .up).perform([request])
+    let observations = request.results ?? []
+    var lines = [[[String: Any]]]()
+    for observation in observations.prefix(1000) {
+      guard let candidate = observation.topCandidates(1).first else { continue }
+      var glyphs = [[String: Any]]()
+      for start in candidate.string.indices {
+        let end = candidate.string.index(after: start)
+        guard let box = try candidate.boundingBox(for: start..<end)?.boundingBox else { continue }
+        let left = max(0, box.minX * Double(pixels.width))
+        let top = max(0, (1 - box.maxY) * Double(pixels.height))
+        let right = min(Double(pixels.width), box.maxX * Double(pixels.width))
+        let bottom = min(Double(pixels.height), (1 - box.minY) * Double(pixels.height))
+        if left < right && top < bottom {
+          glyphs.append(["text": String(candidate.string[start..<end]),
+                         "box": [left, top, right, bottom]])
+        }
+      }
+      lines.append(glyphs)
+    }
+    return ["lines": lines, "truncated": observations.count > 1000]
   }
 
   private static func faces(_ arguments: [String: Any]) throws -> [String: Any] {
