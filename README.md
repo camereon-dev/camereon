@@ -143,3 +143,5 @@ Android のビルド設定（`android/`・`mise.toml`・`pubspec`・ビルドス
 参考: [Flutter 導入](https://docs.flutter.dev/install)、[Android ビルド](https://docs.flutter.dev/deployment/android)、[integration test](https://docs.flutter.dev/testing/integration-tests)。
 
 関連 Issue: [#1 定義書作る](https://github.com/camereon-dev/camereon/issues/1)
+
+郵便番号は「〒100-0001」「100-0001」「1000001」の形式を、全角数字も含めて住所候補として最初から隠す。「〒」がある場合は記号も含めて1つの枠にし、住所の他の要素とは個別に解除・再適用できる。郵便番号の実在照合は行わないため、同形式の7桁の番号も隠れる場合がある。

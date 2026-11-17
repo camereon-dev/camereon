@@ -130,6 +130,10 @@ final _aza = RegExp(
   '(?:$_number(?:(?:丁目|番地?|号|の|-)$_number)*(?:丁目|番地?|号)?)?\$',
 );
 final _postcode = RegExp(r'^[0-9]{3}-[0-9]{4}$');
+// Do not extract seven digits from a longer phone number or identifier.
+final _postalMention = RegExp(
+  r'(?<![0-9A-Za-z-])〒?[0-9]{3}-?[0-9]{4}(?![0-9A-Za-z-])',
+);
 final _numericDate = RegExp(r'^(?:19|20)[0-9]{2}-[0-9]{1,2}-[0-9]{1,2}$');
 
 typedef _AddressSpan = ({int start, int end});
@@ -518,16 +522,24 @@ List<RegionCandidate> japaneseAddressCandidates(
       }
     }
   }
+  final postalSpans = [
+    for (final match in _postalMention.allMatches(normalizedText))
+      (start: match.start, end: match.end),
+  ];
+  final protectedControls = [...protectedSpans, ...postalSpans];
   final dictionarySpans =
       dictionary
           ?.matches(normalizedText)
           .where(
-            (match) => !protectedSpans.any(
+            (match) => !protectedControls.any(
               (span) => match.start < span.end && match.end > span.start,
             ),
           )
           .toList() ??
       <_AddressSpan>[];
+  // Keep the postal code as one independent control, including 〒 if present.
+  dictionarySpans.addAll(postalSpans);
+  dictionarySpans.sort((a, b) => a.start.compareTo(b.start));
   final finalSpans = <_AddressSpan>[...dictionarySpans];
   for (final span in splitSpans) {
     var low = 0;
