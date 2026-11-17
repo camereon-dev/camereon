@@ -27,11 +27,6 @@ final _labelOnly = RegExp(
   '^[ ]*(?:$_phoneLabels)[ :：.]*\$',
   caseSensitive: false,
 );
-final _otherLabel = RegExp(
-  r'(?:管理番号|注文番号|伝票番号|受付番号|会員番号|商品番号|商品コード|'
-  r'口座番号|顧客番号|追跡番号|郵便番号|ID|FAX)[ :：.#-]*$',
-  caseSensitive: false,
-);
 final _word = RegExp(r'[0-9A-Za-z+@\-]');
 final _date = RegExp(r'^(?:19|20)[0-9]{2}-?[0-9]{2}-?[0-9]{2}$');
 
@@ -77,47 +72,20 @@ String _normalize(String text) => String.fromCharCodes([
   );
 }
 
-String? _nationalNumber(String raw) {
-  var value = raw.replaceAll(' ', '');
-  if (value.startsWith('+81')) {
-    value = value.substring(3);
-    if (value.startsWith('-')) value = value.substring(1);
-    if (value.startsWith('(0)')) value = value.substring(3);
-    if (value.startsWith('-')) value = value.substring(1);
-    if (value.startsWith('0')) return null;
-    value = '0$value';
-  } else if (value.startsWith('+')) {
-    return null;
-  }
-  if ('('.allMatches(value).length != ')'.allMatches(value).length) return null;
-  if (value.contains('(') &&
-      !RegExp(r'^\([0-9]{2,5}\)[0-9-]+$').hasMatch(value)) {
-    return null;
-  }
-  final digits = value.replaceAll(RegExp(r'[()\-]'), '');
-  if (!RegExp(r'^[0-9]+$').hasMatch(digits)) return null;
-  // Reject malformed hyphen groups, but tolerate spaces inserted by OCR.
-  final groups = value.replaceAll(RegExp(r'[()]'), '').split('-');
-  if (groups.any((g) => g.isEmpty) || groups.length > 3) return null;
-  if (groups.length > 1 && groups.last.length != 4) {
-    if (!(digits.startsWith('0120') || digits.startsWith('0570')) ||
-        groups.last.length != 3) {
-      return null;
-    }
-  }
-  return digits;
+String? _numberDigits(String raw) {
+  final digits = raw.replaceAll(RegExp(r'[+ ()\-]'), '');
+  return RegExp(r'^[0-9]+$').hasMatch(digits) ? digits : null;
 }
 
-bool _completeJapaneseNumber(String number) {
-  if (RegExp(r'^0(?:50|60|70|80|90)[0-9]{8}$').hasMatch(number)) return true;
-  // 10-digit geographic/service formats. Allocation and reachability are not
-  // checked. 050/070/080/090 etc. must not accidentally match as 10 digits.
-  return RegExp(r'^0[1-9][0-9]{8}$').hasMatch(number) &&
-      !RegExp(r'^0(?:10|20|50|70|80|90)').hasMatch(number);
+bool _automaticallyMaskNumber(String number) {
+  // Prefer recall over exact telephone-format validation, including IDs.
+  if (number.length >= 9) return true;
+  return RegExp(r'^0(?:50|60|70|80|90)[0-9]{4,5}$').hasMatch(number);
 }
 
-/// Japanese full numbers are automatically selected. Label-supported local
-/// numbers (7/8 digits) remain optional. OCR text is never retained in results.
+/// Nine or more digits, or 7/8 digits starting with a mobile/IP prefix, are
+/// automatically selected. Other labelled local numbers remain optional.
+/// OCR text is never retained in results.
 List<PhoneNumberCandidate> japanesePhoneNumberCandidates(
   List<List<PhoneGlyph>> lines,
   int imageWidth,
@@ -130,7 +98,6 @@ List<PhoneNumberCandidate> japanesePhoneNumberCandidates(
     for (final match in _numbers.allMatches(line.text)) {
       final prefix = line.text.substring(0, match.start);
       final sameLineLabel = _phoneLabel.hasMatch(prefix.split('\t').last);
-      if (_otherLabel.hasMatch(prefix.split('\t').last)) continue;
       if (match.start > 0 &&
           _word.hasMatch(line.text[match.start - 1]) &&
           !sameLineLabel) {
@@ -140,7 +107,7 @@ List<PhoneNumberCandidate> japanesePhoneNumberCandidates(
           _word.hasMatch(line.text[match.end])) {
         continue;
       }
-      final number = _nationalNumber(match.group(0)!);
+      final number = _numberDigits(match.group(0)!);
       if (number == null) continue;
       Rect? box;
       for (final position in line.positions.sublist(match.start, match.end)) {
@@ -160,7 +127,7 @@ List<PhoneNumberCandidate> japanesePhoneNumberCandidates(
             (box.left - previous.bounds.left).abs() <=
                 math.max(24, previous.bounds.height * 2);
       }
-      final complete = _completeJapaneseNumber(number);
+      final complete = _automaticallyMaskNumber(number);
       final local =
           labelled &&
           !match.group(0)!.startsWith('+') &&
