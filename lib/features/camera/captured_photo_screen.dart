@@ -10,8 +10,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/analysis/face_detection.dart';
 import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
-import '../../core/detection/android_text_region_detector.dart';
-import '../../core/detection/android_object_region_detector.dart';
 import '../../core/detection/region_detector.dart';
 import '../../core/detection/japanese_address_detector.dart';
 import '../../core/photo/android_photo_saver.dart';
@@ -24,7 +22,6 @@ import '../../core/photo/photo_processing_exception.dart';
 import '../../core/photo/photo_saver.dart';
 import '../../core/photo/photo_sharer.dart';
 import '../analysis/face_detection_controller.dart';
-import '../analysis/photo_analysis_entry.dart';
 import '../detection/candidate_overlay.dart';
 import 'glass_photo_chrome.dart';
 
@@ -82,14 +79,14 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   late final PhotoSaver _saver = widget.saver ?? AndroidPhotoSaver();
   late final PhotoSharer _sharer = widget.sharer ?? PlatformPhotoSharer();
   late final RegionDetector _detector =
-      widget.detector ?? AndroidTextRegionDetector();
+      widget.detector ?? const NoRegionDetector();
   late final RegionDetector _addressDetector =
       widget.addressDetector ?? JapaneseAddressDetector();
   bool _addressDetecting = false;
   bool _addressFailed = false;
   final Set<HideRegion> _seenAddresses = {};
   late final RegionDetector _objectDetector =
-      widget.objectDetector ?? AndroidObjectRegionDetector();
+      widget.objectDetector ?? const NoRegionDetector();
   late final _faces = FaceDetectionController(
     widget.faceDetector ?? MlKitFaceDetector(),
   );
@@ -171,7 +168,6 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   SourcePhoto? _source;
   RedactedJpeg? _preview;
   late bool _waitingForConfirmation = widget.startWithConfirmation;
-  bool _covered = false;
   bool _busy = true;
   bool _loadFailed = false;
   String _loadError = '写真を読み込めませんでした';
@@ -214,9 +210,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _covered = AnalysisEntryVisibility.coveredOf(context);
-    if (_covered) _faces.cancel();
-    if (!_covered) scheduleMicrotask(_startAutomaticDetection);
+    scheduleMicrotask(_startAutomaticDetection);
   }
 
   @override
@@ -291,10 +285,8 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     if (!mounted || _busy || _loadFailed || _automaticDetectionStarted) return;
     final source = _source;
     if (source == null || _preview != null) return;
-    if (_covered ||
-        (WidgetsBinding.instance.lifecycleState != null &&
-            WidgetsBinding.instance.lifecycleState !=
-                AppLifecycleState.resumed)) {
+    if (WidgetsBinding.instance.lifecycleState != null &&
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
       _faces.markDeferred();
       return;
     }
@@ -426,7 +418,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   void _retry() {
     final source = _source;
-    if (_busy || _covered || !_canRetry || source == null) return;
+    if (_busy || !_canRetry || source == null) return;
     if (_faces.canRetry) unawaited(_faces.detect(source));
     if (!widget.includeOtherCandidates) {
       unawaited(_detectAddresses(source));
@@ -582,7 +574,6 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         _scanning ||
         _canRetry ||
         _processingFailed ||
-        _covered ||
         _source == null ||
         _preview != null) {
       return;
@@ -1347,7 +1338,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                   Positioned.fromRect(
                     rect: rect,
                     child: RepaintBoundary(
-                      child: PhotoScanEffect(active: _scanning && !_covered),
+                      child: PhotoScanEffect(active: _scanning),
                     ),
                   ),
                 ],

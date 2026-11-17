@@ -22,8 +22,6 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var japaneseOcr: JapaneseOcrChannel? = null
     private var faces: MlKitFaceDetectionHandler? = null
-    private var textRegionChannel: TextRegionChannel? = null
-    private var objectRegionChannel: ObjectRegionChannel? = null
     private var deviceRotation: DeviceRotationChannel? = null
     private val photoPickerRequestCode = 732
     private var pendingPhotoPick: MethodChannel.Result? = null
@@ -38,8 +36,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         japaneseOcr = JapaneseOcrChannel(flutterEngine.dartExecutor.binaryMessenger)
         faces = MlKitFaceDetectionHandler(flutterEngine.dartExecutor.binaryMessenger)
-        textRegionChannel = TextRegionChannel(this, flutterEngine)
-        objectRegionChannel = ObjectRegionChannel(this, flutterEngine)
         deviceRotation = DeviceRotationChannel(this, flutterEngine).also { it.resume() }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.camereon/photo_picker")
             .setMethodCallHandler { call, result ->
@@ -230,22 +226,11 @@ class MainActivity : FlutterActivity() {
         super.onPause()
     }
 
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        // Cached detector sessions are rebuilt on the next photo.
-        if (level >= TRIM_MEMORY_RUNNING_LOW) OnnxSessions.release()
-    }
-
     override fun onDestroy() {
         japaneseOcr?.close()
         japaneseOcr = null
-        OnnxSessions.release()
         faces?.close()
         faces = null
-        textRegionChannel?.close()
-        textRegionChannel = null
-        objectRegionChannel?.close()
-        objectRegionChannel = null
         deviceRotation?.close()
         deviceRotation = null
         pendingPhotoPick?.success(null)
