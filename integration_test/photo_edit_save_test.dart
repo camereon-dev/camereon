@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:camereon/app.dart';
-import 'package:camereon/features/analysis/prepare_analysis_image.dart';
 import 'package:camereon/core/photo/android_photo_saver.dart';
 import 'package:camereon/core/photo/flutter_photo_processor.dart';
 import 'package:camereon/core/photo/hide_region.dart';
@@ -100,8 +99,8 @@ void main() {
           ]);
         }
         await file.writeAsBytes(bytes);
-        final analysis = await prepareAnalysisImage(bytes);
-        expect((analysis.width, analysis.height), (32, 48));
+        final decoded = await instantiateDecodedSize(bytes);
+        expect((decoded.width, decoded.height), (32, 48));
         final saver = RecordingSaver();
         await tester.pumpWidget(
           MaterialApp(
@@ -111,6 +110,7 @@ void main() {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => CapturedPhotoScreen(
+                        includeOtherCandidates: true,
                         photo: XFile(file.path),
                         saver: saver,
                         detector: CoordinateFixtureDetector(),

@@ -1,0 +1,30 @@
+{
+  "source_url": "https://data.address-br.digital.go.jp/mt_town/mt_town_all.csv.zip",
+  "source_sha256": "d4745978092c30e4ed4e1aa8901b29b2f90a7e5bf4c0b2e4301693547cd7c6fa",
+  "source_updated_utc": "2026-11-06T15:40:49.000Z",
+  "source_catalog": "https://dataset.address-br.digital.go.jp/documents/b80e77a0e2d24e5692be4af885eb3de7",
+  "rows": 727526,
+  "municipality_codes": 1892,
+  "status_counts": {
+    "1": 659210,
+    "0": 46863,
+    "2": 21429,
+    "3": 24
+  },
+  "fields": {
+    "pref": 1,
+    "county": 2,
+    "city": 2,
+    "ward": 2,
+    "oaza_cho": 4,
+    "koaza": 8
+  },
+  "names_with_aliases": 408196,
+  "single_character_names": 913,
+  "nodes": 639063,
+  "edges": 639062,
+  "max_utf16_length": 25,
+  "binary_bytes": 10225016,
+  "binary_sha256": "040b31e78d0a105359e78e3dc154fba84a1d0d2e3dc96e634e1262c700a85caf",
+  "processing": "camereon: deduplicate names; remove city/ward/town/village/county suffixes for aliases; remove aza/oaza/koaza prefixes for aliases; include all published rows, excluding numeric/punctuation-only field values and non-kanji single-character names/aliases; no invented names."
+}

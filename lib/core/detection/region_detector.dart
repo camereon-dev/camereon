@@ -6,8 +6,8 @@ import '../photo/photo_images.dart';
 
 /// Shared candidate contract. Detectors only return regions, never OCR text.
 enum CandidateKind {
+  address('住所'),
   text('文字'),
-  phone('電話番号'),
   face('顔'),
   person('人物'),
   screen('画面'),
@@ -41,6 +41,16 @@ class RegionDetection {
 abstract interface class RegionDetector {
   /// Coordinates are always in the normalized SourcePhoto, never screen pixels.
   Future<RegionDetection> detect(SourcePhoto photo);
+}
+
+/// Finds nothing. The shipped app only masks addresses and faces; objects and
+/// general text are not detected unless a detector is injected (tests).
+class NoRegionDetector implements RegionDetector {
+  const NoRegionDetector();
+
+  @override
+  Future<RegionDetection> detect(SourcePhoto photo) async =>
+      RegionDetection(candidates: const []);
 }
 
 class RegionDetectionException implements Exception {

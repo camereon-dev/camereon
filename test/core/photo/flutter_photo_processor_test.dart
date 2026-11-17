@@ -5,10 +5,10 @@ import 'package:camereon/core/photo/flutter_photo_processor.dart';
 import 'package:camereon/core/photo/hide_region.dart';
 import 'package:camereon/core/photo/image_photo_processor.dart';
 import 'package:camereon/core/photo/photo_processing_exception.dart';
-import 'package:camereon/features/analysis/prepare_analysis_image.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
+import '../../support/flutter_decoded_size.dart';
 import '../../support/photo_fixtures.dart';
 
 void main() {
@@ -21,7 +21,7 @@ void main() {
       () async {
         final input = metadataJpeg(orientation: orientation);
         final source = await processor.normalize(input);
-        final analysis = await prepareAnalysisImage(input);
+        final analysis = await flutterDecodedSize(input);
         expect(
           (source.width, source.height),
           (analysis.width, analysis.height),
@@ -78,7 +78,7 @@ void main() {
         throwsA(isA<PhotoProcessingException>()),
       );
       final source = await processor.normalize(input);
-      final analysis = await prepareAnalysisImage(input);
+      final analysis = await flutterDecodedSize(input);
       expect((source.width, source.height), (analysis.width, analysis.height));
       expect((source.width, source.height), (32, 48));
       expect(
