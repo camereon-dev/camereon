@@ -4,8 +4,9 @@ import '../photo/hide_region.dart';
 import '../photo/photo_images.dart';
 import 'region_detector.dart';
 import 'place_name_dictionary.dart';
+import 'japanese_phone_number_detector.dart';
 
-/// On-device Japanese OCR. Text stays in memory and is never logged or stored.
+/// Shared Japanese OCR for address/phone regions. Text is never logged or stored.
 class JapaneseAddressDetector implements RegionDetector {
   JapaneseAddressDetector({
     MethodChannel? channel,
@@ -81,14 +82,39 @@ class JapaneseAddressDetector implements RegionDetector {
         }
         lines.add(glyphs);
       }
+      final phones = japanesePhoneNumberCandidates(
+        [
+          for (final line in lines)
+            [for (final g in line) (text: g.text, bounds: g.bounds)],
+        ],
+        photo.width,
+        photo.height,
+      );
       return RegionDetection(
-        candidates: japaneseAddressCandidates(
-          lines,
-          photo.width,
-          photo.height,
-          dictionary: dictionary,
-        ),
-        truncated: response['truncated'] == true,
+        candidates: [
+          ...japaneseAddressCandidates(
+            lines,
+            photo.width,
+            photo.height,
+            dictionary: dictionary,
+          ).where(
+            (address) => !phones.any((phone) {
+              if (phone.automaticallySelected) return false;
+              final a = address.region.toRect();
+              final p = phone.region.toRect();
+              final overlap = a.intersect(p);
+              final area = overlap.isEmpty
+                  ? 0.0
+                  : overlap.width * overlap.height;
+              // TEL:123-4567 is an uncertain local phone, not an automatic
+              // postal-code mask. Only replace a substantially identical box.
+              return area >= a.width * a.height * .8 &&
+                  area >= p.width * p.height * .8;
+            }),
+          ),
+          ...phones,
+        ],
+        truncated: response['truncated'] == true || phones.length >= 100,
       );
     } catch (_) {
       throw const RegionDetectionException();
