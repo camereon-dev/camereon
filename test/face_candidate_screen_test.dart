@@ -30,9 +30,8 @@ void main() {
     expect(editor.painter(tester).regions, isEmpty);
     await editor.tapText(tester, '取り消す');
     expect(editor.painter(tester).regions, [r]);
-    await editor.tapText(tester, '保存前に確認');
-    expect(processor.received, [r]);
     await editor.tapText(tester, '写真に保存');
+    expect(processor.received, [r]);
     expect(saver.calls, 1);
   });
 
@@ -48,14 +47,13 @@ void main() {
       faces: faces,
       settle: false,
     );
-    await tester.tap(find.byTooltip('保存前に確認'));
+    await tester.tap(find.byTooltip('写真に保存'));
     await tester.pumpAndSettle();
     faces.result.complete([
       FaceCandidate('late', editor.region(const Rect.fromLTRB(20, 20, 60, 60))),
     ]);
     await tester.pumpAndSettle();
     expect(processor.received, isEmpty);
-    await editor.tapText(tester, '編集へ戻る');
     expect(editor.overlay(tester).candidates, isEmpty);
   });
 }

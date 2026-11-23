@@ -17,6 +17,8 @@ PixelShape shape(
   bottom: bottom,
   shape: shape,
   points: Float64List.fromList(points),
+  radius: 0.0,
+  reveal: false,
 );
 
 /// Two flat halves: dark left, light right, with a thin bright stripe inside

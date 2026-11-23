@@ -83,19 +83,19 @@ void main() {
           const Duration(seconds: 120),
         );
         final previewed = hiding.elapsedMilliseconds;
-        final confirming = Stopwatch()..start();
-        await editorAction(tester, '保存前に確認');
+        final saving = Stopwatch()..start();
+        await editorAction(tester, '写真に保存');
         await pumpUntil(
-          () => find.bySemanticsLabel('保存する加工済み写真').evaluate().isNotEmpty,
+          () => find.byTooltip('共有').evaluate().isNotEmpty,
           const Duration(seconds: 120),
         );
-        final confirmed = confirming.elapsedMilliseconds;
+        final saved = saving.elapsedMilliseconds;
         report.add({
           'id': id,
           'candidates': candidates.length,
           'detect_ms': detected,
           'preview_patches_ms': previewed,
-          'confirm_redact_ms': confirmed,
+          'save_ms': saved,
         });
         // ignore: avoid_print
         print('EDITOR_CASE ${jsonEncode(report.last)}');

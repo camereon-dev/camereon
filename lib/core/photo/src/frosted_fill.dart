@@ -2,7 +2,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 /// 隠す形を isolate へ送れる形にしたもの。座標は処理する画像の画素。
-/// shape: 0 長方形、1 楕円、2 多角形（points は x, y の繰り返し）。
+/// shape: 0 長方形、1 楕円、2 多角形、3 線（points は x, y の繰り返し）。
+/// 線は points を結ぶ折れ線から [radius] 以内。[reveal] は消しゴムの線で、
+/// 並びでそれより前に隠した範囲を元に戻す。
 typedef PixelShape = ({
   int left,
   int top,
@@ -10,6 +12,8 @@ typedef PixelShape = ({
   int bottom,
   int shape,
   Float64List points,
+  double radius,
+  bool reveal,
 });
 
 /// 周囲の画素だけから作った「すりガラス」の塗りで形の内側を置き換える。
@@ -25,9 +29,10 @@ void frostShapes(
   int channels,
   List<PixelShape> shapes,
 ) {
-  if (shapes.isEmpty) return;
-  // Exclude the union before any region is painted. Otherwise an earlier
-  // region can sample private pixels in a neighbouring, not-yet-painted one.
+  if (shapes.every((s) => s.reveal)) return;
+  // Resolve the final hidden area before any region is painted: shapes in
+  // order, erasers clearing what came before. Otherwise an earlier region can
+  // sample private pixels in a neighbouring, not-yet-painted one.
   final excluded = Uint8List(width * height);
   for (final shape in shapes) {
     final left = math.max(0, shape.left);
@@ -37,13 +42,18 @@ void frostShapes(
     final w = right - left, h = bottom - top;
     if (w <= 0 || h <= 0) continue;
     final mask = rasterize(shape, left, top, w, h);
+    final value = shape.reveal ? 0 : 1;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
-        if (mask[y * w + x] != 0) excluded[(top + y) * width + left + x] = 1;
+        if (mask[y * w + x] != 0) {
+          excluded[(top + y) * width + left + x] = value;
+        }
       }
     }
   }
+  // Every hidden pixel lies in at least one non-eraser shape, which fills it.
   for (final shape in shapes) {
+    if (shape.reveal) continue;
     _frost(pixels, width, height, channels, shape, excluded: excluded);
   }
 }
@@ -62,7 +72,7 @@ void frostShapes(
   PixelShape shape,
 ) {
   final band = _band(shape, width, height);
-  if (band == null) return null;
+  if (band == null || shape.reveal) return null;
   final rgba = Uint8List(band.width * band.height * 4);
   _frost(pixels, width, height, channels, shape, overlay: rgba);
   return (
@@ -127,6 +137,35 @@ Uint8List rasterize(PixelShape shape, int left, int top, int w, int h) {
           );
         }
       }
+    case 3:
+      final n = shape.points.length ~/ 2;
+      final radius = shape.radius;
+      final r2 = radius * radius;
+      // Union of capsules: each segment only scans its own padded box.
+      for (var i = 0; i < math.max(1, n - 1); i++) {
+        final ax = shape.points[2 * i], ay = shape.points[2 * i + 1];
+        final bx = n > 1 ? shape.points[2 * i + 2] : ax;
+        final by = n > 1 ? shape.points[2 * i + 3] : ay;
+        final dx = bx - ax, dy = by - ay;
+        final length2 = dx * dx + dy * dy;
+        final y0 = math.max(t, (math.min(ay, by) - radius).floor());
+        final y1 = math.min(b, (math.max(ay, by) + radius).ceil());
+        final x0 = math.max(l, (math.min(ax, bx) - radius).floor());
+        final x1 = math.min(r, (math.max(ax, bx) + radius).ceil());
+        for (var y = y0; y < y1; y++) {
+          final py = y + .5;
+          final row = (y - top) * w - left;
+          for (var x = x0; x < x1; x++) {
+            final px = x + .5;
+            var u = length2 == 0
+                ? 0.0
+                : ((px - ax) * dx + (py - ay) * dy) / length2;
+            u = u < 0 ? 0.0 : (u > 1 ? 1.0 : u);
+            final ex = px - (ax + dx * u), ey = py - (ay + dy * u);
+            if (ex * ex + ey * ey <= r2) mask[row + x] = 1;
+          }
+        }
+      }
     default:
       final n = shape.points.length ~/ 2;
       final crossings = <double>[];
@@ -157,19 +196,20 @@ Uint8List rasterize(PixelShape shape, int left, int top, int w, int h) {
   return mask;
 }
 
-/// 縁のなじませ幅。形の短辺の 8%、2〜24 画素。
+/// 形の太さ。線は直径、それ以外は外接矩形の短辺。
+double _thickness(PixelShape s) => s.shape == 3
+    ? math.min(s.radius * 2, math.min(s.right - s.left, s.bottom - s.top) * 1.0)
+    : math.min(s.right - s.left, s.bottom - s.top).toDouble();
+
+/// 縁のなじませ幅。形の太さの 8%、2〜24 画素。
 double featherOf(PixelShape s) =>
-    (math.min(s.right - s.left, s.bottom - s.top) * .08)
-        .clamp(2.0, 24.0)
-        .toDouble();
+    (_thickness(s) * .08).clamp(2.0, 24.0).toDouble();
 
 /// 塗りを作る周囲の広さ。形の短辺の半分より大きければ、どの内側の画素からも
 /// 外側の色が届く（内接円の半径は短辺の半分以下）。長辺に合わせないことで、
 /// 細長い文字行は離れた色を混ぜず、すぐ隣の背景の色になる。
 double reachOf(PixelShape s) =>
-    (math.min(s.right - s.left, s.bottom - s.top) / 2 + featherOf(s) * 2)
-        .clamp(6.0, 4096.0)
-        .toDouble();
+    (_thickness(s) / 2 + featherOf(s) * 2).clamp(6.0, 4096.0).toDouble();
 
 /// [frostShapes] が形の周りで読み書きする画素の範囲（画像内に切り詰め済み）。
 ({int left, int top, int right, int bottom}) frostWindow(
@@ -215,6 +255,15 @@ void _frost(
   final int bw = bandRect.width;
   final int bh = bandRect.height;
   final inside = rasterize(s, bandLeft, bandTop, bw, bh);
+  if (excluded != null) {
+    // A later eraser may have revealed part of this shape again.
+    for (var y = 0; y < bh; y++) {
+      final row = (bandTop + y) * width + bandLeft;
+      for (var x = 0; x < bw; x++) {
+        if (excluded[row + x] == 0) inside[y * bw + x] = 0;
+      }
+    }
+  }
 
   // 塗りの色場は縮小した格子で作る。大きくぼかすので解像度は要らない。
   // 窓が大きいときは画素も間引いて集計する。
