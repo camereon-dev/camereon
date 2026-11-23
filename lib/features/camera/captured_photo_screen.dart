@@ -45,6 +45,7 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.includeOtherCandidates = false,
     this.startWithConfirmation = false,
     this.sharer,
+    this.autoHideKinds = const {CandidateKind.address, CandidateKind.face},
   });
 
   /// Captures first show the automatically redacted result before editing.
@@ -68,6 +69,9 @@ class CapturedPhotoScreen extends StatefulWidget {
   /// Builds the frosted preview of selected areas; tests pass [FrostedPreviewer.none].
   final FrostedPreviewer? previewer;
   final PhotoSharer? sharer;
+
+  /// Detected kinds that start hidden. Other kinds still get frames to tap.
+  final Set<CandidateKind> autoHideKinds;
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
@@ -193,7 +197,8 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             kind: CandidateKind.face,
             region: face.region,
           );
-          if (!widget.includeOtherCandidates) {
+          if (!widget.includeOtherCandidates &&
+              widget.autoHideKinds.contains(CandidateKind.face)) {
             _selected.add(candidate);
             for (final previous in _history) {
               previous.add(candidate);
@@ -258,7 +263,13 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       setState(() {
         _source = source;
         _candidates = List.of(initial);
-        _selected = initial.toSet();
+        _selected = initial
+            .where(
+              (c) =>
+                  widget.includeOtherCandidates ||
+                  widget.autoHideKinds.contains(c.kind),
+            )
+            .toSet();
         _history.clear();
         _seenAddresses.addAll(initial.map((c) => c.region));
       });
@@ -330,6 +341,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
           }
           _seenAddresses.add(c.region);
           _candidates.add(c);
+          if (!widget.autoHideKinds.contains(c.kind)) continue;
           _selected.add(c);
           // Automatic discovery isn't an undo step. Earlier user actions must
           // not accidentally reveal addresses discovered after those actions.
