@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/detection/place_name_dictionary.dart';
 import '../camera/glass_photo_chrome.dart';
 import 'app_settings.dart';
 import 'settings_store.dart';
@@ -94,6 +95,18 @@ class SettingsScreen extends StatelessWidget {
                     value: current.showGrid,
                     onChanged: (show) =>
                         _update((s) => s.copyWith(showGrid: show)),
+                  ),
+                  const _Heading('アプリ情報'),
+                  ListTile(
+                    title: const Text('データ出典・ライセンス'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      PlaceNameDictionary.registerLicense();
+                      showLicensePage(
+                        context: context,
+                        applicationName: 'camereon',
+                      );
+                    },
                   ),
                 ],
               ),

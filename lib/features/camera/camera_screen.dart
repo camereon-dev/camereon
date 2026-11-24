@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_version.dart';
 import '../../core/detection/region_detector.dart';
-import '../../core/detection/place_name_dictionary.dart';
 import '../../core/photo/photo_images.dart';
 import '../settings/app_settings.dart';
 import '../settings/settings_screen.dart';
@@ -372,44 +371,26 @@ class _CameraScreenState extends State<CameraScreen>
               _controlBar(controller),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton.icon(
-                            key: const ValueKey('pick-photo'),
-                            onPressed: _isCapturing ? null : _openPhoto,
-                            icon: const Icon(Icons.photo_library_outlined),
-                            label: const Text(
-                              '写真を選ぶ',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: TextButton.icon(
-                            key: const ValueKey('open-sample'),
-                            onPressed: _isCapturing ? null : _openSample,
-                            icon: const Icon(Icons.image_outlined),
-                            label: const Text(
-                              'サンプルで試す',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Expanded(
+                      child: TextButton.icon(
+                        key: const ValueKey('pick-photo'),
+                        onPressed: _isCapturing ? null : _openPhoto,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('写真を選ぶ', textAlign: TextAlign.center),
+                      ),
                     ),
-                    TextButton(
-                      onPressed: () {
-                        PlaceNameDictionary.registerLicense();
-                        showLicensePage(
-                          context: context,
-                          applicationName: 'camereon',
-                        );
-                      },
-                      child: const Text('データ出典・ライセンス'),
+                    Expanded(
+                      child: TextButton.icon(
+                        key: const ValueKey('open-sample'),
+                        onPressed: _isCapturing ? null : _openSample,
+                        icon: const Icon(Icons.image_outlined),
+                        label: const Text(
+                          'サンプルで試す',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ),
                   ],
                 ),
