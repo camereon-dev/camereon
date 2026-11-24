@@ -9,9 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
-List<AddressGlyph> glyphs(String text, {double y = 10}) => [
+List<AddressGlyph> glyphs(String text, {double y = 10, double x = 10}) => [
   for (var i = 0; i < text.length; i++)
-    AddressGlyph(text[i], Rect.fromLTWH(10 + i * 10, y, 10, 16)),
+    AddressGlyph(text[i], Rect.fromLTWH(x + i * 10, y, 10, 16)),
 ];
 
 void main() {
@@ -25,17 +25,88 @@ void main() {
           glyphs('東京都新宿区西新宿2-8-1で開催'),
           glyphs('新宿区のイベント', y: 40),
           glyphs('西新宿', y: 70),
-          glyphs('西新宿2-8-1', y: 100),
+          glyphs('西新宿2-8-1', y: 130),
         ],
         1000,
         200,
         dictionary: dictionary,
         mode: AddressDetectionMode.addressOnly,
       );
-      expect(candidates.map((c) => c.region.top), [8, 98]);
+      expect(candidates.map((c) => c.region.top), [8, 128]);
       expect(candidates.first.region.right, 12 + '東京都新宿区西新宿2-8-1'.length * 10);
     },
   );
+  group('nearby address fields in address-only mode', () {
+    late PlaceNameDictionary dictionary;
+    setUpAll(() async {
+      dictionary = await PlaceNameDictionary.load();
+    });
+    List<Rect> detect(List<List<AddressGlyph>> lines) => [
+      for (final c in japaneseAddressCandidates(
+        lines,
+        1000,
+        300,
+        mode: AddressDetectionMode.addressOnly,
+        dictionary: dictionary,
+      ))
+        c.region.toRect(),
+    ];
+
+    test('continues through nearby fields and stops at notes', () {
+      final boxes = detect([
+        glyphs('東京都新宿区西新宿2-8-1'),
+        glyphs('字北山', y: 32),
+        glyphs('123番地で開催', y: 54),
+        glyphs('備考', y: 76),
+        glyphs('北山', y: 98),
+      ]);
+      expect(boxes.map((b) => b.top), [8, 30, 52]);
+      expect(boxes.last.right, 12 + '123番地'.length * 10);
+    });
+
+    test('pairs a place and a lot on adjacent lines with supporting clues', () {
+      for (final (name, lot) in [('大字山田', '123'), ('北山', '12-3')]) {
+        expect(detect([glyphs(name), glyphs(lot, y: 32)]), hasLength(2));
+      }
+      for (final lot in ['123', '123円', '2026-11-24']) {
+        expect(detect([glyphs('北山'), glyphs(lot, y: 32)]), isEmpty);
+      }
+    });
+
+    test('address labels identify values beside or below them', () {
+      expect(detect([glyphs('住所：北山')]).single.left, 38);
+      expect(detect([glyphs('番地'), glyphs('123', y: 32)]).single.top, 30);
+    });
+
+    test('checks preceding fields and neighboring fields in the same row', () {
+      expect(detect([glyphs('北山'), glyphs('西新宿2-8-1', y: 32)]), hasLength(2));
+      expect(
+        detect([
+          [...glyphs('西新宿2-8-1'), ...glyphs('字北山', x: 110)],
+        ]),
+        hasLength(2),
+      );
+    });
+
+    test('rejects distant rows, adjacent columns and other fields', () {
+      expect(detect([glyphs('字北山'), glyphs('123番地', y: 150)]), isEmpty);
+      expect(detect([glyphs('字北山'), glyphs('123番地', x: 180, y: 32)]), isEmpty);
+      expect(
+        detect([
+          [...glyphs('北山'), ...glyphs('12-3', x: 180)],
+        ]),
+        isEmpty,
+      );
+      expect(
+        detect([
+          glyphs('東京都新宿区西新宿2-8-1'),
+          glyphs('電話', y: 32),
+          glyphs('123', y: 54),
+        ]),
+        hasLength(1),
+      );
+    });
+  });
   for (final text in [
     '東京都千代田区千代田1-1',
     '東京都新宿区西新宿２丁目８番１号',

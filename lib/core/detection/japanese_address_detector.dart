@@ -314,6 +314,158 @@ List<_AddressSpan> _components(String value, {bool continuation = false}) {
   return parts;
 }
 
+// Examine consecutive OCR fields in reading order. Unrelated text or a layout
+// break ends the run, even if another place name is nearby.
+enum _FieldKind { address, label, aza, place, lot, number }
+
+typedef _AddressField = ({
+  _FieldKind kind,
+  _AddressSpan span,
+  Rect bounds,
+  int line,
+});
+
+final _addressFieldLabel = RegExp(r'^(?:住所|所在地|送付先|字名|番地|地番):?');
+final _nextFieldLabel = RegExp(
+  r'^(?:備考|電話|携帯|氏名|名前|宛名|TEL|FAX|E-?mail|管理番号|金額|価格)',
+  caseSensitive: false,
+);
+final _lotProse = RegExp(r'^[でにはへを]');
+final _bareLot = RegExp(r'^[0-9]{1,5}$');
+
+List<_AddressSpan> _nearbyAddressParts(
+  String text,
+  List<({int line, Rect rect})?> positions,
+  Set<int> breaks,
+  List<_AddressSpan> addresses,
+  PlaceNameDictionary? dictionary,
+) {
+  final found = <_AddressSpan>[];
+  final run = <_AddressField>[];
+  void finish() {
+    // A standalone name and number are insufficient without a more specific
+    // clue (an explicit aza, formatted lot, address label or known address).
+    final selected = <int>{};
+    for (var i = 0; i < run.length; i++) {
+      final kind = run[i].kind;
+      if (kind == _FieldKind.address || kind == _FieldKind.label) {
+        // At most two neighboring fields per side (e.g. name and lot).
+        selected.addAll([i - 2, i - 1, i + 1, i + 2]);
+      }
+      if (i == 0) continue;
+      final previous = run[i - 1].kind;
+      if ((previous == _FieldKind.aza &&
+              (kind == _FieldKind.number || kind == _FieldKind.lot)) ||
+          (previous == _FieldKind.place && kind == _FieldKind.lot)) {
+        selected.addAll([i - 1, i]);
+      }
+    }
+    for (final i in selected) {
+      if (i < 0 || i >= run.length) continue;
+      final field = run[i];
+      if (field.kind != _FieldKind.address && field.kind != _FieldKind.label) {
+        found.add(field.span);
+      }
+    }
+    run.clear();
+  }
+
+  void append(_FieldKind kind, int start, int end) {
+    var bounds = positions[start]!.rect;
+    for (var i = start + 1; i < end; i++) {
+      bounds = bounds.expandToInclude(positions[i]!.rect);
+    }
+    final line = positions[start]!.line;
+    if (run.isNotEmpty) {
+      final prev = run.last;
+      final h = prev.bounds.height;
+      final sameRow = (prev.bounds.center.dy - bounds.center.dy).abs() < h / 2;
+      final close = sameRow
+          ? bounds.left >= prev.bounds.left &&
+                bounds.left - prev.bounds.right <= h * 1.5
+          : line == prev.line + 1 &&
+                bounds.top >= prev.bounds.top &&
+                bounds.top - prev.bounds.bottom <= h &&
+                bounds.left < prev.bounds.right &&
+                bounds.right > prev.bounds.left;
+      if (!close) finish();
+    }
+    run.add((
+      kind: kind,
+      span: (start: start, end: end),
+      bounds: bounds,
+      line: line,
+    ));
+  }
+
+  final covered = List<bool>.filled(text.length, false);
+  for (final span in addresses) {
+    covered.fillRange(span.start, span.end, true);
+  }
+  var blockedLine = -1;
+  var start = 0;
+  while (start < text.length) {
+    if (positions[start] == null) {
+      start++;
+      continue;
+    }
+    var end = start + 1;
+    while (end < text.length &&
+        positions[end] != null &&
+        !breaks.contains(end) &&
+        covered[end] == covered[start]) {
+      end++;
+    }
+    if (covered[start]) {
+      append(_FieldKind.address, start, end);
+    } else {
+      var value = text.substring(start, end);
+      final line = positions[start]!.line;
+      if (_nextFieldLabel.hasMatch(value)) {
+        finish();
+        blockedLine = line;
+      }
+      final label = _addressFieldLabel.matchAsPrefix(value);
+      if (line == blockedLine && label == null) {
+        start = end;
+        continue;
+      }
+      if (label != null) {
+        finish();
+        blockedLine = -1;
+        append(_FieldKind.label, start, start + label.end);
+        start += label.end;
+        value = value.substring(label.end);
+      }
+      if (value.isNotEmpty) {
+        final lot = _explicitLot.matchAsPrefix(value);
+        if (lot != null &&
+            !_numericDate.hasMatch(value) &&
+            (lot.end == value.length ||
+                _lotProse.hasMatch(value.substring(lot.end)))) {
+          append(_FieldKind.lot, start, start + lot.end);
+          if (lot.end != value.length) finish();
+        } else if (_bareLot.hasMatch(value)) {
+          append(_FieldKind.number, start, end);
+        } else if (_aza.hasMatch(value) &&
+            !_azaProse.hasMatch(value) &&
+            !RegExp(
+              r'[へでにをがは]',
+            ).hasMatch(value.substring(_azaMarker.matchAsPrefix(value)!.end))) {
+          append(_FieldKind.aza, start, end);
+        } else if (dictionary?.contains(value) == true) {
+          append(_FieldKind.place, start, end);
+        } else {
+          finish();
+        }
+      }
+    }
+    start = end;
+  }
+  finish();
+  return found;
+}
+
 String _normalize(String value) => String.fromCharCodes(
   value.runes.map((r) => r >= 0xFF01 && r <= 0xFF5E ? r - 0xFEE0 : r),
 ).replaceAll(RegExp(r'[ \t\u3000]'), '').replaceAll(RegExp('[‐‑‒–—―−]'), '-');
@@ -354,6 +506,20 @@ List<RegionCandidate> japaneseAddressCandidates(
     RegExp('[ーｰ](?=[0-9])'),
     '-',
   );
+  bool crossesColumn(int start, int end) {
+    for (var i = start + 1; i < end; i++) {
+      if (!componentBreaks.contains(i)) continue;
+      final before = positions[i - 1];
+      final after = positions[i];
+      if (before != null &&
+          after != null &&
+          after.rect.left - before.rect.right > before.rect.height * 1.5) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   for (final match in _address.allMatches(normalizedText)) {
     if (_nonAddressUnit.hasMatch(normalizedText.substring(match.end))) continue;
     final value = match.group(0)!;
@@ -383,6 +549,7 @@ List<RegionCandidate> japaneseAddressCandidates(
       continue;
     }
     if (mode == AddressDetectionMode.addressOnly) {
+      if (crossesColumn(start, match.end)) continue;
       spans.add((start: start, end: match.end));
       continue;
     }
@@ -414,13 +581,20 @@ List<RegionCandidate> japaneseAddressCandidates(
         in dictionary?.matches(normalizedText) ?? <_AddressSpan>[]) {
       final lot = _explicitLot.matchAsPrefix(normalizedText, place.end);
       if (lot == null ||
+          crossesColumn(place.start, lot.end) ||
           spans.any((s) => place.start < s.end && lot.end > s.start)) {
         continue;
       }
       spans.add((start: place.start, end: lot.end));
     }
     return _addressRegions(
-      _mergeSpans(spans, postalSpans),
+      _mergeSpans([
+        ...spans,
+        ..._nearbyAddressParts(normalizedText, positions, componentBreaks, [
+          ...spans,
+          ...postalSpans,
+        ], dictionary),
+      ], postalSpans),
       positions,
       width,
       height,
