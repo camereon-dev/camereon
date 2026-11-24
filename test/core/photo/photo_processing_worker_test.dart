@@ -14,6 +14,8 @@ PixelShape rect(int left, int top, int right, int bottom) => (
   bottom: bottom,
   shape: 0,
   points: Float64List(0),
+  radius: 0.0,
+  reveal: false,
 );
 
 void main() {
@@ -69,7 +71,46 @@ void main() {
       rect(-1, 0, 2, 2),
       rect(0, 0, 49, 2),
       rect(5, 5, 5, 9),
-      (left: 0, top: 0, right: 4, bottom: 4, shape: 3, points: Float64List(0)),
+      (
+        left: 0,
+        top: 0,
+        right: 4,
+        bottom: 4,
+        shape: 4,
+        points: Float64List(0),
+        radius: 0.0,
+        reveal: false,
+      ),
+      (
+        left: 0,
+        top: 0,
+        right: 4,
+        bottom: 4,
+        shape: 3,
+        points: Float64List(0),
+        radius: 2.0,
+        reveal: false,
+      ),
+      (
+        left: 0,
+        top: 0,
+        right: 4,
+        bottom: 4,
+        shape: 3,
+        points: Float64List.fromList([1, 1]),
+        radius: 0.0,
+        reveal: false,
+      ),
+      (
+        left: 0,
+        top: 0,
+        right: 4,
+        bottom: 4,
+        shape: 0,
+        points: Float64List(0),
+        radius: 0.0,
+        reveal: true,
+      ),
       (
         left: 0,
         top: 0,
@@ -77,6 +118,8 @@ void main() {
         bottom: 4,
         shape: 2,
         points: Float64List.fromList([0, 0, 4, 0]),
+        radius: 0.0,
+        reveal: false,
       ),
     ]) {
       expect(

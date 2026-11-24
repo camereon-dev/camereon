@@ -38,51 +38,49 @@ class _UnavailableCamera extends CameraPlatform {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'sample: open without camera, redact, confirm and save to Photos',
-    (tester) async {
-      final camera = CameraPlatform.instance;
-      CameraPlatform.instance = _UnavailableCamera();
-      addTearDown(() => CameraPlatform.instance = camera);
-      await tester.pumpWidget(const CamereonApp());
-      await tester.pumpAndSettle();
-      expect(find.text('カメラが見つかりません'), findsOneWidget);
-      await tester.tap(find.text('サンプルで試す'));
-      await tester.pumpAndSettle();
-      final candidates = tester
+  testWidgets('sample: open without camera, redact and save to Photos', (
+    tester,
+  ) async {
+    final camera = CameraPlatform.instance;
+    CameraPlatform.instance = _UnavailableCamera();
+    addTearDown(() => CameraPlatform.instance = camera);
+    await tester.pumpWidget(const CamereonApp());
+    await tester.pumpAndSettle();
+    expect(find.text('カメラが見つかりません'), findsOneWidget);
+    await tester.tap(find.text('サンプルで試す'));
+    await tester.pumpAndSettle();
+    final candidates = tester
+        .widget<CandidateOverlay>(find.byType(CandidateOverlay))
+        .candidates;
+    expect(candidates.length, greaterThanOrEqualTo(2));
+    // Every address starts hidden; reveal two, then undo the second.
+    await tapCandidate(tester, candidates[0]);
+    await tapCandidate(tester, candidates[1]);
+    await editorAction(tester, '取り消す');
+    expect(
+      tester
           .widget<CandidateOverlay>(find.byType(CandidateOverlay))
-          .candidates;
-      expect(candidates.length, greaterThanOrEqualTo(2));
-      await tapCandidate(tester, candidates[0]);
-      await tapCandidate(tester, candidates[1]);
-      await editorAction(tester, '取り消す');
-      expect(
-        tester
-            .widget<CandidateOverlay>(find.byType(CandidateOverlay))
-            .selectedCandidates
-            .length,
-        1,
-      );
-      await editorAction(tester, '保存前に確認');
-      expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
-      await tester.tap(find.text('写真に保存'));
-      // Photos completion can arrive after Flutter animations settle.
-      for (var i = 0; i < 300; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-        if (find.text('写真を保存しました').evaluate().isNotEmpty) break;
-      }
-      await tester.pumpAndSettle();
-      expect(find.text('写真を保存しました'), findsOneWidget);
-      await tester.tap(find.text('もう一枚'));
-      await tester.pumpAndSettle();
-      expect(find.text('サンプルで試す'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+          .selectedCandidates
+          .length,
+      candidates.length - 1,
+    );
+    await tester.tap(find.byTooltip('写真に保存'));
+    // Photos completion can arrive after Flutter animations settle.
+    for (var i = 0; i < 300; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.byTooltip('共有').evaluate().isNotEmpty) break;
+    }
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('共有'), findsOneWidget);
+    await tester.tap(find.byTooltip('もう一枚'));
+    await tester.pumpAndSettle();
+    expect(find.text('サンプルで試す'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final repeatedExif in [false, true]) {
     testWidgets(
-      '${repeatedExif ? 'camera metadata' : 'oriented photograph'}: edit, confirm, save JPEG, retake and clean up',
+      '${repeatedExif ? 'camera metadata' : 'oriented photograph'}: edit, save JPEG, retake and clean up',
       (tester) async {
         final directory = await getTemporaryDirectory();
         final file = File('${directory.path}/CAP-integration.jpg');
@@ -144,17 +142,15 @@ void main() {
                 as SelectionPainter;
         final HideRegion region = painter.regions.single;
         expect((painter.imageWidth, painter.imageHeight), (32, 48));
-        await editorAction(tester, '保存前に確認');
-        expect(find.bySemanticsLabel('保存する加工済み写真'), findsOneWidget);
-        await tester.tap(find.text('写真に保存'));
+        await tester.tap(find.byTooltip('写真に保存'));
         // Native Photos writes can finish after Flutter has no pending frames.
         // Wait for the observable outcome, rather than only animation settling.
         for (var i = 0; i < 300; i++) {
           await tester.pump(const Duration(milliseconds: 100));
-          if (find.text('写真を保存しました').evaluate().isNotEmpty) break;
+          if (find.byTooltip('共有').evaluate().isNotEmpty) break;
         }
         await tester.pumpAndSettle();
-        expect(find.text('写真を保存しました'), findsOneWidget);
+        expect(find.byTooltip('共有'), findsOneWidget);
         final jpeg = saver.saved!;
         expect((jpeg.width, jpeg.height), (32, 48));
         final image = img.decodeJpg(jpeg.bytes)!;
@@ -180,7 +176,7 @@ void main() {
           jpegSegments(jpeg.bytes).map((s) => s.marker),
           everyElement(isIn([0xe0, 0xdb, 0xc0, 0xc4, 0xda])),
         );
-        await tester.tap(find.text('もう一枚'));
+        await tester.tap(find.byTooltip('もう一枚'));
         await tester.pumpAndSettle();
         expect(find.text('テスト写真を開く'), findsOneWidget);
         expect(await file.exists(), isFalse);

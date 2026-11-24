@@ -135,11 +135,8 @@ void main() {
         ),
       );
       final before = await galleryFiles(gallery);
-      await editorAction(tester, '保存前に確認');
-      await tester.ensureVisible(find.text('写真に保存'));
-      await tester.tap(find.text('写真に保存'));
-      await tester.pumpAndSettle();
-      expect(find.text('写真を保存しました'), findsOneWidget);
+      await editorAction(tester, '写真に保存');
+      expect(find.byTooltip('共有'), findsOneWidget);
       final created = (await galleryFiles(gallery)).difference(before);
       expect(created.length, 1);
       final persisted = await File(created.single).readAsBytes();

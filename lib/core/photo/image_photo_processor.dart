@@ -72,10 +72,13 @@ PixelShape pixelShape(HideRegion r) => (
     HideShape.rectangle => 0,
     HideShape.ellipse => 1,
     HideShape.polygon => 2,
+    HideShape.stroke => 3,
   },
   points: Float64List.fromList([
     for (final p in r.points) ...[p.dx, p.dy],
   ]),
+  radius: r.radius,
+  reveal: r.reveal,
 );
 
 // 小さい送信可能な引数だけを捕捉し、processor や UI の状態を送らない。

@@ -189,12 +189,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(camera.captureOrientations, [DeviceOrientation.landscapeRight]);
     expect(camera.pictures, 1);
-    expect(
-      tester
-          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
-          .startWithConfirmation,
-      isTrue,
-    );
+    expect(find.byType(CapturedPhotoScreen), findsOneWidget);
   });
 
   testWidgets('向きが届かない端末（iOS）では撮影向きを固定しない', (tester) async {
@@ -208,16 +203,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(camera.pictures, 1);
-    expect(
-      tester
-          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
-          .startWithConfirmation,
-      isTrue,
-    );
+    expect(find.byType(CapturedPhotoScreen), findsOneWidget);
     expect(camera.captureOrientations, isEmpty);
   });
 
-  testWidgets('撮影すると写真の確認画面へ進み、撮り直しでカメラへ戻る', (tester) async {
+  testWidgets('撮影するとすぐ編集画面へ進み、撮り直しでカメラへ戻る', (tester) async {
     useCamera(FakeCameraPlatform());
 
     await tester.pumpWidget(const CamereonApp());
@@ -231,12 +221,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(camera.pictures, 1);
-    expect(
-      tester
-          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
-          .startWithConfirmation,
-      isTrue,
-    );
+    expect(find.byType(CapturedPhotoScreen), findsOneWidget);
     expect(camera.disposed, contains(0));
     expect(find.byTooltip('撮り直す'), findsOneWidget);
 
@@ -395,12 +380,12 @@ void main() {
             .kind,
         CandidateKind.address,
       );
-      expect(find.byTooltip('保存前に確認'), findsOneWidget);
+      expect(find.byTooltip('写真に保存'), findsOneWidget);
       final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
       await tester.dragFrom(rect.center, const Offset(30, 30));
       await tester.pump();
       expect(find.byType(FilterChip), findsNothing);
-      expect(find.byTooltip('保存前に確認'), findsOneWidget);
+      expect(find.byTooltip('写真に保存'), findsOneWidget);
       await tester.tap(find.byTooltip('撮り直す'));
       await tester.pumpAndSettle();
       expect(find.text('編集を破棄しますか？'), findsOneWidget);

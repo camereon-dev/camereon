@@ -43,13 +43,11 @@ void main() {
       await editor.tapPixel(tester, const Offset(50, 30));
       await editor.tapPixel(tester, const Offset(50, 30));
       expect(editor.overlay(tester).selectedCandidates, addresses.toSet());
-      await editor.tapText(tester, '保存前に確認');
-      await editor.tapText(tester, '編集へ戻る');
-      expect(editor.overlay(tester).selectedCandidates, addresses.toSet());
       if (revealBeforeSave) {
         await editor.tapPixel(tester, const Offset(50, 30));
       }
-      await editor.tapText(tester, '保存前に確認');
+      saver.result = const SaveFailed(SaveFailureReason.failed);
+      await editor.tapText(tester, '写真に保存');
       expect(
         processor.received,
         unorderedEquals([
@@ -57,13 +55,17 @@ void main() {
           addresses.last.region,
         ]),
       );
-      saver.result = const SaveFailed(SaveFailureReason.failed);
-      await editor.tapText(tester, '写真に保存');
       expect(saver.received, same(processor.jpeg));
+      expect(find.text('保存できませんでした。もう一度お試しください'), findsOneWidget);
+      // A failed save keeps every edit; the next attempt can succeed.
+      expect(editor.overlay(tester).selectedCandidates, {
+        if (!revealBeforeSave) addresses.first,
+        addresses.last,
+      });
       saver.result = const SaveSucceeded();
       await editor.tapText(tester, '写真に保存');
       expect(saver.calls, 2);
-      expect(find.text('写真を保存しました'), findsOneWidget);
+      expect(find.byTooltip('共有'), findsOneWidget);
     });
   }
 
@@ -123,11 +125,10 @@ void main() {
       editor.painter(tester).regions.single.toRect(),
       const Rect.fromLTRB(76, 325, 431, 360),
     );
-    await editor.tapText(tester, '住所 1');
+    await editor.tapKind(tester, CandidateKind.address);
     expect(editor.painter(tester).regions, isEmpty);
-    await editor.tapText(tester, '保存前に確認');
-    expect(processor.received, isEmpty);
     await editor.tapText(tester, '写真に保存');
+    expect(processor.received, isEmpty);
     expect(saver.received, same(processor.jpeg));
   });
 }
