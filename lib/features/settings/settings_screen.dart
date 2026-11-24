@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/detection/address_detection_mode.dart';
 import '../../core/detection/place_name_dictionary.dart';
 import '../camera/glass_photo_chrome.dart';
 import 'app_settings.dart';
@@ -55,11 +56,17 @@ class SettingsScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 24),
                 children: [
-                  const _Heading(
-                    '自動で隠す',
-                    note:
-                        '写真から見つけたとき、最初から隠しておくもの。'
-                        'オフにしても枠は表示され、タップすれば隠せます。',
+                  const _Heading('自動で隠す'),
+                  ListTile(
+                    title: const Text('住所'),
+                    subtitle: Text(current.addressMode.label),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            _AddressSettingsScreen(settings: settings),
+                      ),
+                    ),
                   ),
                   for (final kind in autoHideChoices)
                     SwitchListTile(
@@ -162,4 +169,43 @@ class _Heading extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on AddressDetectionMode {
+  String get label => switch (this) {
+    AddressDetectionMode.off => '住所を探さない',
+    AddressDetectionMode.addressOnly => '住所だけ隠す',
+    AddressDetectionMode.placeNames => '地名があれば隠す',
+  };
+}
+
+class _AddressSettingsScreen extends StatelessWidget {
+  const _AddressSettingsScreen({required this.settings});
+  final SettingsController settings;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.black,
+    appBar: AppBar(backgroundColor: Colors.black, title: const Text('住所')),
+    body: ValueListenableBuilder<AppSettings>(
+      valueListenable: settings,
+      builder: (_, current, _) => RadioGroup<AddressDetectionMode>(
+        groupValue: current.addressMode,
+        onChanged: (mode) {
+          if (mode != null) {
+            settings.update(settings.value.copyWith(addressMode: mode));
+          }
+        },
+        child: ListView(
+          children: [
+            for (final mode in AddressDetectionMode.values)
+              RadioListTile<AddressDetectionMode>(
+                value: mode,
+                title: Text(mode.label),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

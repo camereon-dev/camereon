@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:camereon/core/detection/address_detection_mode.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/features/settings/app_settings.dart';
 import 'package:camereon/features/settings/settings_screen.dart';
@@ -75,10 +76,17 @@ void main() {
       CandidateKind.phone,
     });
     expect(switchOn(tester, 'auto-hide-face'), isFalse);
-    expect(switchOn(tester, 'auto-hide-address'), isTrue);
+    expect(find.text('地名があれば隠す'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('auto-hide-address')));
+    await tester.tap(find.text('住所'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('住所だけ隠す'));
     await tester.pump();
+    await settings.saved;
+    expect(store.saved?.addressMode, AddressDetectionMode.addressOnly);
+    await tester.tap(find.text('住所を探さない'));
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(settings.value.autoHideKinds, {CandidateKind.phone});
 
     await tester.tap(find.byKey(const ValueKey('auto-hide-face')));
@@ -88,7 +96,7 @@ void main() {
       CandidateKind.face,
     });
     await settings.saved;
-    expect(store.saves, 3);
+    expect(store.saves, 4);
     expect(store.saved, settings.value);
   });
 
@@ -146,7 +154,7 @@ void main() {
       ).withAutoHide(CandidateKind.address, false),
     );
     await tester.pump();
-    expect(switchOn(tester, 'auto-hide-address'), isFalse);
+    expect(find.text('住所を探さない'), findsOneWidget);
     expect(switchOn(tester, 'auto-hide-face'), isTrue);
     expect(
       tester

@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 
 import '../photo/hide_region.dart';
 import '../photo/photo_images.dart';
+import 'address_detection_mode.dart';
 import 'region_detector.dart';
 import 'place_name_dictionary.dart';
 import 'japanese_phone_number_detector.dart';
@@ -10,8 +11,10 @@ import 'japanese_phone_number_detector.dart';
 class JapaneseAddressDetector implements RegionDetector {
   JapaneseAddressDetector({
     MethodChannel? channel,
+    this.addressMode = AddressDetectionMode.placeNames,
     this._nativeTimeout = const Duration(seconds: 60),
   }) : _channel = channel ?? const MethodChannel('dev.camereon/japanese_ocr');
+  final AddressDetectionMode addressMode;
   final MethodChannel _channel;
   final Duration _nativeTimeout;
   bool _working = false;
@@ -21,7 +24,9 @@ class JapaneseAddressDetector implements RegionDetector {
     if (_working) throw const RegionDetectionException();
     _working = true;
     try {
-      final dictionary = await PlaceNameDictionary.load();
+      final dictionary = addressMode == AddressDetectionMode.off
+          ? null
+          : await PlaceNameDictionary.load();
       final pixels = await rawThumbnail(photo, 2560);
       final response = await _channel
           .invokeMapMethod<String, dynamic>('detect', {
@@ -97,6 +102,7 @@ class JapaneseAddressDetector implements RegionDetector {
             photo.width,
             photo.height,
             dictionary: dictionary,
+            mode: addressMode,
           ).where(
             (address) => !phones.any((phone) {
               final a = address.region.toRect();
@@ -156,6 +162,10 @@ final _componentLabel = RegExp(r'^(?:住所|所在地|市区町村|市町村|番
 final _lot = RegExp(
   '^(?:$_number(?:丁目|番地?|号)(?:(?:の|-)?$_number(?:番地?|号)?)*|'
   '[0-9]{1,4}(?:-[0-9]{1,4}){1,2})\$',
+);
+final _explicitLot = RegExp(
+  '$_number(?:丁目|番地?|号)(?:(?:の|-)?$_number(?:番地?|号)?)*|'
+  '[0-9]{1,4}(?:-[0-9]{1,4}){1,2}',
 );
 final _labelledLot = RegExp('^$_number\$');
 // Aza/oaza/koaza components may appear without a municipality or lot number.
@@ -315,7 +325,9 @@ List<RegionCandidate> japaneseAddressCandidates(
   int width,
   int height, {
   PlaceNameDictionary? dictionary,
+  AddressDetectionMode mode = AddressDetectionMode.placeNames,
 }) {
+  if (mode == AddressDetectionMode.off) return [];
   final text = StringBuffer();
   final positions = <({int line, Rect rect})?>[];
   final componentBreaks = <int>{};
@@ -337,7 +349,6 @@ List<RegionCandidate> japaneseAddressCandidates(
     text.write('\n');
     positions.add(null);
   }
-  final regions = <HideRegion>{};
   final spans = <_AddressSpan>[];
   final normalizedText = text.toString().replaceAll(
     RegExp('[ーｰ](?=[0-9])'),
@@ -371,6 +382,10 @@ List<RegionCandidate> japaneseAddressCandidates(
         })) {
       continue;
     }
+    if (mode == AddressDetectionMode.addressOnly) {
+      spans.add((start: start, end: match.end));
+      continue;
+    }
     var end = match.end;
     // Include any contiguous trailing building/room text, not just a list of
     // building suffixes. Explicit other-field labels and OCR gaps stop it.
@@ -387,6 +402,20 @@ List<RegionCandidate> japaneseAddressCandidates(
     final suffix = normalizedText.substring(end, limit);
     if (!suffix.endsWith('様') && !suffix.endsWith('御中')) end = limit;
     spans.add((start: start, end: end));
+  }
+
+  if (mode == AddressDetectionMode.addressOnly) {
+    // Also recognize abbreviated addresses such as 神南1-2-3.
+    for (final place
+        in dictionary?.matches(normalizedText) ?? <_AddressSpan>[]) {
+      final lot = _explicitLot.matchAsPrefix(normalizedText, place.end);
+      if (lot == null ||
+          spans.any((s) => place.start < s.end && lot.end > s.start)) {
+        continue;
+      }
+      spans.add((start: place.start, end: lot.end));
+    }
+    return _addressRegions(spans, positions, width, height);
   }
 
   bool overlaps(int start, int end) =>
@@ -602,7 +631,17 @@ List<RegionCandidate> japaneseAddressCandidates(
     if (cursor < span.end) finalSpans.add((start: cursor, end: span.end));
   }
   finalSpans.sort((a, b) => a.start.compareTo(b.start));
-  for (final span in finalSpans) {
+  return _addressRegions(finalSpans, positions, width, height);
+}
+
+List<RegionCandidate> _addressRegions(
+  List<_AddressSpan> spans,
+  List<({int line, Rect rect})?> positions,
+  int width,
+  int height,
+) {
+  final regions = <HideRegion>{};
+  for (final span in spans) {
     final bounds = <int, Rect>{};
     for (var i = span.start; i < span.end; i++) {
       final p = positions[i];

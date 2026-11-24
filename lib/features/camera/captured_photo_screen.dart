@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/analysis/face_detection.dart';
 import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
+import '../../core/detection/address_detection_mode.dart';
 import '../../core/detection/region_detector.dart';
 import '../../core/detection/japanese_address_detector.dart';
 import '../../core/detection/japanese_phone_number_detector.dart';
@@ -53,6 +54,7 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.previewer,
     this.initialCandidates,
     this.addressDetector,
+    this.addressMode = AddressDetectionMode.placeNames,
     this.includeOtherCandidates = false,
     this.sharer,
     this.autoHideKinds = const {
@@ -70,6 +72,7 @@ class CapturedPhotoScreen extends StatefulWidget {
   final RegionDetector? detector;
   final RegionDetector? objectDetector;
   final RegionDetector? addressDetector;
+  final AddressDetectionMode addressMode;
 
   /// Legacy multi-kind editor is retained only for detector evaluation.
   final bool includeOtherCandidates;
@@ -172,7 +175,8 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   late final RegionDetector _detector =
       widget.detector ?? const NoRegionDetector();
   late final RegionDetector _addressDetector =
-      widget.addressDetector ?? JapaneseAddressDetector();
+      widget.addressDetector ??
+      JapaneseAddressDetector(addressMode: widget.addressMode);
   bool _ocrDetecting = false;
   bool _ocrFailed = false;
   final Map<CandidateKind, Set<HideRegion>> _seenOcrRegions = {};

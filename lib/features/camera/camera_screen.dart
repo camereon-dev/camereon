@@ -295,6 +295,7 @@ class _CameraScreenState extends State<CameraScreen>
           builder: (_) => CapturedPhotoScreen(
             photo: photo,
             initialCandidates: initialCandidates,
+            addressMode: _settings.value.addressMode,
             autoHideKinds: _settings.value.autoHideKinds,
           ),
         ),

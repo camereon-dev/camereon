@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:camereon/core/detection/address_detection_mode.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/features/settings/app_settings.dart';
 import 'package:camereon/features/settings/settings_store.dart';
@@ -28,6 +29,18 @@ void main() {
     expect(settings.showGrid, isFalse);
   });
 
+  test('legacy address switch migrates to its corresponding mode', () {
+    for (final hide in [true, false]) {
+      final settings = AppSettings.fromJson({
+        'autoHide': {'address': hide},
+      });
+      expect(
+        settings.addressMode,
+        hide ? AddressDetectionMode.placeNames : AddressDetectionMode.off,
+      );
+    }
+  });
+
   test('a missing file reads as the defaults', () async {
     expect(await store.load(), const AppSettings());
   });
@@ -35,7 +48,11 @@ void main() {
   test('saved settings read back the same', () async {
     final settings = const AppSettings()
         .withAutoHide(CandidateKind.face, false)
-        .copyWith(resolution: CameraResolution.uhd, showGrid: true);
+        .copyWith(
+          addressMode: AddressDetectionMode.addressOnly,
+          resolution: CameraResolution.uhd,
+          showGrid: true,
+        );
     await store.save(settings);
     expect(await store.load(), settings);
     expect(await store.load(), isNot(const AppSettings()));

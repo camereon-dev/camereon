@@ -1,3 +1,4 @@
+import 'package:camereon/core/detection/address_detection_mode.dart';
 import 'package:camereon/core/detection/japanese_address_detector.dart';
 import 'package:camereon/core/detection/japanese_phone_number_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
@@ -74,6 +75,15 @@ void main() {
             .any((c) => c.region.top >= 155),
         isFalse,
       );
+      final off = await JapaneseAddressDetector(
+        channel: channel,
+        addressMode: AddressDetectionMode.off,
+      ).detect(photo);
+      expect(
+        off.candidates.map((c) => c.kind),
+        everyElement(CandidateKind.phone),
+      );
+      expect(off.candidates.map((c) => c.region), phones.map((c) => c.region));
       expect(phones.first.region.top, 67);
       expect(phones.first.region.left, 47);
     },

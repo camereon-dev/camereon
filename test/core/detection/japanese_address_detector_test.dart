@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:camereon/core/detection/address_detection_mode.dart';
+import 'package:camereon/core/detection/place_name_dictionary.dart';
 import 'package:camereon/core/detection/japanese_address_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/photo_images.dart';
@@ -14,6 +16,26 @@ List<AddressGlyph> glyphs(String text, {double y = 10}) => [
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'address only masks numbered addresses and leaves other mentions visible',
+    () async {
+      final dictionary = await PlaceNameDictionary.load();
+      final candidates = japaneseAddressCandidates(
+        [
+          glyphs('東京都新宿区西新宿2-8-1で開催'),
+          glyphs('新宿区のイベント', y: 40),
+          glyphs('西新宿', y: 70),
+          glyphs('西新宿2-8-1', y: 100),
+        ],
+        1000,
+        200,
+        dictionary: dictionary,
+        mode: AddressDetectionMode.addressOnly,
+      );
+      expect(candidates.map((c) => c.region.top), [8, 98]);
+      expect(candidates.first.region.right, 12 + '東京都新宿区西新宿2-8-1'.length * 10);
+    },
+  );
   for (final text in [
     '東京都千代田区千代田1-1',
     '東京都新宿区西新宿２丁目８番１号',
