@@ -62,8 +62,9 @@ _PhoneLine _line(List<PhoneGlyph> glyphs) {
       if (!_sameRow(previous, r) || gap > height) {
         text.write('\t');
         positions.add(null);
-      } else if (gap > height * .25) {
-        // Keep an OCR gap visible so fragment length checks can inspect it.
+      } else if (gap > height * .55) {
+        // Leave room for the side bearings of narrow and full-width digits.
+        // Only larger gaps create numeric fragments when OCR omits spaces.
         text.write(' ');
         positions.add(null);
       }
@@ -205,7 +206,8 @@ String _numberText(_PhoneLine line) {
             (before.group(0)!.length >= 3 && after.group(0)!.length >= 3)) &&
         a != null &&
         b != null &&
-        _nearby(a, b)) {
+        // Vision can return the same word bounds for multiple characters.
+        (a == b || _nearby(a, b))) {
       continue;
     }
     for (var i = gap.start; i < gap.end; i++) {

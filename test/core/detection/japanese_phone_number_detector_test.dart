@@ -94,6 +94,50 @@ void main() {
     final found = japanesePhoneNumberCandidates([line(text)], 1000, 300);
     expect(found.single.region.toRect(), const Rect.fromLTRB(47, 7, 173, 29));
   });
+  test('spaces between OCR glyph bounds do not split a printed number', () {
+    List<PhoneGlyph> glyphs(
+      String text,
+      double x,
+      double advance,
+      double height,
+      double width,
+    ) => [
+      for (final (i, char) in text.split('').indexed)
+        (
+          text: char,
+          bounds: Rect.fromLTWH(
+            x + i * advance,
+            10,
+            char == '1' && advance == 20 ? 10 : width,
+            height,
+          ),
+        ),
+    ];
+    final local = japanesePhoneNumberCandidates(
+      [
+        [...line('TEL:'), ...glyphs('12345678', 54, 20, 26, 16)],
+      ],
+      1000,
+      300,
+    );
+    expect(local.single.automaticallySelected, isFalse);
+
+    final international = japanesePhoneNumberCandidates(
+      [
+        [
+          ...glyphs('+81', 10, 36, 35, 19),
+          ...glyphs('90', 126, 36, 35, 19),
+          ...glyphs('0000', 206, 36, 35, 19),
+          ...glyphs('9876', 358, 36, 35, 19),
+        ],
+      ],
+      1000,
+      300,
+    );
+    expect(international.single.automaticallySelected, isTrue);
+    expect(international.single.region.left, 4);
+    expect(international.single.region.right, 491);
+  });
   test('a labelled local number is optional, never auto-hidden', () {
     final found = japanesePhoneNumberCandidates(
       [line('TEL:123-4567')],
@@ -172,6 +216,18 @@ void main() {
       expect(found.single.region.right, lessThan(100));
     },
   );
+  test('space-separated digits can share one OCR bounding box', () {
+    const bounds = Rect.fromLTRB(40, 10, 150, 30);
+    final found = japanesePhoneNumberCandidates(
+      [
+        [(text: '03 0000 1234', bounds: bounds)],
+      ],
+      200,
+      100,
+    );
+    expect(found.single.automaticallySelected, isTrue);
+    expect(found.single.region.toRect(), bounds.inflate(3));
+  });
   test('nearby 3+ digit observations join even when OCR order is reversed', () {
     for (final fragments in [
       [line('098', x: 10), line('895', x: 50), line('8012', x: 90)],
