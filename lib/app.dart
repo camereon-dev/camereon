@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'features/camera/camera_screen.dart';
+import 'features/settings/settings_store.dart';
 
 class CamereonApp extends StatelessWidget {
-  const CamereonApp({super.key});
+  const CamereonApp({super.key, this.settings});
+
+  final SettingsController? settings;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +22,7 @@ class CamereonApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.black,
       ),
       // 起動したらすぐ撮影できるよう、最初の画面をカメラにする
-      home: const CameraScreen(),
+      home: CameraScreen(settings: settings),
     );
   }
 }

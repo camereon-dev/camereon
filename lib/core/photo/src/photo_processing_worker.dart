@@ -222,8 +222,14 @@ img.Image paintRegions(img.Image image, List<PixelShape> regions) {
         r.left >= r.right ||
         r.top >= r.bottom ||
         r.shape < 0 ||
-        r.shape > 2 ||
+        r.shape > 3 ||
         (r.shape == 2 && (r.points.length < 6 || r.points.length.isOdd)) ||
+        (r.shape == 3 &&
+            (r.points.length < 2 ||
+                r.points.length.isOdd ||
+                !r.radius.isFinite ||
+                r.radius <= 0)) ||
+        (r.reveal && r.shape != 3) ||
         r.points.any((v) => !v.isFinite)) {
       throw const PhotoProcessingException(
         PhotoProcessingFailure.invalidRegion,

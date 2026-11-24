@@ -46,19 +46,18 @@ void main() {
       });
       await editor.tapText(tester, '取り消す');
       expect(editor.overlay(tester).selectedCandidates, {address, phone});
-      await editor.tapText(tester, '電話番号 1/2');
+      await editor.tapKind(tester, CandidateKind.phone);
       expect(editor.overlay(tester).selectedCandidates, {
         address,
         phone,
         optional,
       });
-      await editor.tapText(tester, '保存前に確認');
+      await editor.tapText(tester, '写真に保存');
       expect(processor.received, [
         address.region,
         phone.region,
         optional.region,
       ]);
-      await editor.tapText(tester, '写真に保存');
       expect(saver.calls, 1);
     },
   );
@@ -87,7 +86,7 @@ void main() {
     expect(editor.overlay(tester).selectedCandidates, {address});
   });
 
-  testWidgets('initial confirmation saves full numbers but not optional ones', (
+  testWidgets('initial masks cover full numbers but not optional ones', (
     tester,
   ) async {
     final processor = editor.FakeProcessor(200, 100);
@@ -97,13 +96,34 @@ void main() {
       processor,
       saver,
       includeOtherCandidates: false,
-      startWithConfirmation: true,
       addresses: editor.FakeDetector()
         ..candidates.addAll([address, phone, optional]),
     );
-    expect(processor.received, [address.region, phone.region]);
-    expect(find.text('写真に保存'), findsOneWidget);
+    expect(processor.received, isNull);
     await editor.tapText(tester, '写真に保存');
+    expect(processor.received, [address.region, phone.region]);
     expect(saver.calls, 1);
   });
+
+  testWidgets(
+    'number setting off keeps detected frames available for manual masking',
+    (tester) async {
+      final processor = editor.FakeProcessor(200, 100);
+      await editor.open(
+        tester,
+        processor,
+        editor.FakeSaver(),
+        includeOtherCandidates: false,
+        autoHideKinds: {CandidateKind.address, CandidateKind.face},
+        addresses: editor.FakeDetector()
+          ..candidates.addAll([address, phone, optional]),
+      );
+      expect(editor.overlay(tester).candidates, [address, phone, optional]);
+      expect(editor.overlay(tester).selectedCandidates, {address});
+
+      await editor.tapPixel(tester, phone.region.toRect().center);
+      await editor.tapText(tester, '写真に保存');
+      expect(processor.received, [address.region, phone.region]);
+    },
+  );
 }

@@ -46,7 +46,7 @@ void main() {
       });
       await editor.tapText(tester, '取り消す');
       expect(editor.overlay(tester).selectedCandidates.length, 2);
-      await editor.tapText(tester, '保存前に確認');
+      await editor.tapText(tester, '写真に保存');
       expect(processor.received, [shared]);
     },
   );
@@ -107,7 +107,7 @@ void main() {
       expect(visible, isNot(contains(texts.candidates[1])));
       expect(visible, contains(texts.candidates[0]));
       expect(visible, contains(texts.candidates[2]));
-      await editor.tapText(tester, '保存前に確認');
+      await editor.tapText(tester, '写真に保存');
       expect(processor.received, [texts.candidates[0].region]);
     },
   );

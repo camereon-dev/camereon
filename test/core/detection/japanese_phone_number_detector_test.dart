@@ -12,6 +12,9 @@ void main() {
   for (final text in [
     '03)0000(1234',
     '1234567890',
+    '4111 1111 1111 1111',
+    '4901234567894',
+    '20261117123045',
     '0901234567',
     '090123456789',
     '0120-123-4567',
@@ -37,6 +40,8 @@ void main() {
     '+81 3 0000 1234',
     '＋８１ ９０ ００００ １２３４',
     '03-0000-1234',
+    '03 0000 1234',
+    '06 0000-1234',
     '06-1234-5678',
     '098-123-4567',
     '0312345678',
@@ -203,6 +208,17 @@ void main() {
       expect(found, hasLength(1));
       expect(found.single.automaticallySelected, isTrue);
       expect(found.single.region.left, 7);
+    }
+  });
+  test('split 03 and 06 area codes join nearby four-digit fragments', () {
+    for (final area in ['03', '06']) {
+      final found = japanesePhoneNumberCandidates(
+        [line('5678', x: 90), line(area, x: 10), line('1234', x: 40)],
+        1000,
+        300,
+      );
+      expect(found.single.automaticallySelected, isTrue);
+      expect(found.single.region.toRect(), const Rect.fromLTRB(7, 7, 133, 29));
     }
   });
   test('same-row joining does not combine another row or distant column', () {

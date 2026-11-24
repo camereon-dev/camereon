@@ -7,6 +7,9 @@ import 'package:camereon/core/detection/place_name_dictionary.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:camereon/features/camera/glass_photo_chrome.dart';
+import 'package:camereon/features/settings/app_settings.dart';
+import 'package:camereon/features/settings/settings_screen.dart';
+import 'package:camereon/features/settings/settings_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +32,8 @@ class FakeCameraPlatform extends CameraPlatform {
   final List<CameraDescription> cameras;
   final CameraException? error;
   final opened = <String>[];
+  // One entry per attempt to open a camera, including failed attempts.
+  final presets = <ResolutionPreset?>[];
   final captureOrientations = <DeviceOrientation>[];
   final orientationChanges =
       StreamController<DeviceOrientationChangedEvent>.broadcast();
@@ -44,6 +49,7 @@ class FakeCameraPlatform extends CameraPlatform {
     CameraDescription cameraDescription,
     MediaSettings? mediaSettings,
   ) async {
+    presets.add(mediaSettings?.resolutionPreset);
     if (error != null) throw error!;
     opened.add(cameraDescription.name);
     return _nextId++;
@@ -189,12 +195,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(camera.captureOrientations, [DeviceOrientation.landscapeRight]);
     expect(camera.pictures, 1);
-    expect(
-      tester
-          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
-          .startWithConfirmation,
-      isTrue,
-    );
+    expect(find.byType(CapturedPhotoScreen), findsOneWidget);
   });
 
   testWidgets('向きが届かない端末（iOS）では撮影向きを固定しない', (tester) async {
@@ -208,16 +209,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(camera.pictures, 1);
-    expect(
-      tester
-          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
-          .startWithConfirmation,
-      isTrue,
-    );
+    expect(find.byType(CapturedPhotoScreen), findsOneWidget);
     expect(camera.captureOrientations, isEmpty);
   });
 
-  testWidgets('撮影すると写真の確認画面へ進み、撮り直しでカメラへ戻る', (tester) async {
+  testWidgets('撮影するとすぐ編集画面へ進み、撮り直しでカメラへ戻る', (tester) async {
     useCamera(FakeCameraPlatform());
 
     await tester.pumpWidget(const CamereonApp());
@@ -231,12 +227,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(camera.pictures, 1);
-    expect(
-      tester
-          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
-          .startWithConfirmation,
-      isTrue,
-    );
+    expect(find.byType(CapturedPhotoScreen), findsOneWidget);
     expect(camera.disposed, contains(0));
     expect(find.byTooltip('撮り直す'), findsOneWidget);
 
@@ -265,6 +256,98 @@ void main() {
 
     expect(camera.opened, ['back', 'front']);
     expect(find.byKey(const ValueKey('preview-1')), findsOneWidget);
+  });
+
+  SettingsController settingsWith(AppSettings initial) {
+    final settings = SettingsController(MemorySettingsStore(), initial);
+    addTearDown(settings.dispose);
+    return settings;
+  }
+
+  testWidgets('設定した解像度で開き、解像度を変えるとカメラを開き直す', (tester) async {
+    useCamera(FakeCameraPlatform());
+    final settings = settingsWith(
+      const AppSettings(resolution: CameraResolution.uhd),
+    );
+    await tester.pumpWidget(CamereonApp(settings: settings));
+    await tester.pumpAndSettle();
+    expect(camera.presets, [ResolutionPreset.ultraHigh]);
+
+    await tester.tap(find.byTooltip('設定'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('resolution-hd')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(camera.presets, [ResolutionPreset.ultraHigh, ResolutionPreset.high]);
+    expect(camera.opened, ['back', 'back']);
+    expect(camera.disposed, contains(0));
+    expect(find.byKey(const ValueKey('preview-1')), findsOneWidget);
+  });
+
+  testWidgets('グリッドと自動で隠す種類は開き直さずに反映する', (tester) async {
+    useCamera(FakeCameraPlatform());
+    final settings = settingsWith(const AppSettings());
+    await tester.pumpWidget(CamereonApp(settings: settings));
+    await tester.pumpAndSettle();
+    expect(camera.presets, [ResolutionPreset.veryHigh]);
+    expect(find.byKey(const ValueKey('camera-grid')), findsNothing);
+
+    await tester.tap(find.byTooltip('設定'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('auto-hide-face')));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('camera-grid-setting')),
+      100,
+    );
+    await tester.tap(find.byKey(const ValueKey('camera-grid-setting')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('camera-grid')), findsOneWidget);
+    expect(camera.opened, ['back']);
+
+    await tester.tap(find.bySemanticsLabel('撮影する'));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
+          .autoHideKinds,
+      {CandidateKind.address, CandidateKind.phone},
+    );
+  });
+
+  testWidgets('カメラが使えなくても設定を開け、解像度を変えても許可を求め直さない', (tester) async {
+    useCamera(
+      FakeCameraPlatform(
+        error: CameraException('CameraAccessDenied', 'denied'),
+      ),
+    );
+    final settings = settingsWith(const AppSettings());
+    await tester.pumpWidget(CamereonApp(settings: settings));
+    await tester.pumpAndSettle();
+    expect(camera.presets, hasLength(1));
+
+    await tester.tap(find.byTooltip('設定'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('resolution-uhd')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(camera.presets, hasLength(1));
+    expect(find.text('カメラの使用が許可されていません'), findsOneWidget);
+
+    useCamera(FakeCameraPlatform());
+    await tester.tap(find.text('許可する'));
+    await tester.pumpAndSettle();
+    expect(camera.presets, [ResolutionPreset.ultraHigh]);
   });
 
   testWidgets('権限を拒否されたら理由を表示し、再度許可を求められる', (tester) async {
@@ -395,12 +478,12 @@ void main() {
             .kind,
         CandidateKind.address,
       );
-      expect(find.byTooltip('保存前に確認'), findsOneWidget);
+      expect(find.byTooltip('写真に保存'), findsOneWidget);
       final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
       await tester.dragFrom(rect.center, const Offset(30, 30));
       await tester.pump();
       expect(find.byType(FilterChip), findsNothing);
-      expect(find.byTooltip('保存前に確認'), findsOneWidget);
+      expect(find.byTooltip('写真に保存'), findsOneWidget);
       await tester.tap(find.byTooltip('撮り直す'));
       await tester.pumpAndSettle();
       expect(find.text('編集を破棄しますか？'), findsOneWidget);

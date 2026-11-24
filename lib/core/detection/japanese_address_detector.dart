@@ -99,17 +99,17 @@ class JapaneseAddressDetector implements RegionDetector {
             dictionary: dictionary,
           ).where(
             (address) => !phones.any((phone) {
-              if (phone.automaticallySelected) return false;
               final a = address.region.toRect();
               final p = phone.region.toRect();
               final overlap = a.intersect(p);
               final area = overlap.isEmpty
                   ? 0.0
                   : overlap.width * overlap.height;
-              // TEL:123-4567 is an uncertain local phone, not an automatic
-              // postal-code mask. Only replace a substantially identical box.
+              // An automatic number can contain a postal-code fragment.
+              // An optional number replaces only a nearly identical box.
               return area >= a.width * a.height * .8 &&
-                  area >= p.width * p.height * .8;
+                  (phone.automaticallySelected ||
+                      area >= p.width * p.height * .8);
             }),
           ),
           ...phones,

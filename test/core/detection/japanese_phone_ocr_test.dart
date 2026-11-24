@@ -28,6 +28,7 @@ void main() {
               'TEL:12345678',
               '管理番号:09000009999',
               'TEL:123-4567',
+              '050-1234 5678',
             ].indexed)
               [
                 for (var i = 0; i < text.length; i++)
@@ -45,9 +46,9 @@ void main() {
         };
       });
       final photo = SourcePhoto(
-        bytes: img.encodePng(img.Image(width: 400, height: 200)),
+        bytes: img.encodePng(img.Image(width: 400, height: 240)),
         width: 400,
-        height: 200,
+        height: 240,
       );
       final result = await JapaneseAddressDetector(channel: channel)
           .detect(photo);
@@ -59,12 +60,13 @@ void main() {
       final phones = result.candidates
           .whereType<PhoneNumberCandidate>()
           .toList();
-      expect(phones, hasLength(4));
+      expect(phones, hasLength(5));
       expect(phones.map((p) => p.automaticallySelected), [
         true,
         false,
         true,
         false,
+        true,
       ]);
       expect(
         result.candidates

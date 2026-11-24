@@ -32,6 +32,8 @@ final _labelOnly = RegExp(
 );
 final _word = RegExp(r'[0-9A-Za-z+@\-]');
 final _date = RegExp(r'^(?:19|20)[0-9]{2}-?[0-9]{2}-?[0-9]{2}$');
+final _fixedLine = RegExp(r'^[0Oo][36][ -]+[0-9Oo]{4}[ -]+[0-9Oo]{4}$');
+final _numberPunctuation = RegExp(r'^[ ()-]*$');
 
 String _normalize(String text) => String.fromCharCodes([
   for (final unit in text.codeUnits)
@@ -106,79 +108,88 @@ bool _nearby(Rect a, Rect b) =>
     b.left >= a.right - 2 &&
     b.left - a.right <= math.max(a.height, b.height);
 
-// OCR may return parts of one printed row as separate observations. Join only
-// a trailing numeric fragment and a numeric-only observation of 3+ digits each.
+typedef _Fragment = ({String raw, String digits, Rect bounds});
+typedef _JoinableLine = ({_PhoneLine line, _Fragment? head, _Fragment? tail});
+
+_Fragment? _fragment(_PhoneLine line, RegExpMatch match) {
+  final raw = match.group(0)!;
+  final digits = _numberDigits(raw);
+  final bounds = _rangeBounds(line, match.start, match.end);
+  if (digits == null || bounds == null) return null;
+  return (raw: raw, digits: digits, bounds: bounds);
+}
+
+_JoinableLine _joinable(_PhoneLine line) {
+  final matches = _numbers.allMatches(line.text).toList();
+  if (matches.isEmpty) return (line: line, head: null, tail: null);
+  final first = matches.first;
+  final last = matches.last;
+  return (
+    line: line,
+    head:
+        _numberPunctuation.hasMatch(line.text.substring(0, first.start)) &&
+            line.text.substring(first.end).trim().isEmpty
+        ? _fragment(line, first)
+        : null,
+    tail: _numberPunctuation.hasMatch(line.text.substring(last.end))
+        ? _fragment(line, last)
+        : null,
+  );
+}
+
+_JoinableLine? _join(_JoinableLine left, _JoinableLine right) {
+  final a = left.tail;
+  final b = right.head;
+  if (a == null || b == null || !_nearby(a.bounds, b.bounds)) return null;
+  final international = a.raw.startsWith('+81');
+  final fixedPrefix =
+      (a.digits == '03' || a.digits == '06') &&
+      (b.digits.length == 4 || _fixedLine.hasMatch('${a.raw} ${b.raw}'));
+  if (!international &&
+      !fixedPrefix &&
+      (a.digits.length < 3 || b.digits.length < 3)) {
+    return null;
+  }
+  return _joinable((
+    text: '${left.line.text} ${right.line.text}',
+    positions: [...left.line.positions, null, ...right.line.positions],
+    bounds: left.line.bounds.expandToInclude(right.line.bounds),
+  ));
+}
+
+// OCR may return parts of one printed row as separate observations. Cache the
+// edge fragments so each nearby-line comparison avoids rescanning the text.
 List<_PhoneLine> _joinNearbyLines(List<_PhoneLine> lines) {
+  final edges = lines.map(_joinable).toList();
   final joined = <_PhoneLine>[];
   final consumed = <int>{};
-  for (var i = 0; i < lines.length; i++) {
+  for (var i = 0; i < edges.length; i++) {
     if (consumed.contains(i)) continue;
-    var current = lines[i];
-    var changed = true;
-    while (changed) {
-      changed = false;
-      for (var j = i + 1; j < lines.length; j++) {
-        if (consumed.contains(j)) continue;
-        final other = lines[j];
-        if (!_sameRow(current.bounds, other.bounds)) continue;
-        _PhoneLine? merged;
-        for (final pair in [(current, other), (other, current)]) {
-          final (left, right) = pair;
-          final leftMatches = _numbers.allMatches(left.text).toList();
-          final rightMatch = _numbers.firstMatch(right.text);
-          if (leftMatches.isEmpty || rightMatch == null) continue;
-          final last = leftMatches.last;
-          if (!RegExp(r'^[ ()-]*$').hasMatch(left.text.substring(last.end)) ||
-              !RegExp(r'^[ ()-]*$')
-                  .hasMatch(right.text.substring(0, rightMatch.start)) ||
-              right.text.substring(rightMatch.end).trim().isNotEmpty) {
-            continue;
-          }
-          final a = _numberDigits(last.group(0)!);
-          final b = _numberDigits(rightMatch.group(0)!);
-          final international = last.group(0)!.startsWith('+81');
-          // +81 and the following 1/2-digit area/mobile prefix are explicit
-          // parts of one international number, not arbitrary short fragments.
-          if (a == null || b == null) continue;
-          if (!international && (a.length < 3 || b.length < 3)) continue;
-          final leftBox = _rangeBounds(left, last.start, last.end);
-          final rightBox = _rangeBounds(
-            right,
-            rightMatch.start,
-            rightMatch.end,
-          );
-          if (leftBox == null ||
-              rightBox == null ||
-              !_nearby(leftBox, rightBox)) {
-            continue;
-          }
-          merged = (
-            text: '${left.text} ${right.text}',
-            positions: [...left.positions, null, ...right.positions],
-            bounds: left.bounds.expandToInclude(right.bounds),
-          );
-          break;
-        }
-        if (merged == null) continue;
-        current = merged;
-        consumed.add(j);
-        changed = true;
-        break;
-      }
+    var current = edges[i];
+    for (var j = i + 1; j < edges.length; j++) {
+      if (consumed.contains(j)) continue;
+      final other = edges[j];
+      if (!_sameRow(current.line.bounds, other.line.bounds)) continue;
+      final merged = _join(current, other) ?? _join(other, current);
+      if (merged == null) continue;
+      current = merged;
+      consumed.add(j);
+      // The merged observation may now reach an earlier, skipped neighbor.
+      j = i;
     }
-    joined.add(current);
+    joined.add(current.line);
   }
   return joined;
 }
 
-// A space joins numeric chunks only if each has 3+ digits and their boxes are
-// close on the same row. Explicit +81 notation may contain shorter groups.
-// Tabs preserve boundaries without shifting offsets.
+// Spaces only join nearby numeric chunks with at least three digits, or the
+// short prefixes in +81 and 03/06 fixed-line notation. Tabs keep offsets.
 String _numberText(_PhoneLine line) {
   final units = line.text.codeUnits.toList();
-  final internationalRuns = _numbers.allMatches(line.text).where((match) {
+  final shortPrefixRuns = _numbers.allMatches(line.text).where((match) {
     final raw = match.group(0)!;
-    return raw.startsWith('+81') && (_numberDigits(raw)?.length ?? 0) >= 11;
+    return _fixedLine.hasMatch(raw) ||
+        (raw.startsWith('+81') && (_numberDigits(raw)?.length ?? 0) >= 11);
   }).toList();
   for (final gap in RegExp(r' +').allMatches(line.text)) {
     final before = RegExp(r'[0-9Oo]+$')
@@ -187,10 +198,10 @@ String _numberText(_PhoneLine line) {
     if (before == null || after == null) continue;
     final a = _rangeBounds(line, before.start, gap.start);
     final b = _rangeBounds(line, gap.end, gap.end + after.end);
-    final international = internationalRuns.any(
+    final shortPrefix = shortPrefixRuns.any(
       (run) => run.start <= gap.start && run.end >= gap.end,
     );
-    if ((international ||
+    if ((shortPrefix ||
             (before.group(0)!.length >= 3 && after.group(0)!.length >= 3)) &&
         a != null &&
         b != null &&
@@ -236,12 +247,7 @@ List<PhoneNumberCandidate> japanesePhoneNumberCandidates(
       }
       final number = _numberDigits(match.group(0)!);
       if (number == null) continue;
-      Rect? box;
-      for (final position in line.positions.sublist(match.start, match.end)) {
-        if (position != null) {
-          box = box == null ? position : box.expandToInclude(position);
-        }
-      }
+      final box = _rangeBounds(line, match.start, match.end);
       if (box == null) continue;
       var labelled = sameLineLabel;
       if (!labelled && lineIndex > 0) {

@@ -42,9 +42,8 @@ void main() {
     await editor.tapPixel(tester, const Offset(40, 20));
     expect(editor.overlay(tester).selectedCandidates, candidates.toSet());
     await editor.tapPixel(tester, const Offset(40, 20));
-    await editor.tapText(tester, '保存前に確認');
-    expect(processor.received, [candidates.last.region]);
     await editor.tapText(tester, '写真に保存');
+    expect(processor.received, [candidates.last.region]);
     expect(saver.received, same(processor.jpeg));
   });
   testWidgets('continuous address and trailing text save independently', (
@@ -77,9 +76,8 @@ void main() {
     await editor.tapPixel(tester, candidates[1].region.toRect().center);
     final selected = candidates.where((c) => c != candidates[1]).toList();
     expect(editor.overlay(tester).selectedCandidates, selected.toSet());
-    await editor.tapText(tester, '保存前に確認');
-    expect(processor.received, selected.map((c) => c.region));
     await editor.tapText(tester, '写真に保存');
+    expect(processor.received, selected.map((c) => c.region));
     expect(saver.received, same(processor.jpeg));
   });
   testWidgets(
@@ -113,12 +111,11 @@ void main() {
       await editor.tapPixel(tester, const Offset(45, 47));
       expect(editor.overlay(tester).selectedCandidates, candidates.toSet());
       await editor.tapPixel(tester, const Offset(45, 47));
-      await editor.tapText(tester, '保存前に確認');
+      await editor.tapText(tester, '写真に保存');
       expect(processor.received, [
         candidates.first.region,
         candidates.last.region,
       ]);
-      await editor.tapText(tester, '写真に保存');
       expect(saver.received, same(processor.jpeg));
     },
   );
@@ -162,9 +159,8 @@ void main() {
     await editor.tapPixel(tester, const Offset(50, 30));
     expect(editor.painter(tester).regions, isEmpty);
     await editor.tapPixel(tester, const Offset(50, 30));
-    await editor.tapText(tester, '保存前に確認');
-    expect(processor.received, [address.region]);
     await editor.tapText(tester, '写真に保存');
+    expect(processor.received, [address.region]);
     expect(saver.calls, 1);
   });
 
@@ -186,7 +182,7 @@ void main() {
       includeOtherCandidates: false,
       settle: false,
     );
-    await tester.tap(find.byTooltip('保存前に確認'));
+    await tester.tap(find.byTooltip('写真に保存'));
     await tester.pump();
     expect(processor.received, isNull);
     detector.pending!.complete(
@@ -202,7 +198,7 @@ void main() {
     await editor.tapText(tester, '一部を検出できませんでした');
     expect(editor.painter(tester).regions, isEmpty);
     expect(editor.overlay(tester).candidates, hasLength(1));
-    await editor.tapText(tester, '保存前に確認');
+    await editor.tapText(tester, '写真に保存');
     expect(processor.received, isEmpty);
   });
 }

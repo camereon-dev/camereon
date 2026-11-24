@@ -48,9 +48,8 @@ void main() {
     ]);
     await tap(tester, '取り消す');
     expect(editor.painter(tester).regions, [texts.candidates.first.region]);
-    await tap(tester, '保存前に確認');
+    await tap(tester, '写真に保存');
     expect(processor.received, [texts.candidates.first.region]);
-    await tap(tester, '編集へ戻る');
     expect(editor.overlay(tester).selectedCandidates, {texts.candidates.first});
   });
 
@@ -73,7 +72,7 @@ void main() {
         objects: objects,
       );
       await editor.tapPixel(tester, const Offset(50, 40));
-      expect(find.text('一部を検出できませんでした'), findsOneWidget);
+      expect(find.byTooltip('一部を検出できませんでした'), findsOneWidget);
       texts.fail = false;
       texts.candidates.add(
         editor.candidate(
@@ -90,7 +89,7 @@ void main() {
     },
   );
 
-  testWidgets('confirmation cancels queued scans and ignores late results', (
+  testWidgets('saving cancels queued scans and ignores late results', (
     tester,
   ) async {
     // Objects run first; the text scan is the queued one that must not start.
@@ -106,7 +105,7 @@ void main() {
       settle: false,
     );
     expect(objects.calls, 1);
-    await tester.tap(find.byTooltip('保存前に確認'));
+    await tester.tap(find.byTooltip('写真に保存'));
     await tester.pumpAndSettle();
     objects.pending!.complete(
       RegionDetection(
@@ -120,7 +119,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(texts.calls, 0);
-    await tap(tester, '編集へ戻る');
     expect(editor.overlay(tester).candidates, isEmpty);
     objects.pending = null;
     objects.candidates.add(

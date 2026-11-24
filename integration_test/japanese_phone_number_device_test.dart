@@ -53,7 +53,7 @@ Future<Uint8List> _syntheticPhoto() async {
   // Artificial test values only. No subscriber information or real contact list.
   const rows = [
     '電話番号:090-0000-1234',
-    'TEL:03-0000-5678',
+    'TEL:03 0000 5678',
     '050 0000 4321',
     '携帯:＋８１ ９０ ００００ ９８７６',
     'TEL:12345678',
@@ -209,13 +209,13 @@ void main() {
       final phones = overlay.candidates
           .whereType<PhoneNumberCandidate>()
           .toList();
-      expect(phones, hasLength(6));
+      expect(phones, hasLength(7));
       final full = phones.where((p) => p.automaticallySelected).toList();
       final optionalPhones = phones
           .where((p) => !p.automaticallySelected)
           .toList();
       final optional = optionalPhones.first;
-      expect(full, hasLength(4));
+      expect(full, hasLength(5));
       expect(full.every(overlay.selectedCandidates.contains), isTrue);
       expect(optionalPhones, hasLength(2));
       expect(optionalPhones.any(overlay.selectedCandidates.contains), isFalse);
@@ -223,7 +223,11 @@ void main() {
         overlay.candidates.any((c) => c.kind == CandidateKind.address),
         isTrue,
       );
-      expect(phones.every((c) => c.region.top < 570), isTrue);
+      final managementNumber = _drawnNumberBounds(6, '管理番号:', '09000009999');
+      expect(
+        full.where((p) => p.region.toRect().overlaps(managementNumber)),
+        hasLength(1),
+      );
       expect(
         overlay.candidates.any(
           (c) =>
@@ -266,8 +270,6 @@ void main() {
             .contains(optional),
         isFalse,
       );
-      await editorAction(tester, '保存前に確認');
-      await _until(tester, () => find.text('写真に保存').evaluate().isNotEmpty);
       await editorAction(tester, '写真に保存');
       await _until(tester, () => saver.saved != null);
       final after = img.decodeJpg(saver.saved!.bytes)!;
@@ -284,16 +286,17 @@ void main() {
       // Catch partial digits that remain just outside an underestimated box.
       for (final (row, prefix, number) in [
         (0, '電話番号:', '090-0000-1234'),
-        (1, 'TEL:', '03-0000-5678'),
+        (1, 'TEL:', '03 0000 5678'),
         (2, '', '050 0000 4321'),
         (3, '携帯:', '＋８１ ９０ ００００ ９８７６'),
+        (6, '管理番号:', '09000009999'),
       ]) {
         final rect = _drawnNumberBounds(row, prefix, number);
         expect(_darkPixels(before, rect), greaterThan(100));
         expect(
           _darkPixels(after, rect),
           lessThan(5),
-          reason: 'entire phone on row $row',
+          reason: 'entire number on row $row',
         );
       }
       final postalBox = const Rect.fromLTWH(200, 755, 450, 50);
@@ -303,11 +306,10 @@ void main() {
         lessThan(_darkPixels(before, postalBox) * .05),
       );
       // Existing address dictionary matches can affect Japanese field LABELS.
-      // The non-phone values themselves must remain unchanged.
+      // Short optional numbers, the date and the name remain visible.
       for (final (row, left) in [
         (4, 140.0),
         (5, 140.0),
-        (6, 220.0),
         (7, 140.0),
         (10, 40.0),
       ]) {
@@ -334,7 +336,8 @@ void main() {
           'phone_pixels_removed': true,
           'entire_drawn_phone_pixels_removed': true,
           'postal_code_still_masked': true,
-          'optional_management_date_name_values_preserved': true,
+          'management_number_masked': true,
+          'optional_date_name_values_preserved': true,
           'address_regions': [
             for (final c in overlay.candidates.where(
               (c) => c.kind == CandidateKind.address,

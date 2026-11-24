@@ -66,9 +66,11 @@ void main() {
       await editor.tapPixel(tester, const Offset(150, 50));
       await editor.tapPixel(tester, const Offset(50, 30));
       expect(editor.painter(tester).regions, [faces.candidates.single.region]);
-      await editor.tapText(tester, '保存前に確認');
-      expect(processor.received, [faces.candidates.single.region]);
+      // The address scan is still partial: saving asks first.
       await editor.tapText(tester, '写真に保存');
+      expect(processor.received, isNull);
+      await editor.tapText(tester, 'このまま保存');
+      expect(processor.received, [faces.candidates.single.region]);
       expect(saver.received, same(processor.jpeg));
     },
   );
@@ -84,14 +86,14 @@ void main() {
       includeOtherCandidates: false,
       settle: false,
     );
-    await tester.tap(find.byTooltip('保存前に確認'));
+    await tester.tap(find.byTooltip('写真に保存'));
     await tester.pump();
     expect(processor.received, isNull);
     expect(find.bySemanticsLabel('撮影した写真'), findsNothing);
     faces.pending!.complete(faces.candidates);
     await tester.pumpAndSettle();
     expect(editor.painter(tester).regions, [faces.candidates.single.region]);
-    await editor.tapText(tester, '保存前に確認');
+    await editor.tapText(tester, '写真に保存');
     expect(processor.received, [faces.candidates.single.region]);
   });
 

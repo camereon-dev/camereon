@@ -112,13 +112,6 @@ void main() {
               candidate.region.top < 200,
         )
         .last;
-    await editorAction(tester, '保存前に確認');
-    // pumpAndSettle only waits for frames, not native image processing or IO.
-    for (var i = 0; i < 150 && find.text('写真に保存').evaluate().isEmpty; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      await tester.pump(const Duration(milliseconds: 200));
-    }
-    expect(find.text('写真に保存'), findsOneWidget);
     await editorAction(tester, '写真に保存');
     for (var i = 0; i < 150 && saver.saved == null; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 200));

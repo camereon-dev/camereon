@@ -12,6 +12,7 @@ import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/core/photo/photo_sharer.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
+import 'package:camereon/features/settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -147,7 +148,7 @@ Future<void> open(
   List<RegionCandidate> Function(SourcePhoto)? initialCandidates,
   RegionDetector? addresses,
   bool includeOtherCandidates = true,
-  bool startWithConfirmation = false,
+  Set<CandidateKind>? autoHideKinds,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -162,7 +163,7 @@ Future<void> open(
         initialCandidates: initialCandidates,
         addressDetector: addresses ?? NoRegions(),
         includeOtherCandidates: includeOtherCandidates,
-        startWithConfirmation: startWithConfirmation,
+        autoHideKinds: autoHideKinds ?? const AppSettings().autoHideKinds,
         sharer: sharer ?? FakeSharer(),
       ),
     ),
@@ -194,5 +195,34 @@ Future<void> tapPixel(
     rect.topLeft +
         Offset(point.dx / width * rect.width, point.dy / height * rect.height),
   );
+  await tester.pumpAndSettle();
+}
+
+Finder kindChip(CandidateKind? kind) =>
+    find.byKey(ValueKey('kind-chip-${kind?.name ?? 'all'}'));
+
+Future<void> tapKind(WidgetTester tester, CandidateKind? kind) async {
+  await tester.ensureVisible(kindChip(kind));
+  await tester.tap(kindChip(kind));
+  await tester.pumpAndSettle();
+}
+
+/// Drags one finger across the photo, in image pixels.
+Future<void> paint(
+  WidgetTester tester,
+  List<Offset> points, {
+  int width = 200,
+  int height = 100,
+}) async {
+  final rect = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+  Offset screen(Offset p) =>
+      rect.topLeft +
+      Offset(p.dx / width * rect.width, p.dy / height * rect.height);
+  final gesture = await tester.startGesture(screen(points.first));
+  for (final p in points.skip(1)) {
+    await gesture.moveTo(screen(p));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await gesture.up();
   await tester.pumpAndSettle();
 }

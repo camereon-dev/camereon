@@ -8,8 +8,12 @@ import '../../core/app_version.dart';
 import '../../core/detection/region_detector.dart';
 import '../../core/detection/place_name_dictionary.dart';
 import '../../core/photo/photo_images.dart';
+import '../settings/app_settings.dart';
+import '../settings/settings_screen.dart';
+import '../settings/settings_store.dart';
 import 'captured_photo_screen.dart';
 import 'device_rotation.dart';
+import 'glass_photo_chrome.dart';
 
 enum _CameraIssue {
   permissionDenied,
@@ -24,7 +28,10 @@ const _photoPicker = MethodChannel('dev.camereon/photo_picker');
 
 /// 起動直後に表示するカメラ画面。開いたらすぐにプレビューを始めて撮影できる。
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+  const CameraScreen({super.key, this.settings});
+
+  /// 起動をまたいで保存される設定。渡さない場合はこの起動の間だけ既定値を使う。
+  final SettingsController? settings;
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -39,6 +46,12 @@ class _CameraScreenState extends State<CameraScreen>
   bool _isCapturing = false;
   bool _editingPhoto = false;
   final _rotation = DeviceRotation();
+  SettingsController? _ownedSettings;
+  late final SettingsController _settings =
+      widget.settings ??
+      (_ownedSettings = SettingsController(MemorySettingsStore()));
+  // カメラを開くときの解像度。設定で変わったらカメラを開き直す。
+  late CameraResolution _resolution = _settings.value.resolution;
 
   // カメラを開く・閉じるたびに進める。古い起動処理の結果を捨てるために使う。
   int _session = 0;
@@ -50,16 +63,33 @@ class _CameraScreenState extends State<CameraScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _settings.addListener(_settingsChanged);
     _openCamera();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _settings.removeListener(_settingsChanged);
+    _ownedSettings?.dispose();
     _session++;
     _disposeController(_controller);
     _rotation.dispose();
     super.dispose();
+  }
+
+  void _settingsChanged() {
+    final resolution = _settings.value.resolution;
+    if (resolution != _resolution) {
+      _resolution = resolution;
+      // 閉じている・開けなかったカメラは、次に開くときに新しい解像度を使う。
+      // 権限の確認を出し直さないよう、ここでは開き直さない。
+      if (_issue == null && !_closedInBackground && !_editingPhoto) {
+        _openCamera();
+        return;
+      }
+    }
+    setState(() {});
   }
 
   @override
@@ -125,7 +155,7 @@ class _CameraScreenState extends State<CameraScreen>
       );
       controller = CameraController(
         description,
-        ResolutionPreset.veryHigh,
+        _resolution.preset,
         enableAudio: false,
       );
       await controller.initialize();
@@ -189,7 +219,7 @@ class _CameraScreenState extends State<CameraScreen>
         const Duration(seconds: 10),
       );
       if (!mounted) return;
-      await _editPhoto(photo, startWithConfirmation: true);
+      await _editPhoto(photo);
     } catch (e) {
       debugPrint('camera: failed to take picture: $e');
       if (!mounted) return;
@@ -248,7 +278,6 @@ class _CameraScreenState extends State<CameraScreen>
   Future<void> _editPhoto(
     XFile photo, {
     List<RegionCandidate> Function(SourcePhoto)? initialCandidates,
-    bool startWithConfirmation = false,
   }) async {
     var hadCamera = false;
     _editingPhoto = true;
@@ -266,8 +295,8 @@ class _CameraScreenState extends State<CameraScreen>
         MaterialPageRoute(
           builder: (_) => CapturedPhotoScreen(
             photo: photo,
-            startWithConfirmation: startWithConfirmation,
             initialCandidates: initialCandidates,
+            autoHideKinds: _settings.value.autoHideKinds,
           ),
         ),
       );
@@ -282,6 +311,10 @@ class _CameraScreenState extends State<CameraScreen>
       }
     }
   }
+
+  Future<void> _openSettings() => Navigator.of(context).push<void>(
+    MaterialPageRoute(builder: (_) => SettingsScreen(settings: _settings)),
+  );
 
   Widget _controlBar(CameraController? controller) =>
       ValueListenableBuilder<int>(
@@ -308,11 +341,32 @@ class _CameraScreenState extends State<CameraScreen>
           child: Column(
             children: [
               Expanded(
-                child: issue != null
-                    ? _CameraMessage(issue: issue, onRetry: _openCamera)
-                    : controller == null
-                    ? const SizedBox.expand()
-                    : _Preview(controller: controller),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: issue != null
+                          ? _CameraMessage(issue: issue, onRetry: _openCamera)
+                          : controller == null
+                          ? const SizedBox.expand()
+                          : _Preview(
+                              controller: controller,
+                              showGrid: _settings.value.showGrid,
+                            ),
+                    ),
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: PhotoGlass(
+                        radius: 24,
+                        child: GlassIconButton(
+                          label: '設定',
+                          icon: Icons.settings_outlined,
+                          onPressed: _isCapturing ? null : _openSettings,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const AppVersion(),
               _controlBar(controller),
@@ -369,9 +423,10 @@ class _CameraScreenState extends State<CameraScreen>
 }
 
 class _Preview extends StatelessWidget {
-  const _Preview({required this.controller});
+  const _Preview({required this.controller, required this.showGrid});
 
   final CameraController controller;
+  final bool showGrid;
 
   @override
   Widget build(BuildContext context) {
@@ -382,11 +437,44 @@ class _Preview extends StatelessWidget {
         aspectRatio: 1 / controller.value.aspectRatio,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: controller.buildPreview(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              controller.buildPreview(),
+              if (showGrid)
+                const IgnorePointer(
+                  child: CustomPaint(
+                    key: ValueKey('camera-grid'),
+                    painter: _GridPainter(),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// 撮影される範囲を縦横3分割する線。
+class _GridPainter extends CustomPainter {
+  const _GridPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: .45)
+      ..strokeWidth = 1;
+    for (var i = 1; i < 3; i++) {
+      final x = size.width * i / 3;
+      final y = size.height * i / 3;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GridPainter oldDelegate) => false;
 }
 
 class _ControlBar extends StatelessWidget {
