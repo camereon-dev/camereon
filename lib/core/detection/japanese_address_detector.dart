@@ -146,11 +146,14 @@ const _name = r'[一-龯々ヶケぁ-んァ-ヶー]';
 const _number = r'[0-9一二三四五六七八九十百]+';
 // Prefer a complete address where available; standalone components are added
 // below without putting overlapping controls over that complete address.
+const _numberedAddressPattern =
+    '(?:(?:$_prefectures)\\n?$_name{1,24}?[市区町村]\\n?|'
+    '$_name{2,10}?[市区町村])'
+    '$_name{1,30}?\\n?$_number'
+    '(?:(?:丁目|番地?|号|条[東西南北]?|線|の|-)$_number)*(?:丁目|番地?|号)?';
+final _numberedAddress = RegExp(_numberedAddressPattern);
 final _address = RegExp(
-  '(?:(?:$_prefectures)\\n?$_name{1,24}?[市区町村]\\n?|'
-  '$_name{2,10}?[市区町村])'
-  '$_name{1,30}?\\n?$_number'
-  '(?:(?:丁目|番地?|号|条[東西南北]?|線|の|-)$_number)*(?:丁目|番地?|号)?'
+  '$_numberedAddressPattern'
   '(?:\\n?(?:$_name|[A-Za-z0-9]){1,30}?(?:ビル|マンション|ハイツ|タワー|荘|館)'
   '(?:$_number(?:号室|階|F)?)?)?',
 );
@@ -333,6 +336,90 @@ final _nextFieldLabel = RegExp(
 final _lotProse = RegExp(r'^[でにはへを.。、,・(（]');
 final _bareLot = RegExp(r'^[0-9]{1,5}$');
 
+// Match identifiable building, floor and room details after a numbered address.
+const _buildingName = r'[一-龯々ヶケぁ-んァ-ヶーA-Za-z0-9]';
+final _unitPart = RegExp(
+  '(?:(?:地下)?[A-Za-z]?$_number(?:号室|階|[Ff])|'
+  '$_buildingName{0,30}?(?:マンション|レジデンス|ハイツ|タワー|ビル|号棟|棟|荘|館)|'
+  '(?:コーポ|メゾン)$_buildingName{1,20}?(?=[0-9]|[^一-龯々ヶケァ-ヶーA-Za-z0-9]|電話|備考|\$)|'
+  '$_buildingName{1,30}?(?=[0-9]{1,5}号室)|'
+  '[ァ-ヶーA-Za-z]{2,30}(?=[0-9]{2,5}(?![0-9]))|'
+  '#[0-9]{1,5}(?![0-9]))',
+);
+final _plainRoom = RegExp(r'[0-9]{2,5}(?![0-9A-Za-z-]|円|年|月|日|人|件|分|時|番|階)');
+final _unitBoundary = RegExp(
+  r'電話|携帯|氏名|備考|宛名|価格|金額|管理番号|郵便番号|TEL|FAX|E-?mail',
+  caseSensitive: false,
+);
+
+// Normalization removes spaces, so a lot matcher can consume the digits
+// or the 号 of a following room number.
+int _includeRoomSuffix(String text, int end) {
+  if (text.startsWith('号室', end)) return end + 2;
+  if (text[end - 1] == '号' && text.startsWith('室', end)) return end + 1;
+  return end;
+}
+
+List<_AddressSpan> _withAddressUnits(
+  List<_AddressSpan> spans,
+  String text,
+  List<({int line, Rect rect})?> positions,
+) {
+  spans.sort((a, b) => a.start.compareTo(b.start));
+  final result = <_AddressSpan>[];
+  for (final span in spans) {
+    if (result.isNotEmpty && span.end <= result.last.end) continue;
+    var end = span.end;
+    final address = text.substring(span.start, end);
+    if (_numberStart.hasMatch(address)) {
+      end = _includeRoomSuffix(text, end);
+      var lineStart = text.lastIndexOf('\n', end - 1) + 1;
+      if (lineStart < span.start) lineStart = span.start;
+      var hasBuilding = false;
+      while (end < text.length) {
+        final start = text[end] == '\n' ? end + 1 : end;
+        if (start >= text.length || positions[start] == null) break;
+        final before = positions[end - 1]!.rect;
+        final after = positions[start]!.rect;
+        if (start != end) {
+          final left = positions[lineStart]!.rect.left;
+          final sameRow =
+              (after.center.dy - before.center.dy).abs() < before.height / 2;
+          final close = sameRow
+              ? after.left >= before.left &&
+                    after.left - before.right <= before.height * 1.5
+              : after.top >= before.top &&
+                    after.top - before.bottom <= before.height &&
+                    after.left <= before.right &&
+                    after.right >= left;
+          if (!close) break;
+        }
+        if ('でにはへを'.contains(text[start])) break;
+        final match =
+            _unitPart.matchAsPrefix(text, start) ??
+            (hasBuilding ? _plainRoom.matchAsPrefix(text, start) : null);
+        if (match == null || _unitBoundary.hasMatch(match.group(0)!)) break;
+        var previous = start == end ? before : after;
+        var distant = false;
+        for (var i = start; i < match.end; i++) {
+          final rect = positions[i]!.rect;
+          if (rect.left - previous.right > previous.height * 1.5) {
+            distant = true;
+            break;
+          }
+          previous = rect;
+        }
+        if (distant) break;
+        if (start != end) lineStart = start;
+        end = match.end;
+        hasBuilding = true;
+      }
+    }
+    result.add((start: span.start, end: end));
+  }
+  return result;
+}
+
 // A prefecture, a municipality and a locality may arrive as one OCR field.
 // Validate the entire field so a sentence starting with a prefecture is not
 // treated as a place name.
@@ -468,12 +555,14 @@ List<_AddressSpan> _nearbyAddressParts(
       }
       if (value.isNotEmpty) {
         final lot = _explicitLot.matchAsPrefix(value);
-        if (lot != null &&
+        final lotEnd = lot == null ? null : _includeRoomSuffix(value, lot.end);
+        if (lotEnd != null &&
             !_numericDate.hasMatch(value) &&
-            (lot.end == value.length ||
-                _lotProse.hasMatch(value.substring(lot.end)))) {
-          append(_FieldKind.lot, start, start + lot.end);
-          if (lot.end != value.length) finish();
+            (lotEnd == value.length ||
+                _lotProse.hasMatch(value.substring(lotEnd)) ||
+                _unitPart.matchAsPrefix(value, lotEnd) != null)) {
+          append(_FieldKind.lot, start, start + lotEnd);
+          if (lotEnd != value.length) finish();
         } else if (_bareLot.hasMatch(value)) {
           append(_FieldKind.number, start, end);
         } else if (_aza.hasMatch(value) &&
@@ -569,7 +658,10 @@ List<RegionCandidate> japaneseAddressCandidates(
     return false;
   }
 
-  for (final match in _address.allMatches(normalizedText)) {
+  final pattern = mode == AddressDetectionMode.addressOnly
+      ? _numberedAddress
+      : _address;
+  for (final match in pattern.allMatches(normalizedText)) {
     if (_nonAddressUnit.hasMatch(normalizedText.substring(match.end))) continue;
     final value = match.group(0)!;
     // A generic city/ward match must not consume a preceding address label or
@@ -637,13 +729,20 @@ List<RegionCandidate> japaneseAddressCandidates(
       spans.add((start: place.start, end: lot.end));
     }
     return _addressRegions(
-      _mergeSpans([
-        ...spans,
-        ..._nearbyAddressParts(normalizedText, positions, componentBreaks, [
-          ...spans,
-          ...postalSpans,
-        ], dictionary),
-      ], postalSpans),
+      _mergeSpans(
+        _withAddressUnits(
+          [
+            ...spans,
+            ..._nearbyAddressParts(normalizedText, positions, componentBreaks, [
+              ...spans,
+              ...postalSpans,
+            ], dictionary),
+          ],
+          normalizedText,
+          positions,
+        ),
+        postalSpans,
+      ),
       positions,
       width,
       height,
