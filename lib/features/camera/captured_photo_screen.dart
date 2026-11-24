@@ -54,6 +54,7 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.addressDetector,
     this.includeOtherCandidates = false,
     this.sharer,
+    this.autoHideKinds = const {CandidateKind.address, CandidateKind.face},
   });
 
   final XFile photo;
@@ -75,6 +76,9 @@ class CapturedPhotoScreen extends StatefulWidget {
   /// Builds the frosted preview of selected areas; tests pass [FrostedPreviewer.none].
   final FrostedPreviewer? previewer;
   final PhotoSharer? sharer;
+
+  /// Detected kinds that start hidden. Other kinds still get frames to tap.
+  final Set<CandidateKind> autoHideKinds;
   @override
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
@@ -301,6 +305,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   /// Automatic discovery isn't an undo step. Undoing or redoing an earlier
   /// user action must not reveal something found after that action.
   void _hideAutomatically(RegionCandidate candidate) {
+    if (!widget.autoHideKinds.contains(candidate.kind)) return;
     final previous = _redactions;
     _edits = _edits.hide([candidate]);
     for (final stack in [_undoStack, _redoStack]) {
@@ -367,7 +372,13 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       setState(() {
         _source = source;
         _candidates = List.of(initial);
-        _edits = _Snapshot(const []).hide(initial);
+        _edits = _Snapshot(const []).hide(
+          initial.where(
+            (candidate) =>
+                widget.includeOtherCandidates ||
+                widget.autoHideKinds.contains(candidate.kind),
+          ),
+        );
         _undoStack.clear();
         _redoStack.clear();
         _seenAddresses.addAll(initial.map((c) => c.region));
