@@ -35,47 +35,68 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(backgroundColor: Colors.black, title: const Text('設定')),
       body: ValueListenableBuilder<AppSettings>(
         valueListenable: settings,
-        builder: (context, current, _) => ListView(
-          padding: const EdgeInsets.only(bottom: 24),
+        builder: (context, current, _) => Column(
           children: [
-            const _Heading(
-              '自動で隠す',
-              note:
-                  '写真から見つけたとき、最初から隠しておくもの。'
-                  'オフにしても枠は表示され、タップすれば隠せます。',
-            ),
-            for (final kind in autoHideChoices)
-              SwitchListTile(
-                key: ValueKey('auto-hide-${kind.name}'),
-                title: Text(kind.label),
-                value: current.autoHideKinds.contains(kind),
-                onChanged: (hide) => _update((s) => s.withAutoHide(kind, hide)),
-              ),
-            const _Heading('カメラ'),
-            const _Heading(
-              '解像度',
-              sub: true,
-              note: '端末が対応していない場合は、近い解像度で撮影します。',
-            ),
-            RadioGroup<CameraResolution>(
-              groupValue: current.resolution,
-              onChanged: (resolution) {
-                if (resolution == null) return;
-                _update((s) => s.copyWith(resolution: resolution));
-              },
-              child: Column(
-                children: [
-                  for (final resolution in CameraResolution.values)
-                    _resolutionTile(resolution),
+            if (settings.saveFailed)
+              MaterialBanner(
+                content: Semantics(
+                  liveRegion: true,
+                  child: const Text('設定を保存できませんでした。アプリを閉じると変更が失われます。'),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: settings.retrySave,
+                    child: const Text('再試行'),
+                  ),
                 ],
               ),
-            ),
-            SwitchListTile(
-              key: const ValueKey('camera-grid-setting'),
-              title: const Text('グリッド'),
-              subtitle: const Text('プレビューに縦横3分割の線を表示します'),
-              value: current.showGrid,
-              onChanged: (show) => _update((s) => s.copyWith(showGrid: show)),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+                  const _Heading(
+                    '自動で隠す',
+                    note:
+                        '写真から見つけたとき、最初から隠しておくもの。'
+                        'オフにしても枠は表示され、タップすれば隠せます。',
+                  ),
+                  for (final kind in autoHideChoices)
+                    SwitchListTile(
+                      key: ValueKey('auto-hide-${kind.name}'),
+                      title: Text(kind.label),
+                      value: current.autoHideKinds.contains(kind),
+                      onChanged: (hide) =>
+                          _update((s) => s.withAutoHide(kind, hide)),
+                    ),
+                  const _Heading('カメラ'),
+                  const _Heading(
+                    '解像度',
+                    sub: true,
+                    note: '端末が対応していない場合は、近い解像度で撮影します。',
+                  ),
+                  RadioGroup<CameraResolution>(
+                    groupValue: current.resolution,
+                    onChanged: (resolution) {
+                      if (resolution == null) return;
+                      _update((s) => s.copyWith(resolution: resolution));
+                    },
+                    child: Column(
+                      children: [
+                        for (final resolution in CameraResolution.values)
+                          _resolutionTile(resolution),
+                      ],
+                    ),
+                  ),
+                  SwitchListTile(
+                    key: const ValueKey('camera-grid-setting'),
+                    title: const Text('グリッド'),
+                    subtitle: const Text('プレビューに縦横3分割の線を表示します'),
+                    value: current.showGrid,
+                    onChanged: (show) =>
+                        _update((s) => s.copyWith(showGrid: show)),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

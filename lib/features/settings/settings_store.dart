@@ -67,6 +67,11 @@ class SettingsController extends ValueNotifier<AppSettings> {
 
   final SettingsStore _store;
   Future<void> _saving = Future.value();
+  bool _saveFailed = false;
+  bool _disposed = false;
+  int _saveVersion = 0;
+
+  bool get saveFailed => _saveFailed;
 
   /// Completes when every change so far has been written (or failed).
   Future<void> get saved => _saving;
@@ -81,10 +86,38 @@ class SettingsController extends ValueNotifier<AppSettings> {
 
   void update(AppSettings next) {
     if (next == value) return;
+    _saveFailed = false;
+    _save(next);
     value = next;
-    _saving = _saving.then((_) => _store.save(next)).catchError((Object e) {
-      // The change still applies for this run; only persistence is lost.
-      debugPrint('settings: could not save: $e');
+  }
+
+  void retrySave() {
+    if (!_saveFailed) return;
+    _saveFailed = false;
+    _save(value);
+    notifyListeners();
+  }
+
+  void _save(AppSettings next) {
+    final version = ++_saveVersion;
+    _saving = _saving.then((_) async {
+      var failed = false;
+      try {
+        await _store.save(next);
+      } catch (e) {
+        failed = true;
+        debugPrint('settings: could not save: $e');
+      }
+      if (!_disposed && version == _saveVersion && failed != _saveFailed) {
+        _saveFailed = failed;
+        notifyListeners();
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }
