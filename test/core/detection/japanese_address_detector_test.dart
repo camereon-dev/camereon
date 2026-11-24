@@ -52,6 +52,42 @@ void main() {
         c.region.toRect(),
     ];
 
+    test('campus address wraps from the right edge to a left-aligned lot', () {
+      const locality = '沖縄県宜野湾市字喜友名';
+      expect(
+        detect([
+          glyphs('キャンパス：'),
+          glyphs('1076番地.⑤国立大学法人', x: 80, y: 32),
+          glyphs('詳細案内', y: 90),
+          glyphs(locality, x: 700),
+        ]),
+        [
+          const Rect.fromLTRB(78, 30, 142, 50),
+          Rect.fromLTRB(698, 8, 702 + locality.length * 10, 28),
+        ],
+      );
+      for (final postal in [true, false]) {
+        final boxes = detect([
+          glyphs('キャンパス：'),
+          [
+            if (postal) ...glyphs('〒123-4567', x: 600),
+            ...glyphs(locality, x: 700),
+          ],
+          glyphs('1076番地', x: 80, y: 32),
+          glyphs('大学の案内', x: 180, y: 32),
+        ]);
+        expect(boxes, [
+          if (postal) const Rect.fromLTRB(598, 8, 692, 28),
+          Rect.fromLTRB(698, 8, 702 + locality.length * 10, 28),
+          const Rect.fromLTRB(78, 30, 142, 50),
+        ]);
+      }
+      expect(detect([glyphs('〒123-4567沖縄県宜野湾市字喜友名')]), hasLength(2));
+      expect(
+        detect([glyphs(locality, x: 700), glyphs('123円', y: 32)]),
+        isEmpty,
+      );
+    });
     test('continues through nearby fields and stops at notes', () {
       final boxes = detect([
         glyphs('東京都新宿区西新宿2-8-1'),

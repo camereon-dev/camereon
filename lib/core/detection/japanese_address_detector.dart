@@ -316,7 +316,7 @@ List<_AddressSpan> _components(String value, {bool continuation = false}) {
 
 // Examine consecutive OCR fields in reading order. Unrelated text or a layout
 // break ends the run, even if another place name is nearby.
-enum _FieldKind { address, label, aza, place, lot, number }
+enum _FieldKind { address, label, aza, place, locality, lot, number }
 
 typedef _AddressField = ({
   _FieldKind kind,
@@ -330,8 +330,28 @@ final _nextFieldLabel = RegExp(
   r'^(?:備考|電話|携帯|氏名|名前|宛名|TEL|FAX|E-?mail|管理番号|金額|価格)',
   caseSensitive: false,
 );
-final _lotProse = RegExp(r'^[でにはへを]');
+final _lotProse = RegExp(r'^[でにはへを.。、,・(（]');
 final _bareLot = RegExp(r'^[0-9]{1,5}$');
+
+// A prefecture, a municipality and a locality may arrive as one OCR field.
+// Validate the entire field so a sentence starting with a prefecture is not
+// treated as a place name.
+bool _isCompoundLocality(String value, PlaceNameDictionary? dictionary) {
+  final prefecture = _prefecture.matchAsPrefix(value);
+  if (prefecture == null) return false;
+  final local = value.substring(prefecture.end);
+  final municipality =
+      _city.matchAsPrefix(local) ??
+      _ward.matchAsPrefix(local) ??
+      _townVillage.matchAsPrefix(local);
+  if (municipality == null) return false;
+  final town = local.substring(municipality.end);
+  return town.isNotEmpty &&
+      (dictionary?.contains(town) == true ||
+          (_aza.hasMatch(town) &&
+              !_azaProse.hasMatch(town) &&
+              !RegExp(r'[ぁ-ん]').hasMatch(town)));
+}
 
 List<_AddressSpan> _nearbyAddressParts(
   String text,
@@ -340,7 +360,9 @@ List<_AddressSpan> _nearbyAddressParts(
   List<_AddressSpan> addresses,
   PlaceNameDictionary? dictionary,
 ) {
-  final found = <_AddressSpan>[];
+  final found = <_AddressSpan>{};
+  final localities = <_AddressField>[];
+  final leadingLots = <_AddressField>[];
   final run = <_AddressField>[];
   void finish() {
     // A standalone name and number are insufficient without a more specific
@@ -356,7 +378,8 @@ List<_AddressSpan> _nearbyAddressParts(
       final previous = run[i - 1].kind;
       if ((previous == _FieldKind.aza &&
               (kind == _FieldKind.number || kind == _FieldKind.lot)) ||
-          (previous == _FieldKind.place && kind == _FieldKind.lot)) {
+          ((previous == _FieldKind.place || previous == _FieldKind.locality) &&
+              kind == _FieldKind.lot)) {
         selected.addAll([i - 1, i]);
       }
     }
@@ -390,12 +413,18 @@ List<_AddressSpan> _nearbyAddressParts(
                 bounds.right > prev.bounds.left;
       if (!close) finish();
     }
-    run.add((
+    final field = (
       kind: kind,
       span: (start: start, end: end),
       bounds: bounds,
       line: line,
-    ));
+    );
+    run.add(field);
+    if (kind == _FieldKind.locality) localities.add(field);
+    if (kind == _FieldKind.lot &&
+        (start == 0 || positions[start - 1]?.line != line)) {
+      leadingLots.add(field);
+    }
   }
 
   final covered = List<bool>.filled(text.length, false);
@@ -453,6 +482,8 @@ List<_AddressSpan> _nearbyAddressParts(
               r'[へでにをがは]',
             ).hasMatch(value.substring(_azaMarker.matchAsPrefix(value)!.end))) {
           append(_FieldKind.aza, start, end);
+        } else if (_isCompoundLocality(value, dictionary)) {
+          append(_FieldKind.locality, start, end);
         } else if (dictionary?.contains(value) == true) {
           append(_FieldKind.place, start, end);
         } else {
@@ -463,7 +494,25 @@ List<_AddressSpan> _nearbyAddressParts(
     start = end;
   }
   finish();
-  return found;
+  // Vision can emit a wrapped lot before its locality, with unrelated OCR
+  // observations in between. Resolve only an unambiguous next-row match.
+  for (final locality in localities) {
+    final upper = locality.bounds;
+    final matches = leadingLots.where((lot) {
+      final lower = lot.bounds;
+      final drop = lower.center.dy - upper.center.dy;
+      return lower.right <= upper.left &&
+          drop >= upper.height * .5 &&
+          drop <= upper.height * 2 &&
+          lower.height >= upper.height * .5 &&
+          lower.height <= upper.height * 2;
+    });
+    if (matches.length == 1) {
+      found.add(locality.span);
+      found.add(matches.first.span);
+    }
+  }
+  return found.toList();
 }
 
 String _normalize(String value) => String.fromCharCodes(
