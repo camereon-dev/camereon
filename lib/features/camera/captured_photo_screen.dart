@@ -79,11 +79,32 @@ class CapturedPhotoScreen extends StatefulWidget {
   State<CapturedPhotoScreen> createState() => _CapturedPhotoScreenState();
 }
 
-/// One undo step: which frames are hidden and the strokes painted so far.
+typedef _Mask = ({RegionCandidate? candidate, HideRegion region});
+
+/// Selected frames and brush strokes in the order they were applied.
 class _Snapshot {
-  _Snapshot(this.selected, this.strokes);
-  final Set<RegionCandidate> selected;
-  final List<HideRegion> strokes;
+  _Snapshot(Iterable<_Mask> masks) : masks = List.unmodifiable(masks);
+
+  final List<_Mask> masks;
+  late final selected = {for (final mask in masks) ?mask.candidate};
+  late final regions = _regions();
+
+  List<HideRegion> _regions() {
+    final seen = <HideRegion>{};
+    // Coincident frames still toggle independently. Draw their shape at its
+    // most recent position so reselecting a frame hides earlier erasures.
+    return [
+      for (final mask in masks.reversed)
+        if (mask.candidate == null || seen.add(mask.region)) mask.region,
+    ].reversed.toList(growable: false);
+  }
+
+  _Snapshot hide(Iterable<RegionCandidate> candidates) => _Snapshot([
+    ...masks,
+    for (final candidate in candidates)
+      if (!selected.contains(candidate))
+        (candidate: candidate, region: candidate.region),
+  ]);
 }
 
 /// The stroke under the finger. Repaints only the selection layer.
@@ -156,14 +177,15 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   Timer? _patchTimer;
   final Map<String, RegionCandidate> _faceCandidates = {};
   List<RegionCandidate> _candidates = [];
-  Set<RegionCandidate> _selected = {};
-  List<HideRegion> _strokes = const [];
+  _Snapshot _edits = _Snapshot(const []);
+  Set<RegionCandidate> get _selected => _edits.selected;
   final List<_Snapshot> _undoStack = [];
   final List<_Snapshot> _redoStack = [];
   EditTool _tool = EditTool.pen;
   final _live = LiveStroke();
   // Fingers on the photo. Once two touch, nothing paints until all lift.
   int _pointers = 0;
+  Offset? _strokeStart;
   bool _multiTouch = false;
   bool _pinching = false;
   bool _peeking = false;
@@ -222,16 +244,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     });
   }
 
-  /// What the saved photo hides, in order: frames, then strokes as painted.
-  /// Eraser strokes reveal what came before them.
-  List<HideRegion> get _redactions => [
-    ...{for (final c in _selected) c.region},
-    ..._strokes,
-  ];
+  List<HideRegion> get _redactions => _edits.regions;
   bool get _scanning =>
       _addressDetecting ||
       _detecting ||
       _faces.status == FaceDetectionStatus.detecting;
+  bool get _scanIncomplete =>
+      _addressFailed ||
+      _failedScans.isNotEmpty ||
+      _faces.status == FaceDetectionStatus.failed ||
+      _faces.status == FaceDetectionStatus.cancelled;
   bool get _canRetry =>
       !_scanning &&
       (_addressFailed || _failedScans.isNotEmpty || _faces.canRetry);
@@ -279,10 +301,19 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   /// Automatic discovery isn't an undo step. Undoing or redoing an earlier
   /// user action must not reveal something found after that action.
   void _hideAutomatically(RegionCandidate candidate) {
-    _selected.add(candidate);
-    for (final snapshot in [..._undoStack, ..._redoStack]) {
-      snapshot.selected.add(candidate);
+    final previous = _redactions;
+    _edits = _edits.hide([candidate]);
+    for (final stack in [_undoStack, _redoStack]) {
+      for (var i = 0; i < stack.length; i++) {
+        stack[i] = stack[i].hide([candidate]);
+      }
     }
+    if (!listEquals(previous, _redactions)) _invalidateSavedPhoto();
+  }
+
+  void _invalidateSavedPhoto() {
+    _saved = false;
+    _savedJpeg = null;
   }
 
   @override
@@ -336,8 +367,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       setState(() {
         _source = source;
         _candidates = List.of(initial);
-        _selected = initial.toSet();
-        _strokes = const [];
+        _edits = _Snapshot(const []).hide(initial);
         _undoStack.clear();
         _redoStack.clear();
         _seenAddresses.addAll(initial.map((c) => c.region));
@@ -491,7 +521,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   void _retry() {
     final source = _source;
-    if (_busy || !_canRetry || source == null) return;
+    if (_busy || _live.active || !_canRetry || source == null) return;
     if (_faces.canRetry) unawaited(_faces.detect(source));
     if (!widget.includeOtherCandidates) {
       unawaited(_detectAddresses(source));
@@ -502,17 +532,12 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   // --- Editing: every change is one undo step. ---------------------------
 
-  void _apply(Set<RegionCandidate> selected, List<HideRegion> strokes) {
-    if (setEquals(selected, _selected) && listEquals(strokes, _strokes)) {
-      return;
-    }
+  void _apply(_Snapshot next) {
     setState(() {
-      _undoStack.add(_Snapshot(_selected, _strokes));
+      _undoStack.add(_edits);
       _redoStack.clear();
-      _selected = selected;
-      _strokes = List.unmodifiable(strokes);
-      // The photo changed since it was saved: offer to save it again.
-      _saved = false;
+      _edits = next;
+      _invalidateSavedPhoto();
     });
     unawaited(HapticFeedback.selectionClick());
     _schedulePatches();
@@ -520,9 +545,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   void _toggle(RegionCandidate candidate) {
     if (!_canEdit) return;
-    final next = Set.of(_selected);
-    if (!next.remove(candidate)) next.add(candidate);
-    _apply(next, _strokes);
+    _toggleFrames({candidate});
   }
 
   /// Hide every frame of one kind, or show them all again when all are hidden.
@@ -531,11 +554,17 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     final frames = _visibleCandidates
         .where((c) => kind == null || c.kind == kind)
         .toSet();
-    if (frames.isEmpty) return;
+    if (frames.isNotEmpty) _toggleFrames(frames);
+  }
+
+  void _toggleFrames(Set<RegionCandidate> frames) {
     final allHidden = frames.every(_selected.contains);
     _apply(
-      allHidden ? _selected.difference(frames) : _selected.union(frames),
-      _strokes,
+      allHidden
+          ? _Snapshot(
+              _edits.masks.where((mask) => !frames.contains(mask.candidate)),
+            )
+          : _edits.hide(frames),
     );
   }
 
@@ -545,11 +574,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   void _step(List<_Snapshot> from, List<_Snapshot> to) {
     if (_busy || from.isEmpty) return;
     setState(() {
-      to.add(_Snapshot(_selected, _strokes));
-      final snapshot = from.removeLast();
-      _selected = snapshot.selected;
-      _strokes = snapshot.strokes;
-      _saved = false;
+      to.add(_edits);
+      _edits = from.removeLast();
+      _invalidateSavedPhoto();
     });
     unawaited(HapticFeedback.selectionClick());
     _schedulePatches();
@@ -564,17 +591,32 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     return Offset((local.dx - t.x) / zoom, (local.dy - t.y) / zoom);
   }
 
-  void _pointerDown(PointerDownEvent _) {
+  void _pointerDown(PointerDownEvent event) {
     _pointers++;
-    if (_pointers < 2) return;
+    if (_pointers == 1) {
+      _strokeStart = event.localPosition;
+      return;
+    }
     // A second finger means zoom: the stroke so far was not meant to paint.
     _multiTouch = true;
-    if (_live.active) _live.clear();
+    _clearStroke();
   }
 
   void _pointerUp(PointerEvent _) {
     _pointers = math.max(0, _pointers - 1);
-    if (_pointers == 0) _multiTouch = false;
+    if (_pointers == 0) {
+      _strokeStart = null;
+      _multiTouch = false;
+    }
+  }
+
+  void _pointerCancel(PointerCancelEvent event) {
+    _clearStroke();
+    _pointerUp(event);
+  }
+
+  void _clearStroke() {
+    if (_live.active) setState(_live.clear);
   }
 
   void _scaleStart(ScaleStartDetails d, Rect photo, double fit) {
@@ -583,24 +625,31 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       _startPinch(d.localFocalPoint, 1);
       return;
     }
-    if (_multiTouch) return;
-    final content = _toContent(d.localFocalPoint);
+    final start = _strokeStart;
+    if (_multiTouch || start == null) return;
+    final content = _toContent(start);
     final radius =
         brushScreenRadius / (fit * _photoTransform.value.getMaxScaleOnAxis());
     // Strokes start on the photo; the margin around it is left alone.
     if (!photo.inflate(radius * fit).contains(content)) return;
-    _live.start(
-      (content - photo.topLeft) / fit,
-      radius,
-      _tool == EditTool.eraser,
-      d.localFocalPoint,
-    );
+    setState(() {
+      _live.start(
+        (content - photo.topLeft) / fit,
+        radius,
+        _tool == EditTool.eraser,
+        d.localFocalPoint,
+      );
+      _live.extend(
+        (_toContent(d.localFocalPoint) - photo.topLeft) / fit,
+        d.localFocalPoint,
+      );
+    });
   }
 
   void _scaleUpdate(ScaleUpdateDetails d, Rect photo, double fit) {
     if (!_canEdit) return;
     if (d.pointerCount >= 2) {
-      if (_live.active) _live.clear();
+      _clearStroke();
       if (!_pinching) _startPinch(d.localFocalPoint, d.scale);
       _updatePinch(d);
       return;
@@ -642,8 +691,8 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   void _commitStroke() {
     final source = _source;
-    if (!_live.active || source == null) {
-      _live.clear();
+    if (!_live.active || source == null || !_canEdit) {
+      _clearStroke();
       return;
     }
     final region = HideRegion.stroke(
@@ -653,7 +702,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       imageHeight: source.height,
       reveal: _live.reveal,
     );
-    _live.clear();
+    _clearStroke();
     if (region == null) return;
     // An eraser stroke over nothing hidden would only be a confusing undo step.
     if (region.reveal &&
@@ -662,7 +711,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
         )) {
       return;
     }
-    _apply(Set.of(_selected), [..._strokes, region]);
+    _apply(_Snapshot([..._edits.masks, (candidate: null, region: region)]));
   }
 
   void _schedulePatches() {
@@ -732,12 +781,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// Renders exactly what the editor shows and saves it in one step.
+  bool get _canSave => _canEdit && !_live.active && !_saved;
+  bool get _canShare => _saved && !_busy && !_scanning && !_live.active;
+
+  /// Renders the committed masks and saves the photo in one step.
   Future<void> _save() async {
     final source = _source;
-    if (_busy || source == null || _saved || _hiddenWhileScanning) return;
-    if (_canRetry) {
+    if (!_canSave || source == null) return;
+    if (_scanIncomplete) {
       // Saving after a failed scan is allowed, but never by accident.
+      final retryAvailable = _canRetry;
       final choice = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -745,8 +798,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
           content: const Text('隠し忘れがないか確認してから保存してください。'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('もう一度検出'),
+              onPressed: () =>
+                  Navigator.pop(context, retryAvailable ? false : null),
+              child: Text(retryAvailable ? 'もう一度検出' : '編集に戻る'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
@@ -757,7 +811,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       );
       if (!mounted) return;
       if (choice == false) _retry();
-      if (choice != true) return;
+      if (choice != true || !_canSave) return;
     }
     if (_scanning) {
       // Legacy editor: stop the scans; the retry button finishes them later.
@@ -922,10 +976,10 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
             ),
           ),
         )
-      else if (_canRetry)
+      else if (_scanIncomplete)
         IconButton(
           tooltip: '一部を検出できませんでした',
-          onPressed: _retry,
+          onPressed: _canRetry && !_live.active ? _retry : null,
           style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
           icon: const Icon(
             Icons.refresh_rounded,
@@ -1104,14 +1158,14 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
                     label: '共有',
                     icon: Icons.ios_share_rounded,
                     primary: true,
-                    onPressed: _busy ? null : _share,
+                    onPressed: _canShare ? _share : null,
                   )
                 else
                   GlassIconButton(
                     label: '写真に保存',
                     icon: Icons.download_rounded,
                     primary: true,
-                    onPressed: _busy || _hiddenWhileScanning ? null : _save,
+                    onPressed: _canSave ? _save : null,
                   ),
               ],
             ),
@@ -1188,7 +1242,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   Future<void> _share() async {
     final jpeg = _savedJpeg;
-    if (jpeg == null) return;
+    if (!_canShare || jpeg == null) return;
     if (!await _sharer.share(jpeg) && mounted) {
       _notify('共有できませんでした');
     }
@@ -1351,7 +1405,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       return Listener(
         onPointerDown: _pointerDown,
         onPointerUp: _pointerUp,
-        onPointerCancel: _pointerUp,
+        onPointerCancel: _pointerCancel,
         child: GestureDetector(
           key: const ValueKey('photo-canvas'),
           behavior: HitTestBehavior.opaque,

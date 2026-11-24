@@ -113,8 +113,8 @@ void main() {
       );
       frostShapes(out, w, h, 3, shapes([box, eraser]));
       for (var y = 10; y < 40; y++) {
-        // Well inside the eraser: original pixels.
-        for (var x = 40; x <= 50; x++) {
+        // Every pixel inside the eraser stays original, including its edge.
+        for (var x = 37; x < 53; x++) {
           expect(changed(original, out, x, y, w), isFalse, reason: '($x,$y)');
         }
         // Still hidden outside the eraser.

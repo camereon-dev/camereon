@@ -1,12 +1,21 @@
 import 'dart:async';
 
+import 'package:camereon/core/analysis/face_detection.dart';
 import 'package:camereon/core/detection/japanese_address_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
+import 'package:camereon/core/photo/photo_images.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/photo_editor.dart' as editor;
+
+class _PendingFaces implements PhotoFaceDetector {
+  final result = Completer<List<FaceCandidate>>();
+
+  @override
+  Future<List<FaceCandidate>> detect(SourcePhoto photo) => result.future;
+}
 
 void main() {
   final address = editor.candidate(
@@ -79,6 +88,65 @@ void main() {
     expect(editor.overlay(tester).selectedCandidates, {address});
     await editor.tapText(tester, '写真に保存');
     expect(processor.received, [address.region]);
+  });
+
+  testWidgets('an interrupted face scan still requires confirmation', (
+    tester,
+  ) async {
+    final processor = editor.FakeProcessor(200, 100);
+    final saver = editor.FakeSaver();
+    final faces = _PendingFaces();
+    await editor.open(
+      tester,
+      processor,
+      saver,
+      faces: faces,
+      includeOtherCandidates: false,
+      settle: false,
+    );
+    expect(find.bySemanticsLabel('検出中'), findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await editor.tapText(tester, '写真に保存');
+    expect(find.text('このまま保存'), findsOneWidget);
+    expect(processor.received, isNull);
+    expect(saver.calls, 0);
+
+    faces.result.complete([FaceCandidate('face', address.region)]);
+    await tester.pumpAndSettle();
+    await editor.tapText(tester, 'このまま保存');
+    expect(saver.calls, 1);
+  });
+
+  testWidgets('a scan that adds a mask after saving requires a fresh save', (
+    tester,
+  ) async {
+    final addresses = editor.FakeDetector()..partial = true;
+    final processor = editor.FakeProcessor(200, 100);
+    final saver = editor.FakeSaver();
+    await editor.open(
+      tester,
+      processor,
+      saver,
+      addresses: addresses,
+      includeOtherCandidates: false,
+    );
+    await editor.tapText(tester, '写真に保存');
+    await editor.tapText(tester, 'このまま保存');
+    expect(processor.received, isEmpty);
+    expect(find.byTooltip('共有'), findsOneWidget);
+
+    addresses
+      ..partial = false
+      ..candidates.add(address);
+    await editor.tapText(tester, '一部を検出できませんでした');
+    expect(find.byTooltip('共有'), findsNothing);
+    expect(saver.calls, 1);
+    await editor.tapText(tester, '写真に保存');
+    expect(processor.received, [address.region]);
+    expect(saver.calls, 2);
   });
 
   testWidgets('a failed save keeps the edits for another attempt', (

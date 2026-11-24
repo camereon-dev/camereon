@@ -48,6 +48,7 @@ void main() {
     final pen = regions.last;
     expect(pen.shape, HideShape.stroke);
     expect(pen.reveal, isFalse);
+    expect(pen.contains(const Offset(140, 70)), isTrue);
     expect(pen.contains(const Offset(160, 75)), isTrue);
     await editor.tapText(tester, '写真に保存');
     expect(processor.received, [address.region, pen]);
@@ -114,7 +115,7 @@ void main() {
       center - const Offset(30, 0),
       pointer: 1,
     );
-    await first.moveTo(center - const Offset(40, 0));
+    await first.moveTo(center - const Offset(70, 0));
     await tester.pump();
     final second = await tester.startGesture(
       center + const Offset(30, 0),
@@ -152,19 +153,65 @@ void main() {
     expect(editor.painter(tester).regions, [address.region]);
   });
 
-  testWidgets('an address found after a stroke is not revealed by undo', (
+  testWidgets('saving waits for the pen stroke to finish', (tester) async {
+    final processor = await openWithAddress(tester);
+    final photo = tester.getRect(find.bySemanticsLabel('撮影した写真'));
+    final finger = await tester.startGesture(photo.center);
+    await finger.moveBy(const Offset(80, 0));
+    await tester.pump();
+
+    final save = find.byTooltip('写真に保存');
+    await tester.tap(save);
+    await tester.pump();
+    expect(processor.received, isNull);
+
+    await finger.up();
+    await tester.pumpAndSettle();
+    await editor.tapText(tester, '写真に保存');
+    expect(processor.received, editor.painter(tester).regions);
+    expect(processor.received, hasLength(2));
+  });
+
+  testWidgets('reselecting an erased frame hides the erased part', (
     tester,
   ) async {
-    // Addresses arrive late: retry after a partial first scan.
+    await openWithAddress(tester);
+    await editor.tapText(tester, '消しゴムで戻す');
+    await editor.paint(tester, const [Offset(35, 40), Offset(70, 40)]);
+    final eraser = editor.painter(tester).regions.last;
+
+    await editor.tapPixel(tester, const Offset(50, 40));
+    expect(editor.painter(tester).regions, [eraser]);
+    await editor.tapPixel(tester, const Offset(50, 40));
+    expect(editor.painter(tester).regions, [eraser, address.region]);
+    await editor.tapText(tester, '取り消す');
+    expect(editor.painter(tester).regions, [eraser]);
+    await editor.tapText(tester, 'やり直す');
+    expect(editor.painter(tester).regions, [eraser, address.region]);
+  });
+
+  testWidgets('an earlier eraser cannot reveal an address found on retry', (
+    tester,
+  ) async {
     final addresses = editor.FakeDetector()..partial = true;
-    await openWithAddress(tester, addresses: addresses);
-    await editor.paint(tester, const [Offset(140, 70), Offset(180, 80)]);
+    final processor = await openWithAddress(tester, addresses: addresses);
+    const path = [Offset(35, 40), Offset(60, 40), Offset(100, 40)];
+    await editor.paint(tester, path);
+    await editor.tapText(tester, '消しゴムで戻す');
+    await editor.paint(tester, path);
+    final strokes = editor.painter(tester).regions;
+    expect(strokes, hasLength(2));
+    expect(strokes.last.reveal, isTrue);
     addresses
       ..partial = false
       ..candidates.add(address);
     await editor.tapText(tester, '一部を検出できませんでした');
-    expect(editor.painter(tester).regions.first, address.region);
+    expect(editor.painter(tester).regions, [...strokes, address.region]);
     await editor.tapText(tester, '取り消す');
-    expect(editor.painter(tester).regions, [address.region]);
+    expect(editor.painter(tester).regions, [strokes.first, address.region]);
+    await editor.tapText(tester, 'やり直す');
+    expect(editor.painter(tester).regions, [...strokes, address.region]);
+    await editor.tapText(tester, '写真に保存');
+    expect(processor.received, [...strokes, address.region]);
   });
 }

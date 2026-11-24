@@ -16,6 +16,9 @@ typedef PixelShape = ({
   bool reveal,
 });
 
+const _hidden = 1;
+const _revealed = 2;
+
 /// 周囲の画素だけから作った「すりガラス」の塗りで形の内側を置き換える。
 ///
 /// 内側の画素は一切参照しない（内容は捨てる）ので黒塗りと同じく復元できない。
@@ -42,7 +45,7 @@ void frostShapes(
     final w = right - left, h = bottom - top;
     if (w <= 0 || h <= 0) continue;
     final mask = rasterize(shape, left, top, w, h);
-    final value = shape.reveal ? 0 : 1;
+    final value = shape.reveal ? _revealed : _hidden;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         if (mask[y * w + x] != 0) {
@@ -228,8 +231,8 @@ double reachOf(PixelShape s) =>
 
 /// Writes the fill into [px] in place, or, when [overlay] is given, into that
 /// premultiplied RGBA buffer covering exactly [_band] (leaving [px] intact).
-/// [excluded] (one byte per image pixel) marks every hidden pixel, so colours
-/// are never sampled from another region; without it only [s] is skipped.
+/// [excluded] marks hidden and erased pixels. Hidden pixels are never sampled
+/// for any region, and erased pixels are preserved even in the feather band.
 void _frost(
   Uint8List px,
   int width,
@@ -260,7 +263,7 @@ void _frost(
     for (var y = 0; y < bh; y++) {
       final row = (bandTop + y) * width + bandLeft;
       for (var x = 0; x < bw; x++) {
-        if (excluded[row + x] == 0) inside[y * bw + x] = 0;
+        if (excluded[row + x] != _hidden) inside[y * bw + x] = 0;
       }
     }
   }
@@ -278,7 +281,7 @@ void _frost(
     final int gy = math.min(gh - 1, (y * scale).floor());
     for (var x = 0; x < w; x += step) {
       if (excluded != null) {
-        if (excluded[(top + y) * width + left + x] != 0) continue;
+        if (excluded[(top + y) * width + left + x] == _hidden) continue;
       } else {
         final int iy = top + y - bandTop;
         final int ix = left + x - bandLeft;
@@ -347,7 +350,9 @@ void _frost(
   final sample = Float32List(4);
   for (var y = 0; y < bh; y++) {
     final fy = (bandTop + y - top + .5) * scale - .5;
+    final row = (bandTop + y) * width + bandLeft;
     for (var x = 0; x < bw; x++) {
+      if (excluded?[row + x] == _revealed) continue;
       final i = y * bw + x;
       final a = inside[i] != 0 ? 1.0 : (alpha[i] * 2).clamp(0.0, 1.0);
       if (a <= 0) continue;
@@ -370,7 +375,7 @@ void _frost(
         overlay[o + 3] = (a * 255).round();
         continue;
       }
-      final int p = ((bandTop + y) * width + bandLeft + x) * channels;
+      final int p = (row + x) * channels;
       px[p] = _mix(px[p], sample[0] + noise, a);
       px[p + 1] = _mix(px[p + 1], sample[1] + noise, a);
       px[p + 2] = _mix(px[p + 2], sample[2] + noise, a);
