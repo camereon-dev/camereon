@@ -320,7 +320,7 @@ void main() {
       tester
           .widget<CapturedPhotoScreen>(find.byType(CapturedPhotoScreen))
           .autoHideKinds,
-      {CandidateKind.address},
+      {CandidateKind.address, CandidateKind.phone},
     );
   });
 

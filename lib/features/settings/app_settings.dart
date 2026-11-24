@@ -5,7 +5,11 @@ import '../../core/detection/region_detector.dart';
 
 /// Kinds the settings screen offers to hide automatically, in display order.
 /// Adding a detected kind here adds its switch; it starts on for everyone.
-const autoHideChoices = [CandidateKind.address, CandidateKind.face];
+const autoHideChoices = [
+  CandidateKind.address,
+  CandidateKind.phone,
+  CandidateKind.face,
+];
 
 /// Capture resolutions the camera screen can open with.
 enum CameraResolution {

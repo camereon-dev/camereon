@@ -19,7 +19,11 @@ void main() {
 
   test('defaults keep the current behavior', () {
     const settings = AppSettings();
-    expect(settings.autoHideKinds, {CandidateKind.address, CandidateKind.face});
+    expect(settings.autoHideKinds, {
+      CandidateKind.address,
+      CandidateKind.phone,
+      CandidateKind.face,
+    });
     expect(settings.resolution.preset.name, 'veryHigh');
     expect(settings.showGrid, isFalse);
   });
@@ -108,7 +112,10 @@ void main() {
         controller.value.withAutoHide(CandidateKind.address, false),
       );
       expect(controller.value.showGrid, isTrue);
-      expect(controller.value.autoHideKinds, {CandidateKind.face});
+      expect(controller.value.autoHideKinds, {
+        CandidateKind.phone,
+        CandidateKind.face,
+      });
       expect(notified, 2);
 
       await controller.saved;

@@ -1,0 +1,104 @@
+{
+  "automatic_phone_candidates": 4,
+  "optional_phone_candidates": 2,
+  "address_candidates": 12,
+  "gallery_save_succeeded": true,
+  "dimensions": [
+    1200,
+    1080
+  ],
+  "phone_pixels_removed": true,
+  "entire_drawn_phone_pixels_removed": true,
+  "postal_code_still_masked": true,
+  "optional_management_date_name_values_preserved": true,
+  "address_regions": [
+    [
+      25,
+      45,
+      92,
+      84
+    ],
+    [
+      126,
+      45,
+      159,
+      84
+    ],
+    [
+      76,
+      314,
+      112,
+      352
+    ],
+    [
+      40,
+      585,
+      76,
+      622
+    ],
+    [
+      76,
+      585,
+      113,
+      622
+    ],
+    [
+      112,
+      585,
+      148,
+      622
+    ],
+    [
+      127,
+      764,
+      165,
+      802
+    ],
+    [
+      198,
+      764,
+      339,
+      802
+    ],
+    [
+      40,
+      854,
+      163,
+      892
+    ],
+    [
+      159,
+      854,
+      271,
+      892
+    ],
+    [
+      267,
+      854,
+      375,
+      892
+    ],
+    [
+      371,
+      854,
+      568,
+      892
+    ]
+  ],
+  "offline_check": {
+    "settings_before": {
+      "airplane_mode_on": "0",
+      "wifi_on": "1",
+      "mobile_data": "1"
+    },
+    "settings_offline": {
+      "airplane_mode_on": "1",
+      "wifi_on": "0",
+      "mobile_data": "0"
+    },
+    "default_network": [
+      "Active default network: none"
+    ],
+    "exit_code": 0
+  }
+}

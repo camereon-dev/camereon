@@ -12,6 +12,7 @@ import 'package:camereon/core/photo/photo_saver.dart';
 import 'package:camereon/core/photo/photo_sharer.dart';
 import 'package:camereon/features/camera/captured_photo_screen.dart';
 import 'package:camereon/features/detection/candidate_overlay.dart';
+import 'package:camereon/features/settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -147,6 +148,7 @@ Future<void> open(
   List<RegionCandidate> Function(SourcePhoto)? initialCandidates,
   RegionDetector? addresses,
   bool includeOtherCandidates = true,
+  Set<CandidateKind>? autoHideKinds,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -161,6 +163,7 @@ Future<void> open(
         initialCandidates: initialCandidates,
         addressDetector: addresses ?? NoRegions(),
         includeOtherCandidates: includeOtherCandidates,
+        autoHideKinds: autoHideKinds ?? const AppSettings().autoHideKinds,
         sharer: sharer ?? FakeSharer(),
       ),
     ),

@@ -51,7 +51,6 @@ void main() {
     }
     expect(find.text('住所'), findsOneWidget);
     expect(find.text('顔'), findsOneWidget);
-    expect(switchOn(tester, 'camera-grid-setting'), isFalse);
     expect(
       tester
           .widget<RadioGroup<CameraResolution>>(
@@ -60,23 +59,34 @@ void main() {
           .groupValue,
       CameraResolution.fullHd,
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('camera-grid-setting')),
+      100,
+    );
+    expect(switchOn(tester, 'camera-grid-setting'), isFalse);
   });
 
   testWidgets('auto-hide switches turn each kind off and on', (tester) async {
     await open(tester);
     await tester.tap(find.byKey(const ValueKey('auto-hide-face')));
     await tester.pump();
-    expect(settings.value.autoHideKinds, {CandidateKind.address});
+    expect(settings.value.autoHideKinds, {
+      CandidateKind.address,
+      CandidateKind.phone,
+    });
     expect(switchOn(tester, 'auto-hide-face'), isFalse);
     expect(switchOn(tester, 'auto-hide-address'), isTrue);
 
     await tester.tap(find.byKey(const ValueKey('auto-hide-address')));
     await tester.pump();
-    expect(settings.value.autoHideKinds, isEmpty);
+    expect(settings.value.autoHideKinds, {CandidateKind.phone});
 
     await tester.tap(find.byKey(const ValueKey('auto-hide-face')));
     await tester.pump();
-    expect(settings.value.autoHideKinds, {CandidateKind.face});
+    expect(settings.value.autoHideKinds, {
+      CandidateKind.phone,
+      CandidateKind.face,
+    });
     await settings.saved;
     expect(store.saves, 3);
     expect(store.saved, settings.value);
@@ -122,9 +132,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('camera-grid-setting')));
     await tester.pump();
     expect(settings.value.showGrid, isTrue);
-    expect(switchOn(tester, 'camera-grid-setting'), isTrue);
     await settings.saved;
     expect(store.saved, settings.value);
+    expect(switchOn(tester, 'camera-grid-setting'), isTrue);
   });
 
   testWidgets('opens with the saved settings', (tester) async {
@@ -138,7 +148,6 @@ void main() {
     await tester.pump();
     expect(switchOn(tester, 'auto-hide-address'), isFalse);
     expect(switchOn(tester, 'auto-hide-face'), isTrue);
-    expect(switchOn(tester, 'camera-grid-setting'), isTrue);
     expect(
       tester
           .widget<RadioGroup<CameraResolution>>(
@@ -147,6 +156,11 @@ void main() {
           .groupValue,
       CameraResolution.hd,
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('camera-grid-setting')),
+      100,
+    );
+    expect(switchOn(tester, 'camera-grid-setting'), isTrue);
   });
 
   testWidgets('fits a small screen with large text', (tester) async {

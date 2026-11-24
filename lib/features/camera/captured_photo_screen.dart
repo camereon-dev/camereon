@@ -13,6 +13,7 @@ import '../../core/analysis/face_detection.dart';
 import '../../core/analysis/infrastructure/mlkit_face_detector.dart';
 import '../../core/detection/region_detector.dart';
 import '../../core/detection/japanese_address_detector.dart';
+import '../../core/detection/japanese_phone_number_detector.dart';
 import '../../core/photo/android_photo_saver.dart';
 import '../../core/photo/hide_region.dart';
 import '../../core/photo/flutter_photo_processor.dart';
@@ -54,7 +55,11 @@ class CapturedPhotoScreen extends StatefulWidget {
     this.addressDetector,
     this.includeOtherCandidates = false,
     this.sharer,
-    this.autoHideKinds = const {CandidateKind.address, CandidateKind.face},
+    this.autoHideKinds = const {
+      CandidateKind.address,
+      CandidateKind.phone,
+      CandidateKind.face,
+    },
   });
 
   final XFile photo;
@@ -146,8 +151,11 @@ class LiveStroke extends ChangeNotifier {
   }
 }
 
+const _ocrKinds = {CandidateKind.address, CandidateKind.phone};
+
 const _kindIcons = <CandidateKind, IconData>{
   CandidateKind.address: Icons.home_rounded,
+  CandidateKind.phone: Icons.numbers_rounded,
   CandidateKind.text: Icons.text_fields_rounded,
   CandidateKind.face: Icons.face_rounded,
   CandidateKind.person: Icons.person_rounded,
@@ -165,9 +173,9 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
       widget.detector ?? const NoRegionDetector();
   late final RegionDetector _addressDetector =
       widget.addressDetector ?? JapaneseAddressDetector();
-  bool _addressDetecting = false;
-  bool _addressFailed = false;
-  final Set<HideRegion> _seenAddresses = {};
+  bool _ocrDetecting = false;
+  bool _ocrFailed = false;
+  final Map<CandidateKind, Set<HideRegion>> _seenOcrRegions = {};
   late final RegionDetector _objectDetector =
       widget.objectDetector ?? const NoRegionDetector();
   late final _faces = FaceDetectionController(
@@ -250,17 +258,16 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
 
   List<HideRegion> get _redactions => _edits.regions;
   bool get _scanning =>
-      _addressDetecting ||
+      _ocrDetecting ||
       _detecting ||
       _faces.status == FaceDetectionStatus.detecting;
   bool get _scanIncomplete =>
-      _addressFailed ||
+      _ocrFailed ||
       _failedScans.isNotEmpty ||
       _faces.status == FaceDetectionStatus.failed ||
       _faces.status == FaceDetectionStatus.cancelled;
   bool get _canRetry =>
-      !_scanning &&
-      (_addressFailed || _failedScans.isNotEmpty || _faces.canRetry);
+      !_scanning && (_ocrFailed || _failedScans.isNotEmpty || _faces.canRetry);
 
   /// Automatic results stay hidden behind the scan until they are complete,
   /// so the original never shows with a missing mask.
@@ -305,7 +312,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
   /// Automatic discovery isn't an undo step. Undoing or redoing an earlier
   /// user action must not reveal something found after that action.
   void _hideAutomatically(RegionCandidate candidate) {
-    if (!widget.autoHideKinds.contains(candidate.kind)) return;
+    if (!_automaticallySelect(candidate)) return;
     final previous = _redactions;
     _edits = _edits.hide([candidate]);
     for (final stack in [_undoStack, _redoStack]) {
@@ -365,23 +372,20 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
           (widget.initialCandidates?.call(source) ?? const <RegionCandidate>[])
               .where(
                 (c) =>
-                    widget.includeOtherCandidates ||
-                    c.kind == CandidateKind.address,
+                    widget.includeOtherCandidates || _ocrKinds.contains(c.kind),
               )
               .toList();
       setState(() {
         _source = source;
         _candidates = List.of(initial);
-        _edits = _Snapshot(const []).hide(
-          initial.where(
-            (candidate) =>
-                widget.includeOtherCandidates ||
-                widget.autoHideKinds.contains(candidate.kind),
-          ),
-        );
+        _edits = _Snapshot(const []).hide(initial.where(_automaticallySelect));
         _undoStack.clear();
         _redoStack.clear();
-        _seenAddresses.addAll(initial.map((c) => c.region));
+        for (final candidate in initial) {
+          _seenOcrRegions
+              .putIfAbsent(candidate.kind, () => {})
+              .add(candidate.region);
+        }
       });
       widget.onSourceLoaded?.call(source);
       unawaited(_previewer.load(source).then((_) => _refreshPatches()));
@@ -414,7 +418,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     _automaticDetectionStarted = true;
     unawaited(_faces.detect(source));
     if (!widget.includeOtherCandidates) {
-      unawaited(_detectAddresses(source));
+      unawaited(_detectOcr(source));
       return;
     }
     unawaited(_detectAll(source));
@@ -433,49 +437,54 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     await _detect();
   }
 
-  Future<void> _detectAddresses(SourcePhoto source) async {
-    if (_busy || _addressDetecting) return;
+  Future<void> _detectOcr(SourcePhoto source) async {
+    if (_busy || _ocrDetecting) return;
     final epoch = ++_detectionEpoch;
     setState(() {
-      _addressDetecting = true;
-      _addressFailed = false;
+      _ocrDetecting = true;
+      _ocrFailed = false;
     });
     try {
       final result = await _addressDetector.detect(source);
       if (!mounted || epoch != _detectionEpoch) return;
       setState(() {
-        for (final c in result.candidates) {
-          if (c.kind != CandidateKind.address || _knownAddress(c.region)) {
+        for (final candidate in result.candidates) {
+          if (!_ocrKinds.contains(candidate.kind)) continue;
+          final seen = _seenOcrRegions.putIfAbsent(candidate.kind, () => {});
+          if (seen.any((old) => _sameOcrRegion(old, candidate.region))) {
             continue;
           }
-          _seenAddresses.add(c.region);
-          _candidates.add(c);
-          _hideAutomatically(c);
+          seen.add(candidate.region);
+          _candidates.add(candidate);
+          _hideAutomatically(candidate);
         }
-        _addressFailed = result.partial;
+        _ocrFailed = result.partial;
         _truncated = _truncated || result.truncated;
       });
       _schedulePatches();
     } catch (_) {
       if (mounted && epoch == _detectionEpoch) {
-        setState(() => _addressFailed = true);
+        setState(() => _ocrFailed = true);
       }
     } finally {
       if (mounted && epoch == _detectionEpoch) {
-        setState(() => _addressDetecting = false);
+        setState(() => _ocrDetecting = false);
       }
     }
   }
 
-  bool _knownAddress(HideRegion region) => _seenAddresses.any((old) {
+  bool _automaticallySelect(RegionCandidate candidate) =>
+      (widget.includeOtherCandidates ||
+          widget.autoHideKinds.contains(candidate.kind)) &&
+      (candidate is! PhoneNumberCandidate || candidate.automaticallySelected);
+
+  bool _sameOcrRegion(HideRegion old, HideRegion current) {
     final a = old.toRect();
-    final b = region.toRect();
+    final b = current.toRect();
     final overlap = a.intersect(b);
-    final area = overlap.width > 0 && overlap.height > 0
-        ? overlap.width * overlap.height
-        : 0;
+    final area = overlap.isEmpty ? 0.0 : overlap.width * overlap.height;
     return area >= a.width * a.height * .7 && area >= b.width * b.height * .7;
-  });
+  }
 
   Future<void> _detect({bool objects = false}) async {
     final source = _source;
@@ -535,7 +544,7 @@ class _CapturedPhotoScreenState extends State<CapturedPhotoScreen>
     if (_busy || _live.active || !_canRetry || source == null) return;
     if (_faces.canRetry) unawaited(_faces.detect(source));
     if (!widget.includeOtherCandidates) {
-      unawaited(_detectAddresses(source));
+      unawaited(_detectOcr(source));
       return;
     }
     unawaited(_detectAll(source));
