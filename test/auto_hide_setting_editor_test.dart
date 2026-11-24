@@ -31,7 +31,6 @@ void main() {
   Future<(editor.FakeProcessor, _Faces, editor.FakeDetector)> open(
     WidgetTester tester, {
     required Set<CandidateKind> autoHideKinds,
-    bool startWithConfirmation = false,
     List<RegionCandidate> Function(SourcePhoto)? initialCandidates,
   }) async {
     final processor = editor.FakeProcessor(200, 100);
@@ -47,7 +46,6 @@ void main() {
           addressDetector: addresses,
           previewer: const FrostedPreviewer.none(),
           sharer: editor.FakeSharer(),
-          startWithConfirmation: startWithConfirmation,
           initialCandidates: initialCandidates,
           autoHideKinds: autoHideKinds,
         ),
@@ -78,7 +76,7 @@ void main() {
     expect(editor.overlay(tester).selectedCandidates, {address, face});
     await editor.tapText(tester, '取り消す');
     expect(editor.overlay(tester).selectedCandidates, {address});
-    await editor.tapText(tester, '保存前に確認');
+    await editor.tapText(tester, '写真に保存');
     expect(processor.received, [address.region]);
   });
 
@@ -104,24 +102,21 @@ void main() {
 
     await editor.tapPixel(tester, const Offset(50, 30));
     expect(editor.overlay(tester).selectedCandidates, contains(address));
-    await editor.tapText(tester, '保存前に確認');
+    await editor.tapText(tester, '写真に保存');
     expect(
       processor.received,
       unorderedEquals([address.region, faces.face.region]),
     );
   });
 
-  testWidgets('with nothing hidden automatically, capture confirms as shot', (
+  testWidgets('with both auto-hide settings off, saving starts unmasked', (
     tester,
   ) async {
-    final (processor, _, _) = await open(
-      tester,
-      autoHideKinds: const {},
-      startWithConfirmation: true,
-    );
-    expect(processor.received, isEmpty);
-    await editor.tapText(tester, '編集する');
+    final (processor, _, _) = await open(tester, autoHideKinds: const {});
+    expect(processor.received, isNull);
     expect(editor.overlay(tester).candidates, hasLength(2));
     expect(editor.overlay(tester).selectedCandidates, isEmpty);
+    await editor.tapText(tester, '写真に保存');
+    expect(processor.received, isEmpty);
   });
 }

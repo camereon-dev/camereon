@@ -4,8 +4,8 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 /// 隠す範囲の形。[HideRegion] の整数の外接矩形に加えて、楕円や多角形で
-/// 検出した形に沿って隠せる。
-enum HideShape { rectangle, ellipse, polygon }
+/// 検出した形に沿って隠せる。[stroke] は指でなぞった線（半径つきの折れ線）。
+enum HideShape { rectangle, ellipse, polygon, stroke }
 
 /// 隠す範囲。[SourcePhoto] の画素座標（向きを正規化した後）で表す。
 ///
@@ -20,8 +20,10 @@ class HideRegion {
     this.right,
     this.bottom,
     this.shape,
-    this.points,
-  );
+    this.points, {
+    this.radius = 0,
+    this.reveal = false,
+  });
 
   /// [rect] を画像の範囲に収め、隠し漏れがないよう外側へ丸めて作る。
   ///
@@ -77,6 +79,55 @@ class HideRegion {
     );
   }
 
+  /// 指でなぞった線。[points] を結ぶ折れ線から [radius] 以内を隠す。
+  ///
+  /// [reveal] が true なら消しゴムで、それまでに隠した範囲のうち線の内側を
+  /// 元に戻す。範囲の並びの順に適用するため、後のペンは消した場所も隠せる。
+  /// 1 点だけなら円。点が無い・半径が正でない・画像と重ならない場合は null。
+  static HideRegion? stroke(
+    List<Offset> points,
+    double radius, {
+    required int imageWidth,
+    required int imageHeight,
+    bool reveal = false,
+  }) {
+    if (imageWidth <= 0 ||
+        imageHeight <= 0 ||
+        points.isEmpty ||
+        !radius.isFinite ||
+        radius <= 0 ||
+        points.any((p) => !p.dx.isFinite || !p.dy.isFinite)) {
+      return null;
+    }
+    final kept = List<Offset>.unmodifiable(points);
+    var minX = double.infinity, minY = double.infinity;
+    var maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+    for (final p in kept) {
+      minX = math.min(minX, p.dx);
+      maxX = math.max(maxX, p.dx);
+      minY = math.min(minY, p.dy);
+      maxY = math.max(maxY, p.dy);
+    }
+    final bounds = _bounded(
+      Rect.fromLTRB(minX, minY, maxX, maxY).inflate(radius),
+      imageWidth,
+      imageHeight,
+      HideShape.stroke,
+      kept,
+    );
+    if (bounds == null) return null;
+    return HideRegion._(
+      bounds.left,
+      bounds.top,
+      bounds.right,
+      bounds.bottom,
+      HideShape.stroke,
+      kept,
+      radius: radius,
+      reveal: reveal,
+    );
+  }
+
   static HideRegion? _bounded(
     Rect rect,
     int imageWidth,
@@ -116,8 +167,14 @@ class HideRegion {
   final int bottom;
   final HideShape shape;
 
-  /// 多角形の頂点（画像座標）。長方形・楕円では空。
+  /// 多角形の頂点、または線の通り道（画像座標）。長方形・楕円では空。
   final List<Offset> points;
+
+  /// 線の太さの半分（画像の画素）。線以外は 0。
+  final double radius;
+
+  /// 消しゴムの線。隠すのではなく、それまでに隠した範囲を元に戻す。
+  final bool reveal;
 
   int get width => right - left;
   int get height => bottom - top;
@@ -139,8 +196,46 @@ class HideRegion {
         path.addOval(toRect());
       case HideShape.polygon:
         path.addPolygon(points, true);
+      case HideShape.stroke:
+        // Union of capsules. Every piece winds the same way, so overlaps
+        // add up under the non-zero rule instead of cancelling.
+        for (final p in points) {
+          path.addOval(Rect.fromCircle(center: p, radius: radius));
+        }
+        for (var i = 1; i < points.length; i++) {
+          final a = points[i - 1], b = points[i];
+          final d = b - a;
+          if (d.distance == 0) continue;
+          final n = Offset(-d.dy, d.dx) / d.distance * radius;
+          final quad = [a + n, b + n, b - n, a - n];
+          path.addPolygon(
+            _signedArea(quad) > 0 ? quad : quad.reversed.toList(),
+            true,
+          );
+        }
     }
     return path;
+  }
+
+  static double _signedArea(List<Offset> p) {
+    var sum = 0.0;
+    for (var i = 0; i < p.length; i++) {
+      final a = p[i], b = p[(i + 1) % p.length];
+      sum += a.dx * b.dy - b.dx * a.dy;
+    }
+    return sum;
+  }
+
+  /// [point] から線の中心までの距離が [radius] 以内か。
+  bool _nearStroke(Offset point) {
+    final r2 = radius * radius;
+    if (points.length == 1) return (point - points.first).distanceSquared <= r2;
+    for (var i = 1; i < points.length; i++) {
+      if (segmentDistanceSquared(point, points[i - 1], points[i]) <= r2) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// [point] が形の内側にあるか。外接矩形ではなく形そのもので判定する。
@@ -166,6 +261,8 @@ class HideRegion {
           }
         }
         return inside;
+      case HideShape.stroke:
+        return _nearStroke(point);
     }
   }
 
@@ -177,14 +274,38 @@ class HideRegion {
       other.right == right &&
       other.bottom == bottom &&
       other.shape == shape &&
+      other.radius == radius &&
+      other.reveal == reveal &&
       listEquals(other.points, points);
 
   @override
-  int get hashCode =>
-      Object.hash(left, top, right, bottom, shape, Object.hashAll(points));
+  int get hashCode => Object.hash(
+    left,
+    top,
+    right,
+    bottom,
+    shape,
+    radius,
+    reveal,
+    Object.hashAll(points),
+  );
 
   @override
   String toString() =>
       'HideRegion($left, $top, $right, $bottom, ${shape.name}'
-      '${shape == HideShape.polygon ? ', ${points.length} points' : ''})';
+      '${points.isEmpty ? '' : ', ${points.length} points'}'
+      '${reveal ? ', reveal' : ''})';
+}
+
+/// 点 [p] から線分 [a]–[b] までの距離の二乗。
+double segmentDistanceSquared(Offset p, Offset a, Offset b) {
+  final d = b - a;
+  final length2 = d.distanceSquared;
+  final t = length2 == 0
+      ? 0.0
+      : (((p.dx - a.dx) * d.dx + (p.dy - a.dy) * d.dy) / length2).clamp(
+          0.0,
+          1.0,
+        );
+  return (p - (a + d * t)).distanceSquared;
 }

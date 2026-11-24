@@ -104,7 +104,7 @@ class IsolateFrostedPreviewer implements FrostedPreviewer {
   @override
   Future<FrostedPatch?> patch(HideRegion region) async {
     final pixels = _pixels;
-    if (pixels == null || _disposed) return null;
+    if (pixels == null || _disposed || region.reveal) return null;
     final sx = _width / _sourceWidth;
     final sy = _height / _sourceHeight;
     final source = pixelShape(region);
@@ -120,6 +120,8 @@ class IsolateFrostedPreviewer implements FrostedPreviewer {
           source.points[i + 1] * sy,
         ],
       ]),
+      radius: source.radius * (sx + sy) / 2,
+      reveal: source.reveal,
     );
     if (shape.left >= shape.right || shape.top >= shape.bottom) return null;
     final window = frostWindow(shape, _width, _height);
@@ -144,6 +146,8 @@ class IsolateFrostedPreviewer implements FrostedPreviewer {
           shape.points[i + 1] - window.top,
         ],
       ]),
+      radius: shape.radius,
+      reveal: shape.reveal,
     );
     // Only the shape and its feather are opaque in the result; the rest of
     // the window is transparent so stacked patches never repaint originals.

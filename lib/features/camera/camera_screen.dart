@@ -219,7 +219,7 @@ class _CameraScreenState extends State<CameraScreen>
         const Duration(seconds: 10),
       );
       if (!mounted) return;
-      await _editPhoto(photo, startWithConfirmation: true);
+      await _editPhoto(photo);
     } catch (e) {
       debugPrint('camera: failed to take picture: $e');
       if (!mounted) return;
@@ -278,7 +278,6 @@ class _CameraScreenState extends State<CameraScreen>
   Future<void> _editPhoto(
     XFile photo, {
     List<RegionCandidate> Function(SourcePhoto)? initialCandidates,
-    bool startWithConfirmation = false,
   }) async {
     var hadCamera = false;
     _editingPhoto = true;
@@ -296,7 +295,6 @@ class _CameraScreenState extends State<CameraScreen>
         MaterialPageRoute(
           builder: (_) => CapturedPhotoScreen(
             photo: photo,
-            startWithConfirmation: startWithConfirmation,
             initialCandidates: initialCandidates,
             autoHideKinds: _settings.value.autoHideKinds,
           ),
