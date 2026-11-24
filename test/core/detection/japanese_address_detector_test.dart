@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:camereon/core/detection/address_detection_mode.dart';
+import 'package:camereon/core/detection/place_name_dictionary.dart';
 import 'package:camereon/core/detection/japanese_address_detector.dart';
 import 'package:camereon/core/detection/region_detector.dart';
 import 'package:camereon/core/photo/photo_images.dart';
@@ -7,13 +9,140 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
-List<AddressGlyph> glyphs(String text, {double y = 10}) => [
+List<AddressGlyph> glyphs(String text, {double y = 10, double x = 10}) => [
   for (var i = 0; i < text.length; i++)
-    AddressGlyph(text[i], Rect.fromLTWH(10 + i * 10, y, 10, 16)),
+    AddressGlyph(text[i], Rect.fromLTWH(x + i * 10, y, 10, 16)),
 ];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'address only masks numbered addresses and leaves other mentions visible',
+    () async {
+      final dictionary = await PlaceNameDictionary.load();
+      final candidates = japaneseAddressCandidates(
+        [
+          glyphs('東京都新宿区西新宿2-8-1で開催'),
+          glyphs('新宿区のイベント', y: 40),
+          glyphs('西新宿', y: 70),
+          glyphs('西新宿2-8-1', y: 130),
+        ],
+        1000,
+        200,
+        dictionary: dictionary,
+        mode: AddressDetectionMode.addressOnly,
+      );
+      expect(candidates.map((c) => c.region.top), [8, 128]);
+      expect(candidates.first.region.right, 12 + '東京都新宿区西新宿2-8-1'.length * 10);
+    },
+  );
+  group('nearby address fields in address-only mode', () {
+    late PlaceNameDictionary dictionary;
+    setUpAll(() async {
+      dictionary = await PlaceNameDictionary.load();
+    });
+    List<Rect> detect(List<List<AddressGlyph>> lines) => [
+      for (final c in japaneseAddressCandidates(
+        lines,
+        1000,
+        300,
+        mode: AddressDetectionMode.addressOnly,
+        dictionary: dictionary,
+      ))
+        c.region.toRect(),
+    ];
+
+    test('campus address wraps from the right edge to a left-aligned lot', () {
+      const locality = '沖縄県宜野湾市字喜友名';
+      expect(
+        detect([
+          glyphs('キャンパス：'),
+          glyphs('1076番地.⑤国立大学法人', x: 80, y: 32),
+          glyphs('詳細案内', y: 90),
+          glyphs(locality, x: 700),
+        ]),
+        [
+          const Rect.fromLTRB(78, 30, 142, 50),
+          Rect.fromLTRB(698, 8, 702 + locality.length * 10, 28),
+        ],
+      );
+      for (final postal in [true, false]) {
+        final boxes = detect([
+          glyphs('キャンパス：'),
+          [
+            if (postal) ...glyphs('〒123-4567', x: 600),
+            ...glyphs(locality, x: 700),
+          ],
+          glyphs('1076番地', x: 80, y: 32),
+          glyphs('大学の案内', x: 180, y: 32),
+        ]);
+        expect(boxes, [
+          if (postal) const Rect.fromLTRB(598, 8, 692, 28),
+          Rect.fromLTRB(698, 8, 702 + locality.length * 10, 28),
+          const Rect.fromLTRB(78, 30, 142, 50),
+        ]);
+      }
+      expect(detect([glyphs('〒123-4567沖縄県宜野湾市字喜友名')]), hasLength(2));
+      expect(
+        detect([glyphs(locality, x: 700), glyphs('123円', y: 32)]),
+        isEmpty,
+      );
+    });
+    test('continues through nearby fields and stops at notes', () {
+      final boxes = detect([
+        glyphs('東京都新宿区西新宿2-8-1'),
+        glyphs('字北山', y: 32),
+        glyphs('123番地で開催', y: 54),
+        glyphs('備考', y: 76),
+        glyphs('北山', y: 98),
+      ]);
+      expect(boxes.map((b) => b.top), [8, 30, 52]);
+      expect(boxes.last.right, 12 + '123番地'.length * 10);
+    });
+
+    test('pairs a place and a lot on adjacent lines with supporting clues', () {
+      for (final (name, lot) in [('大字山田', '123'), ('北山', '12-3')]) {
+        expect(detect([glyphs(name), glyphs(lot, y: 32)]), hasLength(2));
+      }
+      for (final lot in ['123', '123円', '2026-11-24']) {
+        expect(detect([glyphs('北山'), glyphs(lot, y: 32)]), isEmpty);
+      }
+    });
+
+    test('address labels identify values beside or below them', () {
+      expect(detect([glyphs('住所：北山')]).single.left, 38);
+      expect(detect([glyphs('番地'), glyphs('123', y: 32)]).single.top, 30);
+    });
+
+    test('checks preceding fields and neighboring fields in the same row', () {
+      expect(detect([glyphs('北山'), glyphs('西新宿2-8-1', y: 32)]), hasLength(2));
+      expect(
+        detect([
+          [...glyphs('西新宿2-8-1'), ...glyphs('字北山', x: 110)],
+        ]),
+        hasLength(2),
+      );
+    });
+
+    test('rejects distant rows, adjacent columns and other fields', () {
+      expect(detect([glyphs('字北山'), glyphs('123番地', y: 150)]), isEmpty);
+      expect(detect([glyphs('字北山'), glyphs('123番地', x: 180, y: 32)]), isEmpty);
+      expect(
+        detect([
+          [...glyphs('北山'), ...glyphs('12-3', x: 180)],
+        ]),
+        isEmpty,
+      );
+      expect(
+        detect([
+          glyphs('東京都新宿区西新宿2-8-1'),
+          glyphs('電話', y: 32),
+          glyphs('123', y: 54),
+        ]),
+        hasLength(1),
+      );
+    });
+  });
   for (final text in [
     '東京都千代田区千代田1-1',
     '東京都新宿区西新宿２丁目８番１号',
@@ -33,30 +162,46 @@ void main() {
       expect(found.last.region.right, 10 + text.length * 10 + 2);
     });
   }
-  for (final text in [
-    '〒100-0001',
-    '100-0001',
-    '〒１００－０００１',
-    '1000001',
-    '〒1000001',
+  for (final mode in [
+    AddressDetectionMode.placeNames,
+    AddressDetectionMode.addressOnly,
   ]) {
-    test('postal code is one complete mask: $text', () {
-      final found = japaneseAddressCandidates([glyphs(text)], 1000, 200);
-      expect(found, hasLength(1));
-      expect(found.single.region.left, 8);
-      expect(found.single.region.right, 12 + text.length * 10);
-    });
-  }
-  for (final text in [
-    '0312345678',
-    '090-1234-5678',
-    '0120-123-4567',
-    '12345678',
-    'ABC1234567Z',
-  ]) {
-    test('does not take postal code from longer number: $text', () {
-      expect(japaneseAddressCandidates([glyphs(text)], 1000, 200), isEmpty);
-    });
+    for (final text in [
+      '〒100-0001',
+      '100-0001',
+      '〒１００－０００１',
+      '1000001',
+      '〒1000001',
+    ]) {
+      test('postal code is one complete mask in ${mode.name}: $text', () {
+        final found = japaneseAddressCandidates(
+          [glyphs(text)],
+          1000,
+          200,
+          mode: mode,
+        );
+        expect(found, hasLength(1));
+        expect(found.single.region.left, 8);
+        expect(found.single.region.right, 12 + text.length * 10);
+      });
+    }
+    for (final text in [
+      '0312345678',
+      '090-1234-5678',
+      '0120-123-4567',
+      '12345678',
+      'ABC1234567Z',
+    ]) {
+      test(
+        'does not take postal code from longer number in ${mode.name}: $text',
+        () {
+          expect(
+            japaneseAddressCandidates([glyphs(text)], 1000, 200, mode: mode),
+            isEmpty,
+          );
+        },
+      );
+    }
   }
   test('postal code and following address are separate', () {
     const text = '〒100-0001東京都';
