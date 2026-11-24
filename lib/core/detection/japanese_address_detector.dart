@@ -404,6 +404,10 @@ List<RegionCandidate> japaneseAddressCandidates(
     spans.add((start: start, end: end));
   }
 
+  final postalSpans = [
+    for (final match in _postalMention.allMatches(normalizedText))
+      (start: match.start, end: match.end),
+  ];
   if (mode == AddressDetectionMode.addressOnly) {
     // Also recognize abbreviated addresses such as 神南1-2-3.
     for (final place
@@ -415,7 +419,12 @@ List<RegionCandidate> japaneseAddressCandidates(
       }
       spans.add((start: place.start, end: lot.end));
     }
-    return _addressRegions(spans, positions, width, height);
+    return _addressRegions(
+      _mergeSpans(spans, postalSpans),
+      positions,
+      width,
+      height,
+    );
   }
 
   bool overlaps(int start, int end) =>
@@ -586,10 +595,6 @@ List<RegionCandidate> japaneseAddressCandidates(
       }
     }
   }
-  final postalSpans = [
-    for (final match in _postalMention.allMatches(normalizedText))
-      (start: match.start, end: match.end),
-  ];
   final protectedControls = [...protectedSpans, ...postalSpans];
   final dictionarySpans =
       dictionary
@@ -603,14 +608,27 @@ List<RegionCandidate> japaneseAddressCandidates(
       <_AddressSpan>[];
   // Keep the postal code as one independent control, including 〒 if present.
   dictionarySpans.addAll(postalSpans);
-  dictionarySpans.sort((a, b) => a.start.compareTo(b.start));
-  final finalSpans = <_AddressSpan>[...dictionarySpans];
-  for (final span in splitSpans) {
+  return _addressRegions(
+    _mergeSpans(splitSpans, dictionarySpans),
+    positions,
+    width,
+    height,
+  );
+}
+
+// Keep postal and dictionary matches whole when they overlap an address.
+List<_AddressSpan> _mergeSpans(
+  List<_AddressSpan> spans,
+  List<_AddressSpan> prioritySpans,
+) {
+  prioritySpans.sort((a, b) => a.start.compareTo(b.start));
+  final finalSpans = <_AddressSpan>[...prioritySpans];
+  for (final span in spans) {
     var low = 0;
-    var high = dictionarySpans.length;
+    var high = prioritySpans.length;
     while (low < high) {
       final middle = (low + high) >> 1;
-      if (dictionarySpans[middle].end <= span.start) {
+      if (prioritySpans[middle].end <= span.start) {
         low = middle + 1;
       } else {
         high = middle;
@@ -619,10 +637,10 @@ List<RegionCandidate> japaneseAddressCandidates(
     var cursor = span.start;
     for (
       var i = low;
-      i < dictionarySpans.length && dictionarySpans[i].start < span.end;
+      i < prioritySpans.length && prioritySpans[i].start < span.end;
       i++
     ) {
-      final match = dictionarySpans[i];
+      final match = prioritySpans[i];
       if (cursor < match.start) {
         finalSpans.add((start: cursor, end: match.start));
       }
@@ -631,7 +649,7 @@ List<RegionCandidate> japaneseAddressCandidates(
     if (cursor < span.end) finalSpans.add((start: cursor, end: span.end));
   }
   finalSpans.sort((a, b) => a.start.compareTo(b.start));
-  return _addressRegions(finalSpans, positions, width, height);
+  return finalSpans;
 }
 
 List<RegionCandidate> _addressRegions(

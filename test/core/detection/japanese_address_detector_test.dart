@@ -55,30 +55,46 @@ void main() {
       expect(found.last.region.right, 10 + text.length * 10 + 2);
     });
   }
-  for (final text in [
-    '〒100-0001',
-    '100-0001',
-    '〒１００－０００１',
-    '1000001',
-    '〒1000001',
+  for (final mode in [
+    AddressDetectionMode.placeNames,
+    AddressDetectionMode.addressOnly,
   ]) {
-    test('postal code is one complete mask: $text', () {
-      final found = japaneseAddressCandidates([glyphs(text)], 1000, 200);
-      expect(found, hasLength(1));
-      expect(found.single.region.left, 8);
-      expect(found.single.region.right, 12 + text.length * 10);
-    });
-  }
-  for (final text in [
-    '0312345678',
-    '090-1234-5678',
-    '0120-123-4567',
-    '12345678',
-    'ABC1234567Z',
-  ]) {
-    test('does not take postal code from longer number: $text', () {
-      expect(japaneseAddressCandidates([glyphs(text)], 1000, 200), isEmpty);
-    });
+    for (final text in [
+      '〒100-0001',
+      '100-0001',
+      '〒１００－０００１',
+      '1000001',
+      '〒1000001',
+    ]) {
+      test('postal code is one complete mask in ${mode.name}: $text', () {
+        final found = japaneseAddressCandidates(
+          [glyphs(text)],
+          1000,
+          200,
+          mode: mode,
+        );
+        expect(found, hasLength(1));
+        expect(found.single.region.left, 8);
+        expect(found.single.region.right, 12 + text.length * 10);
+      });
+    }
+    for (final text in [
+      '0312345678',
+      '090-1234-5678',
+      '0120-123-4567',
+      '12345678',
+      'ABC1234567Z',
+    ]) {
+      test(
+        'does not take postal code from longer number in ${mode.name}: $text',
+        () {
+          expect(
+            japaneseAddressCandidates([glyphs(text)], 1000, 200, mode: mode),
+            isEmpty,
+          );
+        },
+      );
+    }
   }
   test('postal code and following address are separate', () {
     const text = '〒100-0001東京都';
