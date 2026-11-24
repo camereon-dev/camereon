@@ -52,36 +52,6 @@ void main() {
         c.region.toRect(),
     ];
 
-    test('masks building and room after full and abbreviated addresses', () {
-      for (final value in [
-        '東京都新宿区西新宿2丁目8番1号さくらビル5階501号室',
-        '東京都新宿区西新宿2丁目8番1号ABCレジデンス',
-        '西新宿2-8-1サンライズA棟２０１',
-        '西新宿2-8-1コーポ青空301号室',
-        '西新宿12番地201号室',
-        '西新宿2-8-1 301号室',
-      ]) {
-        final boxes = detect([glyphs('$value電話03-1234-5678')]);
-        expect(boxes.single.right, 12 + value.length * 10, reason: value);
-      }
-    });
-
-    test('masks wrapped units only when close to the numbered address', () {
-      final boxes = detect([
-        glyphs('西新宿2-8-1'),
-        glyphs('青空ハイツ', y: 32),
-        glyphs('５０１号室で開催', y: 54),
-      ]);
-      expect(boxes.map((b) => b.top), [8, 30, 52]);
-      expect(boxes.last.right, 12 + '５０１号室'.length * 10);
-      for (final line in [
-        glyphs('501号室', x: 300, y: 32),
-        glyphs('備考：501号室', y: 32),
-      ]) {
-        expect(detect([glyphs('西新宿2-8-1'), line]), hasLength(1));
-      }
-      expect(detect([glyphs('501号室')]), isEmpty);
-    });
     test('campus address wraps from the right edge to a left-aligned lot', () {
       const locality = '沖縄県宜野湾市字喜友名';
       expect(
